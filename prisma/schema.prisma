@@ -1,0 +1,177 @@
+// Prisma Schema for TirthYatraTrails
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  CONFIRMED
+  CLOSED
+}
+
+enum InquiryType {
+  HOTEL
+  PACKAGE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  password      String?   // Make optional since Google users won't have a password
+  image         String?
+  phone         String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  inquiries     Inquiry[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model City {
+  id         String   @id
+  name       String
+  state      String?
+  imageUrl   String
+  hotelCount Int      @default(0)
+  popularFor String?
+  hotels     Hotel[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Hotel {
+  id               String   @id @default(cuid())
+  cityId           String
+  cityName         String
+  name             String
+  starRating       Int      @default(3)
+  googleRating     Float    @default(4.5)
+  reviewCount      Int      @default(0)
+  address          String
+  description      String
+  images           String   // Stored as JSON string or comma-separated URLs
+  amenities        String   // Stored as JSON string
+  basePrice        Int
+  isTopRated       Boolean  @default(false)
+  distanceToTemple String?
+  darshanType      String?
+  city             City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  rooms            Room[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Room {
+  id              String   @id @default(cuid())
+  hotelId         String
+  name            String
+  roomOnlyPrice   Int
+  breakfastPrice  Int
+  halfBoardPrice  Int
+  fullBoardPrice  Int
+  imageUrl        String
+  bedType         String?
+  capacity        String?
+  hotel           Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Package {
+  id                 String   @id @default(cuid())
+  title              String
+  location           String
+  duration           String
+  bookedRank         String?
+  imageUrl           String
+  galleryImages      String?  // JSON string
+  startingPrice      Int
+  overview           String
+  highlights         String   // JSON string
+  cancellationPolicy String?
+  category           String
+  packageType        String?
+  experienceLevel    String?
+  hotelsLevel        String?
+  transfers          String?
+  itinerary          String?  // JSON string
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Inquiry {
+  id              String        @id @default(cuid())
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type            InquiryType   @default(HOTEL)
+  referenceId     String
+  referenceName   String
+  title           String
+  fullName        String
+  customerName    String?
+  email           String
+  customerEmail   String?
+  whatsappNumber  String
+  customerPhone   String?
+  userCity        String?
+  checkInDate     String
+  guests          Int           @default(2)
+  adults          Int           @default(2)
+  children        Int           @default(0)
+  childAges       String?       // JSON string of child ages e.g. "[4, 7]"
+  planChosen      String?
+  selectedPlan    String?
+  specialRequests String?
+  status          InquiryStatus @default(NEW)
+  isResolved      Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Review {
+  id               String   @id @default(cuid())
+  authorName       String   // e.g. "Milind Pawarc"
+  authorLocation   String   // e.g. "Mathura · Vrindavan"
+  authorInitials   String?  // e.g. "MP" (auto-generate from name if empty)
+  rating           Float    @default(5.0) // e.g. 5.0
+  reviewText       String   // The full review/experience description
+  destinationImage String  // Image URL of temple/location on the left card
+  isVerified       Boolean  @default(true) // Shows "Verified Google review" pill
+  googleReviewUrl  String?  // Link for "Read full review on Google"
+  isFeatured       Boolean  @default(true) // Show/hide on Home page slider
+  order            Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

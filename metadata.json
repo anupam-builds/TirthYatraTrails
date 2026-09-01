@@ -1,0 +1,6 @@
+{
+  "name": "TirthYatraTrails",
+  "description": "Enterprise-grade Travel, Pilgrimage & Hotel Booking Portal for sacred yatras, verified hotels near darshan, and curated pilgrimage packages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 160" width="540" height="160">
+  <defs>
+    <linearGradient id="navGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f294a" />
+      <stop offset="100%" stop-color="#163964" />
+    </linearGradient>
+    <linearGradient id="saffronGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="50%" stop-color="#ea580c" />
+      <stop offset="100%" stop-color="#c2410c" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(15, 10)">
+    <circle cx="70" cy="70" r="64" fill="url(#navGrad)" stroke="url(#saffronGrad)" stroke-width="3.5" filter="url(#shadow)" />
+    <circle cx="70" cy="70" r="57" fill="none" stroke="#fbd38d" stroke-dasharray="3,3" stroke-width="1.2" opacity="0.6" />
+
+    <g opacity="0.4" stroke="url(#goldGrad)" stroke-width="1.5">
+      <line x1="70" y1="70" x2="70" y2="22" />
+      <line x1="70" y1="70" x2="98" y2="28" />
+      <line x1="70" y1="70" x2="118" y2="48" />
+      <line x1="70" y1="70" x2="42" y2="28" />
+      <line x1="70" y1="70" x2="22" y2="48" />
+    </g>
+
+    <path d="M22 105 L48 68 L68 94 L88 60 L118 105 Z" fill="#1b3f6e" opacity="0.9" />
+
+    <path d="M70 18 L70 30" stroke="#fde047" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M70 20 Q79 23 85 20 Q78 27 70 29 Z" fill="url(#saffronGrad)" />
+    <circle cx="70" cy="30" r="4.5" fill="#fde047" />
+    
+    <path d="M70 33 L61 46 L79 46 Z" fill="url(#saffronGrad)" />
+    <path d="M70 42 L55 58 L85 58 Z" fill="url(#saffronGrad)" />
+    <path d="M70 54 L48 74 L92 74 Z" fill="url(#saffronGrad)" />
+    
+    <rect x="52" y="74" width="36" height="32" rx="2" fill="#faf8f5" />
+    <path d="M62 106 L62 86 C62 80 78 80 78 86 L78 106 Z" fill="url(#navGrad)" />
+    <path d="M70 94 Q73 99 70 102 Q67 99 70 94 Z" fill="#fbbf24" />
+
+    <rect x="42" y="106" width="56" height="6" rx="2" fill="#d97706" />
+    <rect x="36" y="112" width="68" height="7" rx="3" fill="#ea580c" />
+
+    <path d="M38 119 Q70 123 70 133 T102 120" fill="none" stroke="#fde047" stroke-width="2.5" stroke-linecap="round" />
+  </g>
+
+  <g transform="translate(160, 30)">
+    <text x="0" y="48" font-family="'Plus Jakarta Sans', 'Segoe UI', sans-serif" font-weight="800" font-size="40" letter-spacing="-0.5">
+      <tspan fill="#0f294a">Tirth</tspan>
+      <tspan fill="#ea580c">Yatra</tspan>
+      <tspan fill="#0f294a">Trails</tspan>
+    </text>
+
+    <text x="2" y="76" font-family="'Plus Jakarta Sans', sans-serif" font-weight="600" font-size="13" fill="#64748b" letter-spacing="2.8">
+      SACRED PILGRIMAGE &amp; LUXURY STAYS
+    </text>
+
+    <g transform="translate(0, 90)">
+      <line x1="0" y1="0" x2="60" y2="0" stroke="#ea580c" stroke-width="2.5" stroke-linecap="round" />
+      <circle cx="70" cy="0" r="3" fill="#ea580c" />
+      <line x1="80" y1="0" x2="310" y2="0" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" />
+    </g>
+  </g>
+</svg>
