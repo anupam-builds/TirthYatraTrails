@@ -1,46 +1,15 @@
 import { City, Hotel, Package, User, Inquiry, Review } from '../types.js';
 import bcrypt from 'bcryptjs';
 
-export async function getInitialSeedData() {
-  const adminPasswordHash = await bcrypt.hash('Admin@123', 10);
-  const userPasswordHash = await bcrypt.hash('User@123', 10);
-
-  const users: (User & { password?: string })[] = [
-    {
-      id: 'usr-admin-1',
-      name: 'Enterprise Yatra Admin',
-      email: 'admin@tirthyatratrails.com',
-      password: adminPasswordHash,
-      role: 'ADMIN',
-      createdAt: '2026-01-10T08:00:00.000Z',
-    },
-    {
-      id: 'usr-admin-2',
-      name: 'Executive Yatra Admin',
-      email: 'admin@tirthyatra.com',
-      password: adminPasswordHash,
-      role: 'ADMIN',
-      createdAt: '2026-01-10T08:00:00.000Z',
-    },
-    {
-      id: 'usr-demo-1',
-      name: 'Rohan Sharma',
-      email: 'rohan.sharma@example.com',
-      password: userPasswordHash,
-      role: 'USER',
-      createdAt: '2026-02-15T10:30:00.000Z',
-    },
-  ];
-
-  const cities: City[] = [
-    {
-      id: 'city-varanasi',
-      name: 'Varanasi',
-      state: 'Uttar Pradesh',
-      popularFor: 'Kashi Vishwanath & Ganga Aarti',
-      imageUrl: 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=800&q=80',
-      hotelCount: 38,
-    },
+export const INITIAL_CITIES: City[] = [
+  {
+    id: 'city-varanasi',
+    name: 'Varanasi',
+    state: 'Uttar Pradesh',
+    popularFor: 'Kashi Vishwanath & Ganga Aarti',
+    imageUrl: 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=800&q=80',
+    hotelCount: 38,
+  },
     {
       id: 'city-ayodhya',
       name: 'Ayodhya',
@@ -131,7 +100,7 @@ export async function getInitialSeedData() {
     },
   ];
 
-  const hotels: Hotel[] = [
+export const INITIAL_HOTELS: Hotel[] = [
     {
       id: 'htl-varanasi-quality-inn',
       cityId: 'city-varanasi',
@@ -589,7 +558,7 @@ export async function getInitialSeedData() {
     },
   ];
 
-  const packages: Package[] = [
+export const INITIAL_PACKAGES: Package[] = [
     {
       id: 'pkg-bali-spiritual',
       title: 'Bali Sacred Temples & Spiritual Retreat',
@@ -852,7 +821,7 @@ export async function getInitialSeedData() {
     },
   ];
 
-  const inquiries: Inquiry[] = [
+export const INITIAL_INQUIRIES: Inquiry[] = [
     {
       id: 'inq-101',
       userId: 'usr-demo-1',
@@ -928,7 +897,7 @@ export async function getInitialSeedData() {
     },
   ];
 
-  const reviews: Review[] = [
+export const INITIAL_REVIEWS: Review[] = [
     {
       id: 'rev-1',
       authorName: 'Milind Pawarc',
@@ -973,5 +942,43 @@ export async function getInitialSeedData() {
     },
   ];
 
-  return { users, cities, hotels, packages, inquiries, reviews };
+export async function getInitialSeedData() {
+  const adminPasswordHash = await bcrypt.hash('Admin@123', 10);
+  const userPasswordHash = await bcrypt.hash('User@123', 10);
+
+  const users: (User & { password?: string })[] = [
+    {
+      id: 'usr-admin-1',
+      name: 'Enterprise Yatra Admin',
+      email: 'admin@tirthyatratrails.com',
+      password: adminPasswordHash,
+      role: 'ADMIN',
+      createdAt: '2026-01-10T08:00:00.000Z',
+    },
+    {
+      id: 'usr-admin-2',
+      name: 'Executive Yatra Admin',
+      email: 'admin@tirthyatra.com',
+      password: adminPasswordHash,
+      role: 'ADMIN',
+      createdAt: '2026-01-10T08:00:00.000Z',
+    },
+    {
+      id: 'usr-demo-1',
+      name: 'Rohan Sharma',
+      email: 'rohan.sharma@example.com',
+      password: userPasswordHash,
+      role: 'USER',
+      createdAt: '2026-02-15T10:30:00.000Z',
+    },
+  ];
+
+  return {
+    users,
+    cities: INITIAL_CITIES,
+    hotels: INITIAL_HOTELS,
+    packages: INITIAL_PACKAGES,
+    inquiries: INITIAL_INQUIRIES,
+    reviews: INITIAL_REVIEWS,
+  };
 }

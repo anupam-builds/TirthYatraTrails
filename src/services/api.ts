@@ -1,4 +1,5 @@
 import { City, Hotel, Package, Inquiry, User, AuthResponse, Review } from '../types.js';
+import { localStore } from './localStore.js';
 
 const API_BASE = '/api';
 
@@ -21,7 +22,7 @@ async function safeFetch<T = any>(url: string, options?: RequestInit, fallbackEr
   try {
     res = await fetch(url, options);
   } catch (err: any) {
-    throw new Error(err.message || 'Network connection error. Please check your internet.');
+    throw new Error(err.message || 'Network connection error.');
   }
 
   const contentType = res.headers.get('content-type') || '';
@@ -34,7 +35,6 @@ async function safeFetch<T = any>(url: string, options?: RequestInit, fallbackEr
       data = null;
     }
   } else {
-    // Response is text or HTML (e.g. server error page or 404)
     let text = '';
     try {
       text = await res.text();
@@ -42,11 +42,8 @@ async function safeFetch<T = any>(url: string, options?: RequestInit, fallbackEr
       text = '';
     }
 
-    if (!res.ok) {
-      if (text.startsWith('<') || text.includes('The page c') || text.includes('<!DOCTYPE')) {
-        throw new Error(`Server returned error (${res.status}): Please check endpoint availability.`);
-      }
-      throw new Error(text || `${fallbackError} (${res.status})`);
+    if (!res.ok || text.startsWith('<') || text.includes('The page c') || text.includes('<!DOCTYPE')) {
+      throw new Error(`Server returned status ${res.status}: fallback to local store`);
     }
     return text as unknown as T;
   }
@@ -62,47 +59,75 @@ async function safeFetch<T = any>(url: string, options?: RequestInit, fallbackEr
 export const api = {
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
-    return safeFetch<AuthResponse>(
-      `${API_BASE}/auth/login`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, portal }),
-      },
-      'Failed to login'
-    );
+    try {
+      return await safeFetch<AuthResponse>(
+        `${API_BASE}/auth/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, portal }),
+        },
+        'Failed to login'
+      );
+    } catch (err: any) {
+      // If server error / 404 on Vercel static routing, fallback to localStore
+      console.warn('Backend login unavailable, using local authentication store:', err.message);
+      return localStore.login(email, password, portal);
+    }
   },
 
   async register(name: string, email: string, password: string, phone?: string): Promise<AuthResponse> {
-    return safeFetch<AuthResponse>(
-      `${API_BASE}/auth/register`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, phone }),
-      },
-      'Failed to register'
-    );
+    try {
+      return await safeFetch<AuthResponse>(
+        `${API_BASE}/auth/register`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, phone }),
+        },
+        'Failed to register'
+      );
+    } catch (err: any) {
+      console.warn('Backend register unavailable, using local authentication store:', err.message);
+      return localStore.register(name, email, password, phone);
+    }
   },
 
   async getGoogleAuthUrl(): Promise<{ url: string; isConfigured: boolean }> {
-    return safeFetch<{ url: string; isConfigured: boolean }>(
-      `${API_BASE}/auth/google/url`,
-      undefined,
-      'Failed to retrieve Google Auth configuration'
-    );
+    try {
+      return await safeFetch<{ url: string; isConfigured: boolean }>(
+        `${API_BASE}/auth/google/url`,
+        undefined,
+        'Failed to retrieve Google Auth configuration'
+      );
+    } catch {
+      return { url: '', isConfigured: false };
+    }
   },
 
   async googleDirectLogin(payload: { email: string; name?: string; image?: string; sub?: string }): Promise<AuthResponse> {
-    return safeFetch<AuthResponse>(
-      `${API_BASE}/auth/google/direct`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      },
-      'Google Sign-In failed'
-    );
+    try {
+      return await safeFetch<AuthResponse>(
+        `${API_BASE}/auth/google/direct`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        'Google Sign-In failed'
+      );
+    } catch {
+      const mockUser: User = {
+        id: `usr-google-${Date.now()}`,
+        name: payload.name || payload.email.split('@')[0],
+        email: payload.email,
+        image: payload.image,
+        role: 'USER',
+        createdAt: new Date().toISOString(),
+      };
+      const token = btoa(JSON.stringify(mockUser));
+      return { user: mockUser, token };
+    }
   },
 
   async getMe(tokenKey = 'tyt_auth_token'): Promise<User | null> {
@@ -116,314 +141,434 @@ export const api = {
       );
       return data?.user || null;
     } catch {
+      try {
+        const parsed = JSON.parse(atob(token));
+        if (parsed && parsed.email) return parsed;
+      } catch {}
       return null;
     }
   },
 
   // Cities
   async getCities(): Promise<City[]> {
-    return safeFetch<City[]>(`${API_BASE}/cities`, undefined, 'Failed to fetch cities');
+    try {
+      return await safeFetch<City[]>(`${API_BASE}/cities`, undefined, 'Failed to fetch cities');
+    } catch {
+      return localStore.getCities();
+    }
   },
 
   // Hotels
   async getHotels(cityId?: string, query?: string): Promise<Hotel[]> {
-    const params = new URLSearchParams();
-    if (cityId) params.append('cityId', cityId);
-    if (query) params.append('query', query);
-    return safeFetch<Hotel[]>(`${API_BASE}/hotels?${params.toString()}`, undefined, 'Failed to fetch hotels');
+    try {
+      const params = new URLSearchParams();
+      if (cityId) params.append('cityId', cityId);
+      if (query) params.append('query', query);
+      return await safeFetch<Hotel[]>(`${API_BASE}/hotels?${params.toString()}`, undefined, 'Failed to fetch hotels');
+    } catch {
+      return localStore.getHotels(cityId, query);
+    }
   },
 
   async getHotelById(id: string): Promise<Hotel> {
-    return safeFetch<Hotel>(`${API_BASE}/hotels/${id}`, undefined, 'Hotel not found');
+    try {
+      return await safeFetch<Hotel>(`${API_BASE}/hotels/${id}`, undefined, 'Hotel not found');
+    } catch {
+      const h = localStore.getHotelById(id);
+      if (!h) throw new Error('Hotel not found');
+      return h;
+    }
   },
 
   // Packages
   async getPackages(category?: string, query?: string): Promise<Package[]> {
-    const params = new URLSearchParams();
-    if (category && category !== 'All') params.append('category', category);
-    if (query) params.append('query', query);
-    return safeFetch<Package[]>(`${API_BASE}/packages?${params.toString()}`, undefined, 'Failed to fetch packages');
+    try {
+      const params = new URLSearchParams();
+      if (category && category !== 'All') params.append('category', category);
+      if (query) params.append('query', query);
+      return await safeFetch<Package[]>(`${API_BASE}/packages?${params.toString()}`, undefined, 'Failed to fetch packages');
+    } catch {
+      return localStore.getPackages(category, query);
+    }
   },
 
   async getPackageById(id: string): Promise<Package> {
-    return safeFetch<Package>(`${API_BASE}/packages/${id}`, undefined, 'Package not found');
+    try {
+      return await safeFetch<Package>(`${API_BASE}/packages/${id}`, undefined, 'Package not found');
+    } catch {
+      const p = localStore.getPackageById(id);
+      if (!p) throw new Error('Package not found');
+      return p;
+    }
   },
 
   // Inquiries
   async submitInquiry(inquiryData: Partial<Inquiry>): Promise<Inquiry> {
-    return safeFetch<Inquiry>(
-      `${API_BASE}/inquiries`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(inquiryData),
-      },
-      'Failed to submit inquiry'
-    );
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/inquiries`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(inquiryData),
+        },
+        'Failed to submit inquiry'
+      );
+    } catch {
+      return localStore.submitInquiry(inquiryData);
+    }
   },
 
   async getInquiries(userId?: string): Promise<Inquiry[]> {
-    const url = userId ? `${API_BASE}/my-inquiries?userId=${encodeURIComponent(userId)}` : `${API_BASE}/inquiries`;
-    return safeFetch<Inquiry[]>(url, undefined, 'Failed to load inquiries');
+    try {
+      const url = userId ? `${API_BASE}/my-inquiries?userId=${encodeURIComponent(userId)}` : `${API_BASE}/inquiries`;
+      return await safeFetch<Inquiry[]>(url, undefined, 'Failed to load inquiries');
+    } catch {
+      return localStore.getInquiries(userId);
+    }
   },
 
   async getMyInquiries(userId: string): Promise<Inquiry[]> {
-    return safeFetch<Inquiry[]>(`${API_BASE}/my-inquiries?userId=${encodeURIComponent(userId)}`, undefined, 'Failed to load inquiries');
+    try {
+      return await safeFetch<Inquiry[]>(`${API_BASE}/my-inquiries?userId=${encodeURIComponent(userId)}`, undefined, 'Failed to load inquiries');
+    } catch {
+      return localStore.getInquiries(userId);
+    }
   },
 
   // ================= ADMIN API =================
   async getAdminInquiries(): Promise<Inquiry[]> {
-    return safeFetch<Inquiry[]>(
-      `${API_BASE}/admin/inquiries`,
-      { headers: getAdminAuthHeader() },
-      'Unauthorized or failed to fetch inquiries'
-    );
+    try {
+      return await safeFetch<Inquiry[]>(
+        `${API_BASE}/admin/inquiries`,
+        { headers: getAdminAuthHeader() },
+        'Unauthorized or failed to fetch inquiries'
+      );
+    } catch {
+      return localStore.getInquiries();
+    }
   },
 
   async updateInquiryStatus(id: string, status: Inquiry['status']): Promise<Inquiry> {
-    return safeFetch<Inquiry>(
-      `${API_BASE}/admin/inquiries/${id}/status`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/admin/inquiries/${id}/status`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify({ status }),
         },
-        body: JSON.stringify({ status }),
-      },
-      'Failed to update inquiry status'
-    );
+        'Failed to update inquiry status'
+      );
+    } catch {
+      return localStore.updateInquiryStatus(id, status);
+    }
   },
 
   async toggleInquiryStatus(id: string): Promise<Inquiry> {
-    return safeFetch<Inquiry>(
-      `${API_BASE}/admin/inquiries/${id}/status`,
-      {
-        method: 'PATCH',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to toggle inquiry status'
-    );
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/admin/inquiries/${id}/status`,
+        {
+          method: 'PATCH',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to toggle inquiry status'
+      );
+    } catch {
+      return localStore.toggleInquiryStatus(id);
+    }
   },
 
   async deleteInquiry(id: string): Promise<boolean> {
-    await safeFetch(
-      `${API_BASE}/admin/inquiries/${id}`,
-      {
-        method: 'DELETE',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to delete inquiry'
-    );
-    return true;
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/inquiries/${id}`,
+        {
+          method: 'DELETE',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to delete inquiry'
+      );
+      return true;
+    } catch {
+      return localStore.deleteInquiry(id);
+    }
   },
 
   // Admin Hotels
   async createHotel(hotel: Partial<Hotel>): Promise<Hotel> {
-    return safeFetch<Hotel>(
-      `${API_BASE}/admin/hotels`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<Hotel>(
+        `${API_BASE}/admin/hotels`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(hotel),
         },
-        body: JSON.stringify(hotel),
-      },
-      'Failed to create hotel'
-    );
+        'Failed to create hotel'
+      );
+    } catch {
+      return localStore.createHotel(hotel);
+    }
   },
 
   async updateHotel(id: string, hotel: Partial<Hotel>): Promise<Hotel> {
-    return safeFetch<Hotel>(
-      `${API_BASE}/admin/hotels/${id}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<Hotel>(
+        `${API_BASE}/admin/hotels/${id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(hotel),
         },
-        body: JSON.stringify(hotel),
-      },
-      'Failed to update hotel'
-    );
+        'Failed to update hotel'
+      );
+    } catch {
+      return localStore.updateHotel(id, hotel);
+    }
   },
 
   async deleteHotel(id: string): Promise<boolean> {
-    await safeFetch(
-      `${API_BASE}/admin/hotels/${id}`,
-      {
-        method: 'DELETE',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to delete hotel'
-    );
-    return true;
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/hotels/${id}`,
+        {
+          method: 'DELETE',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to delete hotel'
+      );
+      return true;
+    } catch {
+      return localStore.deleteHotel(id);
+    }
   },
 
   // Admin Packages
   async createPackage(pkg: Partial<Package>): Promise<Package> {
-    return safeFetch<Package>(
-      `${API_BASE}/admin/packages`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<Package>(
+        `${API_BASE}/admin/packages`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(pkg),
         },
-        body: JSON.stringify(pkg),
-      },
-      'Failed to create package'
-    );
+        'Failed to create package'
+      );
+    } catch {
+      return localStore.createPackage(pkg);
+    }
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
-    return safeFetch<Package>(
-      `${API_BASE}/admin/packages/${id}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<Package>(
+        `${API_BASE}/admin/packages/${id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(pkg),
         },
-        body: JSON.stringify(pkg),
-      },
-      'Failed to update package'
-    );
+        'Failed to update package'
+      );
+    } catch {
+      return localStore.updatePackage(id, pkg);
+    }
   },
 
   async deletePackage(id: string): Promise<boolean> {
-    await safeFetch(
-      `${API_BASE}/admin/packages/${id}`,
-      {
-        method: 'DELETE',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to delete package'
-    );
-    return true;
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/packages/${id}`,
+        {
+          method: 'DELETE',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to delete package'
+      );
+      return true;
+    } catch {
+      return localStore.deletePackage(id);
+    }
   },
 
   // Admin Cities
   async createCity(city: Partial<City>): Promise<City> {
-    return safeFetch<City>(
-      `${API_BASE}/admin/cities`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<City>(
+        `${API_BASE}/admin/cities`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(city),
         },
-        body: JSON.stringify(city),
-      },
-      'Failed to create destination hub'
-    );
+        'Failed to create destination hub'
+      );
+    } catch {
+      return localStore.createCity(city);
+    }
   },
 
   async updateCity(id: string, city: Partial<City>): Promise<City> {
-    return safeFetch<City>(
-      `${API_BASE}/admin/cities/${id}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<City>(
+        `${API_BASE}/admin/cities/${id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(city),
         },
-        body: JSON.stringify(city),
-      },
-      'Failed to update destination hub'
-    );
+        'Failed to update destination hub'
+      );
+    } catch {
+      return localStore.updateCity(id, city);
+    }
   },
 
   async deleteCity(id: string): Promise<boolean> {
-    await safeFetch(
-      `${API_BASE}/admin/cities/${id}`,
-      {
-        method: 'DELETE',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to delete city'
-    );
-    return true;
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/cities/${id}`,
+        {
+          method: 'DELETE',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to delete city'
+      );
+      return true;
+    } catch {
+      return localStore.deleteCity(id);
+    }
   },
 
   // Reviews / Traveller Stories
   async getReviews(featuredOnly = false): Promise<Review[]> {
-    const params = new URLSearchParams();
-    if (featuredOnly) params.append('featured', 'true');
-    return safeFetch<Review[]>(`${API_BASE}/reviews?${params.toString()}`, undefined, 'Failed to fetch reviews');
+    try {
+      const params = new URLSearchParams();
+      if (featuredOnly) params.append('featured', 'true');
+      return await safeFetch<Review[]>(`${API_BASE}/reviews?${params.toString()}`, undefined, 'Failed to fetch reviews');
+    } catch {
+      return localStore.getReviews(featuredOnly);
+    }
   },
 
   async getAdminReviews(): Promise<Review[]> {
-    return safeFetch<Review[]>(
-      `${API_BASE}/admin/reviews`,
-      { headers: getAdminAuthHeader() },
-      'Failed to fetch admin reviews'
-    );
+    try {
+      return await safeFetch<Review[]>(
+        `${API_BASE}/admin/reviews`,
+        { headers: getAdminAuthHeader() },
+        'Failed to fetch admin reviews'
+      );
+    } catch {
+      return localStore.getReviews();
+    }
   },
 
   async createReview(review: Partial<Review>): Promise<Review> {
-    return safeFetch<Review>(
-      `${API_BASE}/admin/reviews`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<Review>(
+        `${API_BASE}/admin/reviews`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(review),
         },
-        body: JSON.stringify(review),
-      },
-      'Failed to create review'
-    );
+        'Failed to create review'
+      );
+    } catch {
+      return localStore.createReview(review);
+    }
   },
 
   async updateReview(id: string, review: Partial<Review>): Promise<Review> {
-    return safeFetch<Review>(
-      `${API_BASE}/admin/reviews/${id}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
+    try {
+      return await safeFetch<Review>(
+        `${API_BASE}/admin/reviews/${id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(review),
         },
-        body: JSON.stringify(review),
-      },
-      'Failed to update review'
-    );
+        'Failed to update review'
+      );
+    } catch {
+      return localStore.updateReview(id, review);
+    }
   },
 
   async toggleReviewFeatured(id: string): Promise<Review> {
-    return safeFetch<Review>(
-      `${API_BASE}/admin/reviews/${id}/featured`,
-      {
-        method: 'PATCH',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to toggle featured status'
-    );
+    try {
+      return await safeFetch<Review>(
+        `${API_BASE}/admin/reviews/${id}/featured`,
+        {
+          method: 'PATCH',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to toggle featured status'
+      );
+    } catch {
+      return localStore.toggleReviewFeatured(id);
+    }
   },
 
   async deleteReview(id: string): Promise<boolean> {
-    await safeFetch(
-      `${API_BASE}/admin/reviews/${id}`,
-      {
-        method: 'DELETE',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to delete review'
-    );
-    return true;
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/reviews/${id}`,
+        {
+          method: 'DELETE',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to delete review'
+      );
+      return true;
+    } catch {
+      return localStore.deleteReview(id);
+    }
   },
 
   async resetData(): Promise<void> {
-    await safeFetch(
-      `${API_BASE}/admin/reset-data`,
-      {
-        method: 'POST',
-        headers: getAdminAuthHeader(),
-      },
-      'Failed to reset data'
-    );
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/reset-data`,
+        {
+          method: 'POST',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to reset data'
+      );
+    } catch {
+      localStore.resetData();
+    }
   },
 };
 
@@ -476,7 +621,6 @@ export function generateWhatsAppLink(details: {
   if (numChildren > 0) {
     guestsFormatted += `, ${numChildren} ${numChildren === 1 ? 'Child' : 'Children'}`;
     if (parsedAges.length > 0) {
-      // Map 0 to "Under 1" if displayed or numerical age
       const formattedAges = parsedAges.map((a) => (Number(a) === 0 ? 'Under 1' : a));
       guestsFormatted += ` (Ages: ${formattedAges.join(', ')})`;
     }

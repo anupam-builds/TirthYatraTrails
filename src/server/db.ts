@@ -1,7 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { City, Hotel, Package, User, Inquiry, Room, Review, Account } from '../types.js';
-import { getInitialSeedData } from './seedData.js';
+import {
+  getInitialSeedData,
+  INITIAL_CITIES,
+  INITIAL_HOTELS,
+  INITIAL_PACKAGES,
+  INITIAL_INQUIRIES,
+  INITIAL_REVIEWS,
+} from './seedData.js';
 import bcrypt from 'bcryptjs';
 
 interface DatabaseSchema {
@@ -21,11 +28,11 @@ class DatabaseStore {
   private data: DatabaseSchema = {
     users: [],
     accounts: [],
-    cities: [],
-    hotels: [],
-    packages: [],
-    inquiries: [],
-    reviews: [],
+    cities: [...INITIAL_CITIES],
+    hotels: [...INITIAL_HOTELS],
+    packages: [...INITIAL_PACKAGES],
+    inquiries: [...INITIAL_INQUIRIES],
+    reviews: [...INITIAL_REVIEWS],
   };
   private isInitialized = false;
 
@@ -34,7 +41,11 @@ class DatabaseStore {
     
     try {
       if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+        try {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+        } catch (e) {
+          console.warn('Could not create data directory (serverless environment):', e);
+        }
       }
 
       if (fs.existsSync(DB_FILE)) {
@@ -42,7 +53,15 @@ class DatabaseStore {
         try {
           this.data = JSON.parse(raw);
         } catch {
-          this.data = { users: [], accounts: [], cities: [], hotels: [], packages: [], inquiries: [], reviews: [] };
+          this.data = {
+            users: [],
+            accounts: [],
+            cities: [...INITIAL_CITIES],
+            hotels: [...INITIAL_HOTELS],
+            packages: [...INITIAL_PACKAGES],
+            inquiries: [...INITIAL_INQUIRIES],
+            reviews: [...INITIAL_REVIEWS],
+          };
         }
 
         const seed = await getInitialSeedData();
@@ -74,7 +93,6 @@ class DatabaseStore {
         if (!this.data.cities || this.data.cities.length === 0) {
           this.data.cities = seed.cities;
         } else {
-          // Merge missing cities
           for (const city of seed.cities) {
             if (!this.data.cities.some((c) => c.id === city.id)) {
               this.data.cities.push(city);
@@ -86,7 +104,6 @@ class DatabaseStore {
         if (!this.data.hotels || this.data.hotels.length === 0) {
           this.data.hotels = seed.hotels;
         } else {
-          // Merge missing essential hotels
           for (const hotel of seed.hotels) {
             if (!this.data.hotels.some((h) => h.id === hotel.id)) {
               this.data.hotels.push(hotel);
@@ -98,7 +115,6 @@ class DatabaseStore {
         if (!this.data.packages || this.data.packages.length === 0) {
           this.data.packages = seed.packages;
         } else {
-          // Merge missing essential packages
           for (const pkg of seed.packages) {
             if (!this.data.packages.some((p) => p.id === pkg.id)) {
               this.data.packages.push(pkg);
@@ -119,7 +135,7 @@ class DatabaseStore {
       }
       this.isInitialized = true;
     } catch (err) {
-      console.error('Error initializing database file, falling back to seed:', err);
+      console.error('Error initializing database file, running with in-memory seed data:', err);
       const seed = await getInitialSeedData();
       this.data = seed as any;
       this.isInitialized = true;
@@ -133,7 +149,8 @@ class DatabaseStore {
       }
       fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
     } catch (err) {
-      console.error('Failed to persist database to file:', err);
+      // In serverless / read-only Vercel environment, disk write might fail; stay functional in memory
+      console.warn('Database disk write skipped (in-memory mode active):', err);
     }
   }
 
