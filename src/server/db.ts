@@ -39,7 +39,14 @@ class DatabaseStore {
 
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        this.data = JSON.parse(raw);
+        try {
+          this.data = JSON.parse(raw);
+        } catch {
+          this.data = { users: [], accounts: [], cities: [], hotels: [], packages: [], inquiries: [], reviews: [] };
+        }
+
+        const seed = await getInitialSeedData();
+
         // Ensure default admin user is present and configured
         const adminEmail = 'admin@tirthyatratrails.com';
         const hasAdmin = this.data.users?.some(
@@ -56,15 +63,55 @@ class DatabaseStore {
             role: 'ADMIN',
             createdAt: '2026-01-10T08:00:00.000Z',
           });
-          this.save();
+        }
+
+        // Ensure accounts array exists
+        if (!this.data.accounts) this.data.accounts = [];
+        // Ensure inquiries array exists
+        if (!this.data.inquiries) this.data.inquiries = seed.inquiries || [];
+
+        // Ensure cities are seeded
+        if (!this.data.cities || this.data.cities.length === 0) {
+          this.data.cities = seed.cities;
+        } else {
+          // Merge missing cities
+          for (const city of seed.cities) {
+            if (!this.data.cities.some((c) => c.id === city.id)) {
+              this.data.cities.push(city);
+            }
+          }
+        }
+
+        // Ensure hotels are seeded
+        if (!this.data.hotels || this.data.hotels.length === 0) {
+          this.data.hotels = seed.hotels;
+        } else {
+          // Merge missing essential hotels
+          for (const hotel of seed.hotels) {
+            if (!this.data.hotels.some((h) => h.id === hotel.id)) {
+              this.data.hotels.push(hotel);
+            }
+          }
+        }
+
+        // Ensure packages are seeded
+        if (!this.data.packages || this.data.packages.length === 0) {
+          this.data.packages = seed.packages;
+        } else {
+          // Merge missing essential packages
+          for (const pkg of seed.packages) {
+            if (!this.data.packages.some((p) => p.id === pkg.id)) {
+              this.data.packages.push(pkg);
+            }
+          }
         }
 
         // Ensure reviews array exists and is seeded if empty
         if (!this.data.reviews || this.data.reviews.length === 0) {
-          const seed = await getInitialSeedData();
           this.data.reviews = seed.reviews;
-          this.save();
         }
+
+        this.save();
       } else {
         const seed = await getInitialSeedData();
         this.data = seed as any;

@@ -12,56 +12,109 @@ function getAdminAuthHeader() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * Safely executes a fetch request and parses JSON responses.
+ * Robustly handles non-JSON responses (e.g., HTML error pages) without syntax crashes.
+ */
+async function safeFetch<T = any>(url: string, options?: RequestInit, fallbackError = 'Request failed'): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, options);
+  } catch (err: any) {
+    throw new Error(err.message || 'Network connection error. Please check your internet.');
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  let data: any = null;
+
+  if (contentType.includes('application/json')) {
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+  } else {
+    // Response is text or HTML (e.g. server error page or 404)
+    let text = '';
+    try {
+      text = await res.text();
+    } catch {
+      text = '';
+    }
+
+    if (!res.ok) {
+      if (text.startsWith('<') || text.includes('The page c') || text.includes('<!DOCTYPE')) {
+        throw new Error(`Server returned error (${res.status}): Please check endpoint availability.`);
+      }
+      throw new Error(text || `${fallbackError} (${res.status})`);
+    }
+    return text as unknown as T;
+  }
+
+  if (!res.ok) {
+    const errorMsg = data?.error || data?.message || `${fallbackError} (${res.status})`;
+    throw new Error(errorMsg);
+  }
+
+  return data as T;
+}
+
 export const api = {
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, portal }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to login');
-    return data;
+    return safeFetch<AuthResponse>(
+      `${API_BASE}/auth/login`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, portal }),
+      },
+      'Failed to login'
+    );
   },
 
   async register(name: string, email: string, password: string, phone?: string): Promise<AuthResponse> {
-    const res = await fetch(`${API_BASE}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, phone }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to register');
-    return data;
+    return safeFetch<AuthResponse>(
+      `${API_BASE}/auth/register`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, phone }),
+      },
+      'Failed to register'
+    );
   },
 
   async getGoogleAuthUrl(): Promise<{ url: string; isConfigured: boolean }> {
-    const res = await fetch(`${API_BASE}/auth/google/url`);
-    if (!res.ok) throw new Error('Failed to retrieve Google Auth configuration');
-    return res.json();
+    return safeFetch<{ url: string; isConfigured: boolean }>(
+      `${API_BASE}/auth/google/url`,
+      undefined,
+      'Failed to retrieve Google Auth configuration'
+    );
   },
 
   async googleDirectLogin(payload: { email: string; name?: string; image?: string; sub?: string }): Promise<AuthResponse> {
-    const res = await fetch(`${API_BASE}/auth/google/direct`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Google Sign-In failed');
-    return data;
+    return safeFetch<AuthResponse>(
+      `${API_BASE}/auth/google/direct`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+      'Google Sign-In failed'
+    );
   },
 
   async getMe(tokenKey = 'tyt_auth_token'): Promise<User | null> {
     const token = localStorage.getItem(tokenKey);
     if (!token) return null;
     try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      return data.user || null;
+      const data = await safeFetch<{ user: User }>(
+        `${API_BASE}/auth/me`,
+        { headers: { Authorization: `Bearer ${token}` } },
+        'Failed to get current user'
+      );
+      return data?.user || null;
     } catch {
       return null;
     }
@@ -69,9 +122,7 @@ export const api = {
 
   // Cities
   async getCities(): Promise<City[]> {
-    const res = await fetch(`${API_BASE}/cities`);
-    if (!res.ok) throw new Error('Failed to fetch cities');
-    return res.json();
+    return safeFetch<City[]>(`${API_BASE}/cities`, undefined, 'Failed to fetch cities');
   },
 
   // Hotels
@@ -79,15 +130,11 @@ export const api = {
     const params = new URLSearchParams();
     if (cityId) params.append('cityId', cityId);
     if (query) params.append('query', query);
-    const res = await fetch(`${API_BASE}/hotels?${params.toString()}`);
-    if (!res.ok) throw new Error('Failed to fetch hotels');
-    return res.json();
+    return safeFetch<Hotel[]>(`${API_BASE}/hotels?${params.toString()}`, undefined, 'Failed to fetch hotels');
   },
 
   async getHotelById(id: string): Promise<Hotel> {
-    const res = await fetch(`${API_BASE}/hotels/${id}`);
-    if (!res.ok) throw new Error('Hotel not found');
-    return res.json();
+    return safeFetch<Hotel>(`${API_BASE}/hotels/${id}`, undefined, 'Hotel not found');
   },
 
   // Packages
@@ -95,187 +142,208 @@ export const api = {
     const params = new URLSearchParams();
     if (category && category !== 'All') params.append('category', category);
     if (query) params.append('query', query);
-    const res = await fetch(`${API_BASE}/packages?${params.toString()}`);
-    if (!res.ok) throw new Error('Failed to fetch packages');
-    return res.json();
+    return safeFetch<Package[]>(`${API_BASE}/packages?${params.toString()}`, undefined, 'Failed to fetch packages');
   },
 
   async getPackageById(id: string): Promise<Package> {
-    const res = await fetch(`${API_BASE}/packages/${id}`);
-    if (!res.ok) throw new Error('Package not found');
-    return res.json();
+    return safeFetch<Package>(`${API_BASE}/packages/${id}`, undefined, 'Package not found');
   },
 
   // Inquiries
   async submitInquiry(inquiryData: Partial<Inquiry>): Promise<Inquiry> {
-    const res = await fetch(`${API_BASE}/inquiries`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(inquiryData),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to submit inquiry');
-    return data;
+    return safeFetch<Inquiry>(
+      `${API_BASE}/inquiries`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inquiryData),
+      },
+      'Failed to submit inquiry'
+    );
   },
 
   async getInquiries(userId?: string): Promise<Inquiry[]> {
     const url = userId ? `${API_BASE}/my-inquiries?userId=${encodeURIComponent(userId)}` : `${API_BASE}/inquiries`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to load inquiries');
-    return res.json();
+    return safeFetch<Inquiry[]>(url, undefined, 'Failed to load inquiries');
   },
 
   async getMyInquiries(userId: string): Promise<Inquiry[]> {
-    const res = await fetch(`${API_BASE}/my-inquiries?userId=${encodeURIComponent(userId)}`);
-    if (!res.ok) throw new Error('Failed to load inquiries');
-    return res.json();
+    return safeFetch<Inquiry[]>(`${API_BASE}/my-inquiries?userId=${encodeURIComponent(userId)}`, undefined, 'Failed to load inquiries');
   },
 
   // ================= ADMIN API =================
   async getAdminInquiries(): Promise<Inquiry[]> {
-    const res = await fetch(`${API_BASE}/admin/inquiries`, {
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Unauthorized or failed to fetch inquiries');
-    return res.json();
+    return safeFetch<Inquiry[]>(
+      `${API_BASE}/admin/inquiries`,
+      { headers: getAdminAuthHeader() },
+      'Unauthorized or failed to fetch inquiries'
+    );
   },
 
   async updateInquiryStatus(id: string, status: Inquiry['status']): Promise<Inquiry> {
-    const res = await fetch(`${API_BASE}/admin/inquiries/${id}/status`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<Inquiry>(
+      `${API_BASE}/admin/inquiries/${id}/status`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify({ status }),
       },
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) throw new Error('Failed to update inquiry status');
-    return res.json();
+      'Failed to update inquiry status'
+    );
   },
 
   async toggleInquiryStatus(id: string): Promise<Inquiry> {
-    const res = await fetch(`${API_BASE}/admin/inquiries/${id}/status`, {
-      method: 'PATCH',
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to toggle inquiry status');
-    return res.json();
+    return safeFetch<Inquiry>(
+      `${API_BASE}/admin/inquiries/${id}/status`,
+      {
+        method: 'PATCH',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to toggle inquiry status'
+    );
   },
 
   async deleteInquiry(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/admin/inquiries/${id}`, {
-      method: 'DELETE',
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to delete inquiry');
+    await safeFetch(
+      `${API_BASE}/admin/inquiries/${id}`,
+      {
+        method: 'DELETE',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to delete inquiry'
+    );
     return true;
   },
 
   // Admin Hotels
   async createHotel(hotel: Partial<Hotel>): Promise<Hotel> {
-    const res = await fetch(`${API_BASE}/admin/hotels`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<Hotel>(
+      `${API_BASE}/admin/hotels`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(hotel),
       },
-      body: JSON.stringify(hotel),
-    });
-    if (!res.ok) throw new Error('Failed to create hotel');
-    return res.json();
+      'Failed to create hotel'
+    );
   },
 
   async updateHotel(id: string, hotel: Partial<Hotel>): Promise<Hotel> {
-    const res = await fetch(`${API_BASE}/admin/hotels/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<Hotel>(
+      `${API_BASE}/admin/hotels/${id}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(hotel),
       },
-      body: JSON.stringify(hotel),
-    });
-    if (!res.ok) throw new Error('Failed to update hotel');
-    return res.json();
+      'Failed to update hotel'
+    );
   },
 
   async deleteHotel(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/admin/hotels/${id}`, {
-      method: 'DELETE',
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to delete hotel');
+    await safeFetch(
+      `${API_BASE}/admin/hotels/${id}`,
+      {
+        method: 'DELETE',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to delete hotel'
+    );
     return true;
   },
 
   // Admin Packages
   async createPackage(pkg: Partial<Package>): Promise<Package> {
-    const res = await fetch(`${API_BASE}/admin/packages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<Package>(
+      `${API_BASE}/admin/packages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(pkg),
       },
-      body: JSON.stringify(pkg),
-    });
-    if (!res.ok) throw new Error('Failed to create package');
-    return res.json();
+      'Failed to create package'
+    );
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
-    const res = await fetch(`${API_BASE}/admin/packages/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<Package>(
+      `${API_BASE}/admin/packages/${id}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(pkg),
       },
-      body: JSON.stringify(pkg),
-    });
-    if (!res.ok) throw new Error('Failed to update package');
-    return res.json();
+      'Failed to update package'
+    );
   },
 
   async deletePackage(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/admin/packages/${id}`, {
-      method: 'DELETE',
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to delete package');
+    await safeFetch(
+      `${API_BASE}/admin/packages/${id}`,
+      {
+        method: 'DELETE',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to delete package'
+    );
     return true;
   },
 
   // Admin Cities
   async createCity(city: Partial<City>): Promise<City> {
-    const res = await fetch(`${API_BASE}/admin/cities`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<City>(
+      `${API_BASE}/admin/cities`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(city),
       },
-      body: JSON.stringify(city),
-    });
-    if (!res.ok) throw new Error('Failed to create destination hub');
-    return res.json();
+      'Failed to create destination hub'
+    );
   },
 
   async updateCity(id: string, city: Partial<City>): Promise<City> {
-    const res = await fetch(`${API_BASE}/admin/cities/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<City>(
+      `${API_BASE}/admin/cities/${id}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(city),
       },
-      body: JSON.stringify(city),
-    });
-    if (!res.ok) throw new Error('Failed to update destination hub');
-    return res.json();
+      'Failed to update destination hub'
+    );
   },
 
   async deleteCity(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/admin/cities/${id}`, {
-      method: 'DELETE',
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to delete city');
+    await safeFetch(
+      `${API_BASE}/admin/cities/${id}`,
+      {
+        method: 'DELETE',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to delete city'
+    );
     return true;
   },
 
@@ -283,72 +351,79 @@ export const api = {
   async getReviews(featuredOnly = false): Promise<Review[]> {
     const params = new URLSearchParams();
     if (featuredOnly) params.append('featured', 'true');
-    const res = await fetch(`${API_BASE}/reviews?${params.toString()}`);
-    if (!res.ok) throw new Error('Failed to fetch reviews');
-    return res.json();
+    return safeFetch<Review[]>(`${API_BASE}/reviews?${params.toString()}`, undefined, 'Failed to fetch reviews');
   },
 
   async getAdminReviews(): Promise<Review[]> {
-    const res = await fetch(`${API_BASE}/admin/reviews`, {
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch admin reviews');
-    return res.json();
+    return safeFetch<Review[]>(
+      `${API_BASE}/admin/reviews`,
+      { headers: getAdminAuthHeader() },
+      'Failed to fetch admin reviews'
+    );
   },
 
   async createReview(review: Partial<Review>): Promise<Review> {
-    const res = await fetch(`${API_BASE}/admin/reviews`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<Review>(
+      `${API_BASE}/admin/reviews`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(review),
       },
-      body: JSON.stringify(review),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to create review');
-    return data;
+      'Failed to create review'
+    );
   },
 
   async updateReview(id: string, review: Partial<Review>): Promise<Review> {
-    const res = await fetch(`${API_BASE}/admin/reviews/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeader(),
+    return safeFetch<Review>(
+      `${API_BASE}/admin/reviews/${id}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify(review),
       },
-      body: JSON.stringify(review),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to update review');
-    return data;
+      'Failed to update review'
+    );
   },
 
   async toggleReviewFeatured(id: string): Promise<Review> {
-    const res = await fetch(`${API_BASE}/admin/reviews/${id}/featured`, {
-      method: 'PATCH',
-      headers: getAdminAuthHeader(),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to toggle featured status');
-    return data;
+    return safeFetch<Review>(
+      `${API_BASE}/admin/reviews/${id}/featured`,
+      {
+        method: 'PATCH',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to toggle featured status'
+    );
   },
 
   async deleteReview(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/admin/reviews/${id}`, {
-      method: 'DELETE',
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to delete review');
+    await safeFetch(
+      `${API_BASE}/admin/reviews/${id}`,
+      {
+        method: 'DELETE',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to delete review'
+    );
     return true;
   },
 
   async resetData(): Promise<void> {
-    const res = await fetch(`${API_BASE}/admin/reset-data`, {
-      method: 'POST',
-      headers: getAdminAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to reset data');
+    await safeFetch(
+      `${API_BASE}/admin/reset-data`,
+      {
+        method: 'POST',
+        headers: getAdminAuthHeader(),
+      },
+      'Failed to reset data'
+    );
   },
 };
 

@@ -432,6 +432,22 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
+  // Explicit 404 Handler for /api/* routes to prevent HTML SPA fallback
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+  });
+
+  // Global Error Handler for API routes
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith('/api')) {
+      console.error('API Error:', err);
+      return res.status(err.status || 500).json({
+        error: err.message || 'Internal server error occurred',
+      });
+    }
+    next(err);
+  });
+
   // ===================== VITE MIDDLEWARE SETUP =====================
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
