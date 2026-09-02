@@ -588,6 +588,8 @@ export function generateWhatsAppLink(details: {
   plan?: string;
   notes?: string;
   specialRequests?: string;
+  pickupLocation?: string;
+  dropoffLocation?: string;
 }) {
   const travelDeskNumber = '919876543210'; // Enterprise TirthYatraTrails Travel Desk WhatsApp
   const displayTitle = details.title || 'Sacred Pilgrimage';
@@ -628,6 +630,8 @@ export function generateWhatsAppLink(details: {
 
   const displayPlan = details.plan || '';
   const displayNotes = details.specialRequests || details.notes || '';
+  const pickup = details.pickupLocation?.trim() || '';
+  const dropoff = details.dropoffLocation?.trim() || '';
 
   const text = encodeURIComponent(
     `*Namaste TirthYatraTrails Travel Desk!*\n\n` +
@@ -637,6 +641,8 @@ export function generateWhatsAppLink(details: {
     `📱 *WhatsApp*: ${displayPhone}\n` +
     `📅 *Check-In / Travel Date*: ${displayDate}\n` +
     `👥 *Guests*: ${guestsFormatted}\n` +
+    (pickup ? `📍 *Pickup Location*: ${pickup}\n` : '') +
+    (dropoff ? `🏁 *Drop-off Location*: ${dropoff}\n` : '') +
     (displayPlan ? `🍽️ *Chosen Plan*: ${displayPlan}\n` : '') +
     (displayNotes ? `📝 *Notes/Puja Requests*: ${displayNotes}\n\n` : '\n') +
     `Please share the customized quotation and verified darshan availability at your earliest convenience.`

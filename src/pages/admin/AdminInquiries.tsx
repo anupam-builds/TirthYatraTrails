@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Clock,
   Filter,
+  MapPin,
 } from 'lucide-react';
 
 export const AdminInquiries: React.FC = () => {
@@ -227,6 +228,28 @@ export const AdminInquiries: React.FC = () => {
                     {inq.selectedPlan && (
                       <div className="text-xs text-slate-400">
                         <span className="text-slate-500 font-bold">Selected Plan:</span> {inq.selectedPlan}
+                      </div>
+                    )}
+
+                    {(inq.pickupLocation || inq.dropoffLocation) && (
+                      <div className="flex flex-wrap items-center gap-3 py-1.5 px-3 bg-[#081220] rounded-xl border border-slate-800 text-xs">
+                        {inq.pickupLocation && (
+                          <div className="flex items-center gap-1.5 text-slate-300">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-slate-400 font-medium">Pickup:</span>
+                            <span className="font-semibold text-white">{inq.pickupLocation}</span>
+                          </div>
+                        )}
+                        {inq.pickupLocation && inq.dropoffLocation && (
+                          <span className="text-slate-600">→</span>
+                        )}
+                        {inq.dropoffLocation && (
+                          <div className="flex items-center gap-1.5 text-slate-300">
+                            <MapPin className="w-3.5 h-3.5 text-orange-400" />
+                            <span className="text-slate-400 font-medium">Drop-off:</span>
+                            <span className="font-semibold text-white">{inq.dropoffLocation}</span>
+                          </div>
+                        )}
                       </div>
                     )}
 

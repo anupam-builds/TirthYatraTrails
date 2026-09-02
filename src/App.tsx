@@ -11,8 +11,6 @@ import { HotelDetailPage } from './pages/HotelDetailPage.js';
 import { PackagesPage } from './pages/PackagesPage.js';
 import { PackageDetailPage } from './pages/PackageDetailPage.js';
 import { FlightsPage } from './pages/FlightsPage.js';
-import { CustomerLoginPage } from './pages/CustomerLoginPage.js';
-import { CustomerRegisterPage } from './pages/CustomerRegisterPage.js';
 import { MyInquiriesPage } from './pages/MyInquiriesPage.js';
 
 // Admin Pages
@@ -88,10 +86,6 @@ const AppContent: React.FC = () => {
         return <PackagesPage />;
       case '/flights':
         return <FlightsPage />;
-      case '/login':
-        return <CustomerLoginPage />;
-      case '/register':
-        return <CustomerRegisterPage />;
       case '/my-inquiries':
         return <MyInquiriesPage />;
       case '/':

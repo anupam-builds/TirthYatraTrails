@@ -260,6 +260,8 @@ export const localStore = {
       childAges: inquiryData.childAges ? String(inquiryData.childAges) : undefined,
       planChosen: inquiryData.planChosen || inquiryData.selectedPlan || '',
       selectedPlan: inquiryData.selectedPlan || inquiryData.planChosen || '',
+      pickupLocation: inquiryData.pickupLocation || '',
+      dropoffLocation: inquiryData.dropoffLocation || '',
       specialRequests: inquiryData.specialRequests || '',
       status: 'NEW',
       isResolved: false,

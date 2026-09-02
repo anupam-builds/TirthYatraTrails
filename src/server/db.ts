@@ -525,6 +525,8 @@ class DatabaseStore {
       childAges: childAgesStr || undefined,
       planChosen: inquiryData.planChosen || inquiryData.selectedPlan || '',
       selectedPlan: inquiryData.selectedPlan || inquiryData.planChosen || '',
+      pickupLocation: inquiryData.pickupLocation || '',
+      dropoffLocation: inquiryData.dropoffLocation || '',
       specialRequests: inquiryData.specialRequests || '',
       status: 'NEW',
       isResolved: false,

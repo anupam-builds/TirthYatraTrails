@@ -427,6 +427,52 @@ async function startServer() {
     }
   });
 
+  // Location & Geocoding Autocomplete (Nominatim with India filter + PIN code fallback)
+  app.get('/api/geo/autocomplete', async (req, res) => {
+    try {
+      const q = String(req.query.q || '').trim();
+      if (!q || q.length < 2) {
+        return res.json([]);
+      }
+
+      // Check if 6-digit PIN code
+      if (/^\d{6}$/.test(q)) {
+        const pinRes = await fetch(`https://api.postalpincode.in/pincode/${q}`);
+        if (pinRes.ok) {
+          const pinData = await pinRes.json();
+          return res.json({ type: 'pincode', data: pinData });
+        }
+      }
+
+      // Nominatim search
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=in&q=${encodeURIComponent(q)}`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'TirthYatraTrails-PilgrimageApp/1.0 (traveldesk@tirthyatratrails.com)',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-IN,en;q=0.9',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return res.json({ type: 'nominatim', data });
+      }
+
+      // Fallback to Photon
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`;
+      const photonRes = await fetch(photonUrl);
+      if (photonRes.ok) {
+        const photonData = await photonRes.json();
+        return res.json({ type: 'photon', data: photonData });
+      }
+
+      res.json({ type: 'empty', data: [] });
+    } catch (err: any) {
+      res.json({ type: 'error', error: err.message, data: [] });
+    }
+  });
+
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });

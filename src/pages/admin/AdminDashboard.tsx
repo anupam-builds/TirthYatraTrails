@@ -205,6 +205,8 @@ export const AdminDashboard: React.FC = () => {
                     children: inq.children,
                     plan: inq.selectedPlan,
                     notes: inq.specialRequests,
+                    pickupLocation: inq.pickupLocation,
+                    dropoffLocation: inq.dropoffLocation,
                   });
 
                   return (
@@ -220,7 +222,14 @@ export const AdminDashboard: React.FC = () => {
                         <div className="text-slate-500 text-[10px] truncate max-w-[140px]">{inq.customerEmail}</div>
                       </td>
                       <td className="py-3.5 px-3 font-semibold text-slate-200 truncate max-w-[160px]">
-                        {inq.title}
+                        <div>{inq.title}</div>
+                        {(inq.pickupLocation || inq.dropoffLocation) && (
+                          <div className="text-[10px] text-orange-400/90 truncate">
+                            {inq.pickupLocation && <span>📍 {inq.pickupLocation}</span>}
+                            {inq.pickupLocation && inq.dropoffLocation && <span> → </span>}
+                            {inq.dropoffLocation && <span>🏁 {inq.dropoffLocation}</span>}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-3 text-slate-400">
                         <div>{inq.selectedPlan || 'Standard'}</div>

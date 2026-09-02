@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ShieldCheck,
   CheckCircle2,
+  MapPin,
 } from 'lucide-react';
 
 export const MyInquiriesPage: React.FC = () => {
@@ -176,6 +177,28 @@ export const MyInquiriesPage: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {(inq.pickupLocation || inq.dropoffLocation) && (
+                      <div className="flex flex-wrap items-center gap-3 py-1.5 px-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
+                        {inq.pickupLocation && (
+                          <div className="flex items-center gap-1 text-slate-700">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-slate-400 font-medium">Pickup:</span>
+                            <span className="font-semibold">{inq.pickupLocation}</span>
+                          </div>
+                        )}
+                        {inq.pickupLocation && inq.dropoffLocation && (
+                          <span className="text-slate-400">→</span>
+                        )}
+                        {inq.dropoffLocation && (
+                          <div className="flex items-center gap-1 text-slate-700">
+                            <MapPin className="w-3.5 h-3.5 text-orange-600" />
+                            <span className="text-slate-400 font-medium">Drop-off:</span>
+                            <span className="font-semibold">{inq.dropoffLocation}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {inq.specialRequests && (
                       <p className="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100">

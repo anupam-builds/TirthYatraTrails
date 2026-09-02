@@ -116,6 +116,8 @@ export interface Inquiry {
   childAges?: string | number[];
   planChosen?: string;
   selectedPlan?: string;
+  pickupLocation?: string;
+  dropoffLocation?: string;
   specialRequests?: string;
   status: 'NEW' | 'CONTACTED' | 'CONFIRMED' | 'CLOSED';
   isResolved: boolean;

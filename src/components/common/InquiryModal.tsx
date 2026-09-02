@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { api, generateWhatsAppLink } from '../../services/api.js';
 import confetti from 'canvas-confetti';
+import { LocationAutocompleteInput } from './LocationAutocompleteInput.js';
 import {
   X,
   MessageCircle,
@@ -50,6 +51,8 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
   const [email, setEmail] = useState(customerUser?.email || '');
   const [whatsappNumber, setWhatsappNumber] = useState(customerUser?.phone || '+91 ');
   const [userCity, setUserCity] = useState('');
+  const [pickupLocation, setPickupLocation] = useState('');
+  const [dropoffLocation, setDropoffLocation] = useState('');
   const [checkInDate, setCheckInDate] = useState(() => {
     if (defaultCheckInDate) return defaultCheckInDate;
     const d = new Date();
@@ -134,6 +137,8 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
         email: email.trim(),
         whatsappNumber: whatsappNumber.trim(),
         userCity: userCity.trim(),
+        pickupLocation: pickupLocation.trim(),
+        dropoffLocation: dropoffLocation.trim(),
         checkInDate,
         guests: totalGuests,
         adults: adults,
@@ -150,6 +155,8 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
         fullName,
         phone: whatsappNumber,
         checkInDate,
+        pickupLocation: pickupLocation.trim(),
+        dropoffLocation: dropoffLocation.trim(),
         adults,
         children: childAges.length,
         childAges: childAges,
@@ -180,9 +187,9 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
-      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-orange-100 overflow-hidden relative">
+      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-orange-100 overflow-hidden relative max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="bg-[#0f294a] text-white p-6 relative">
+        <div className="bg-[#0f294a] text-white p-6 relative shrink-0">
           <button
             onClick={onClose}
             className="absolute top-5 right-5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
@@ -204,7 +211,7 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
           {success ? (
             <div className="text-center py-6 space-y-4">
               <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto ring-8 ring-emerald-50/50">
@@ -309,6 +316,29 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Pickup & Drop-off Locations with Real-Time Address & PIN Autocomplete */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <LocationAutocompleteInput
+                  id="inquiry-pickup-location"
+                  label="Pickup Location"
+                  placeholder="e.g., Station, Airport, or PIN"
+                  value={pickupLocation}
+                  onChange={(val) => setPickupLocation(val)}
+                  iconType="pickup"
+                  accentColor="emerald"
+                />
+
+                <LocationAutocompleteInput
+                  id="inquiry-dropoff-location"
+                  label="Drop-off Location"
+                  placeholder="e.g., Temple, Hotel, or PIN"
+                  value={dropoffLocation}
+                  onChange={(val) => setDropoffLocation(val)}
+                  iconType="dropoff"
+                  accentColor="orange"
+                />
               </div>
 
               {/* Travel Date */}
