@@ -1,5 +1,6 @@
 import { City, Hotel, Package, Inquiry, User, AuthResponse, Review } from '../types.js';
 import { localStore } from './localStore.js';
+import { broadcastNewInquiry } from './soundNotification.js';
 
 const API_BASE = '/api';
 
@@ -205,7 +206,7 @@ export const api = {
   // Inquiries
   async submitInquiry(inquiryData: Partial<Inquiry>): Promise<Inquiry> {
     try {
-      return await safeFetch<Inquiry>(
+      const created = await safeFetch<Inquiry>(
         `${API_BASE}/inquiries`,
         {
           method: 'POST',
@@ -214,8 +215,14 @@ export const api = {
         },
         'Failed to submit inquiry'
       );
+      // Sync local storage copy and trigger audio/visual broadcast alert
+      localStore.submitInquiry(created);
+      broadcastNewInquiry(created);
+      return created;
     } catch {
-      return localStore.submitInquiry(inquiryData);
+      const fallback = localStore.submitInquiry(inquiryData);
+      broadcastNewInquiry(fallback);
+      return fallback;
     }
   },
 

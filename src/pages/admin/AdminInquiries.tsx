@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api, generateWhatsAppLink } from '../../services/api.js';
 import { Inquiry } from '../../types.js';
+import { subscribeToNewInquiries } from '../../services/soundNotification.js';
 import {
   MessageSquare,
   Search,
@@ -25,6 +26,15 @@ export const AdminInquiries: React.FC = () => {
 
   useEffect(() => {
     loadInquiries();
+
+    // Auto prepend new incoming leads live without manual refresh
+    const unsub = subscribeToNewInquiries((newInquiry) => {
+      setInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)]);
+    });
+
+    return () => {
+      unsub();
+    };
   }, []);
 
   async function loadInquiries() {
@@ -78,31 +88,31 @@ export const AdminInquiries: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
-              <MessageSquare className="w-6 h-6 text-orange-400" />
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif">
+              <MessageSquare className="w-6 h-6 text-orange-500 dark:text-orange-400" />
               <span>Travel Desk Leads &amp; Direct WhatsApp Inquiries</span>
             </h1>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Real-time feed of pilgrim accommodation and yatra requests.
             </p>
           </div>
 
-          <div className="text-xs font-bold text-slate-300 bg-[#0d1d33] border border-slate-700 px-4 py-2 rounded-xl">
-            Total Leads: <span className="text-orange-400 font-extrabold">{inquiries.length}</span>
+          <div className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-xl shadow-xs">
+            Total Leads: <span className="text-orange-600 dark:text-orange-400 font-extrabold">{inquiries.length}</span>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-[#0d1d33] border border-slate-700 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
           <div className="flex items-center gap-2 overflow-x-auto">
             {['ALL', 'NEW', 'CONTACTED', 'CONFIRMED', 'CLOSED'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
                   statusFilter === st
-                    ? 'bg-[#ea580c] text-white shadow-md'
-                    : 'bg-[#081220] text-slate-400 hover:text-white border border-slate-700'
+                    ? 'bg-orange-600 text-white shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#081220] text-slate-600 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700'
                 }`}
               >
                 {st} {st === 'NEW' && inquiries.filter((i) => i.status === 'NEW').length > 0 && `(${inquiries.filter((i) => i.status === 'NEW').length})`}
@@ -117,7 +127,7 @@ export const AdminInquiries: React.FC = () => {
               placeholder="Search pilgrim name / phone..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 bg-[#081220] border border-slate-700 text-white text-xs rounded-xl focus:outline-none w-60"
+              className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 w-60"
             />
           </div>
         </div>
@@ -126,14 +136,14 @@ export const AdminInquiries: React.FC = () => {
         {loading ? (
           <div className="space-y-4 animate-pulse">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-slate-800/50 rounded-2xl"></div>
+              <div key={i} className="h-32 bg-slate-200 dark:bg-slate-800/50 rounded-2xl"></div>
             ))}
           </div>
         ) : filteredInquiries.length === 0 ? (
-          <div className="bg-[#0d1d33] border border-slate-700 p-12 rounded-3xl text-center space-y-2">
-            <MessageSquare className="w-10 h-10 text-slate-600 mx-auto" />
-            <h3 className="text-base font-bold text-white">No inquiries found</h3>
-            <p className="text-xs text-slate-400">All pilgrim leads have been resolved or filtered out.</p>
+          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 p-12 rounded-3xl text-center space-y-2 shadow-xs">
+            <MessageSquare className="w-10 h-10 text-slate-400 dark:text-slate-600 mx-auto" />
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">No inquiries found</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">All pilgrim leads have been resolved or filtered out.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -152,49 +162,49 @@ export const AdminInquiries: React.FC = () => {
               return (
                 <div
                   key={inq.id}
-                  className="bg-[#0d1d33] border border-slate-700/80 rounded-3xl p-5 hover:border-slate-600 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+                  className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 rounded-3xl p-5 hover:border-slate-300 dark:hover:border-slate-600 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-5 shadow-xs"
                 >
                   {/* Left info */}
                   <div className="space-y-2 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                         inq.status === 'NEW'
-                          ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800'
                           : inq.status === 'CONTACTED'
-                          ? 'bg-blue-950/80 text-blue-300 border border-blue-800'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800'
                           : inq.status === 'CONFIRMED'
-                          ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
-                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800'
+                          : 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                       }`}>
                         {inq.status}
                       </span>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
                         Received: {new Date(inq.createdAt).toLocaleString('en-IN')}
                       </span>
                     </div>
 
                     <div className="flex flex-col sm:flex-row sm:items-baseline gap-2">
-                      <h3 className="text-base font-extrabold text-white">
+                      <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
                         {inq.customerName}
                       </h3>
-                      <span className="text-xs text-orange-400 font-semibold">
+                      <span className="text-xs text-orange-600 dark:text-orange-400 font-semibold">
                         Interested in: {inq.title} ({inq.type})
                       </span>
                     </div>
 
                     {/* Contacts & Dates */}
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300 pt-1">
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-300 pt-1">
                       <div className="flex items-center gap-1.5">
                         <Phone className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="font-mono text-white font-bold">{inq.customerPhone}</span>
+                        <span className="font-mono text-slate-900 dark:text-white font-bold">{inq.customerPhone}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Mail className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-slate-300">{inq.customerEmail}</span>
+                        <span className="text-slate-600 dark:text-slate-300">{inq.customerEmail}</span>
                       </div>
                       {inq.checkInDate && (
                         <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-orange-400" />
+                          <Calendar className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
                           <span>Yatra Date: {inq.checkInDate}</span>
                         </div>
                       )}
@@ -204,15 +214,15 @@ export const AdminInquiries: React.FC = () => {
                           {inq.adults || inq.guests || 2} Adults
                           {inq.children ? `, ${inq.children} Children` : ''}
                           {inq.childAges && (
-                            <span className="text-orange-400 text-[11px] ml-1">
+                            <span className="text-orange-600 dark:text-orange-400 text-[11px] ml-1">
                               (Ages:{' '}
                               {(Array.isArray(inq.childAges)
                                 ? inq.childAges
                                 : (() => {
                                     try {
-                                      return JSON.parse(inq.childAges);
+                                       return JSON.parse(inq.childAges);
                                     } catch {
-                                      return inq.childAges;
+                                       return inq.childAges;
                                     }
                                   })()
                               )
@@ -226,36 +236,36 @@ export const AdminInquiries: React.FC = () => {
                     </div>
 
                     {inq.selectedPlan && (
-                      <div className="text-xs text-slate-400">
-                        <span className="text-slate-500 font-bold">Selected Plan:</span> {inq.selectedPlan}
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <span className="text-slate-600 dark:text-slate-500 font-bold">Selected Plan:</span> {inq.selectedPlan}
                       </div>
                     )}
 
                     {(inq.pickupLocation || inq.dropoffLocation) && (
-                      <div className="flex flex-wrap items-center gap-3 py-1.5 px-3 bg-[#081220] rounded-xl border border-slate-800 text-xs">
+                      <div className="flex flex-wrap items-center gap-3 py-1.5 px-3 bg-slate-50 dark:bg-[#081220] rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
                         {inq.pickupLocation && (
-                          <div className="flex items-center gap-1.5 text-slate-300">
-                            <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-slate-400 font-medium">Pickup:</span>
-                            <span className="font-semibold text-white">{inq.pickupLocation}</span>
+                          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-slate-500 dark:text-slate-400 font-medium">Pickup:</span>
+                            <span className="font-semibold text-slate-900 dark:text-white">{inq.pickupLocation}</span>
                           </div>
                         )}
                         {inq.pickupLocation && inq.dropoffLocation && (
-                          <span className="text-slate-600">→</span>
+                          <span className="text-slate-400 dark:text-slate-600">→</span>
                         )}
                         {inq.dropoffLocation && (
-                          <div className="flex items-center gap-1.5 text-slate-300">
-                            <MapPin className="w-3.5 h-3.5 text-orange-400" />
-                            <span className="text-slate-400 font-medium">Drop-off:</span>
-                            <span className="font-semibold text-white">{inq.dropoffLocation}</span>
+                          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                            <MapPin className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
+                            <span className="text-slate-500 dark:text-slate-400 font-medium">Drop-off:</span>
+                            <span className="font-semibold text-slate-900 dark:text-white">{inq.dropoffLocation}</span>
                           </div>
                         )}
                       </div>
                     )}
 
                     {inq.specialRequests && (
-                      <div className="p-3 rounded-xl bg-[#081220] border border-slate-800 text-xs text-slate-300">
-                        <span className="font-bold text-orange-400">Special Notes:</span> {inq.specialRequests}
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
+                        <span className="font-bold text-orange-600 dark:text-orange-400">Special Notes:</span> {inq.specialRequests}
                       </div>
                     )}
                   </div>
@@ -265,7 +275,7 @@ export const AdminInquiries: React.FC = () => {
                     <select
                       value={inq.status}
                       onChange={(e) => handleUpdateStatus(inq.id, e.target.value as any)}
-                      className="bg-[#081220] border border-slate-700 text-xs text-white rounded-xl px-3 py-2 font-bold focus:outline-none"
+                      className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white rounded-xl px-3 py-2 font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
                     >
                       <option value="NEW">Status: NEW</option>
                       <option value="CONTACTED">Status: CONTACTED</option>
@@ -277,7 +287,7 @@ export const AdminInquiries: React.FC = () => {
                       href={waLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-colors"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
                     >
                       <MessageCircle className="w-4 h-4" />
                       <span>WhatsApp Pilgrim</span>
@@ -285,7 +295,7 @@ export const AdminInquiries: React.FC = () => {
 
                     <button
                       onClick={() => handleDelete(inq.id)}
-                      className="p-2 bg-red-950/60 hover:bg-red-900 text-red-300 rounded-xl transition-colors"
+                      className="p-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950/60 dark:hover:bg-red-900 dark:text-red-300 rounded-xl transition-colors cursor-pointer"
                       title="Delete lead"
                     >
                       <Trash2 className="w-4 h-4" />

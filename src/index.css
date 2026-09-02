@@ -1,1 +1,35 @@
 @import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  --admin-bg: #f8fafc;
+  --admin-sidebar-bg: #ffffff;
+  --admin-header-bg: rgba(255, 255, 255, 0.85);
+  --admin-card-bg: #ffffff;
+  --admin-card-inner: #f1f5f9;
+  --admin-input-bg: #f8fafc;
+  --admin-border: #e2e8f0;
+  --admin-border-subtle: #cbd5e1;
+  --admin-text-primary: #0f172a;
+  --admin-text-secondary: #334155;
+  --admin-text-muted: #64748b;
+  --admin-hover-bg: #f1f5f9;
+  --admin-toast-bg: #ffffff;
+}
+
+.dark {
+  --admin-bg: #071322;
+  --admin-sidebar-bg: #0a192f;
+  --admin-header-bg: rgba(10, 25, 47, 0.85);
+  --admin-card-bg: #0d1d33;
+  --admin-card-inner: #0f233f;
+  --admin-input-bg: #0f233f;
+  --admin-border: #1e293b;
+  --admin-border-subtle: #334155;
+  --admin-text-primary: #f8fafc;
+  --admin-text-secondary: #94a3b8;
+  --admin-text-muted: #64748b;
+  --admin-hover-bg: #0f233f;
+  --admin-toast-bg: #0f294a;
+}

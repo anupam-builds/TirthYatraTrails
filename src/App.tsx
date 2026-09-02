@@ -1,6 +1,7 @@
 import React from 'react';
 import { RouterProvider, useRouter } from './context/RouterContext.js';
 import { AuthProvider } from './context/AuthContext.js';
+import { ThemeProvider } from './context/ThemeContext.js';
 import { CustomerNavbar } from './components/layout/Navbar.js';
 import { CustomerFooter } from './components/layout/Footer.js';
 
@@ -21,6 +22,7 @@ import { AdminPackages } from './pages/admin/AdminPackages.js';
 import { AdminInquiries } from './pages/admin/AdminInquiries.js';
 import { AdminCities } from './pages/admin/AdminCities.js';
 import { AdminReviews } from './pages/admin/AdminReviews.js';
+import { AdminSettings } from './pages/admin/AdminSettings.js';
 
 const AppContent: React.FC = () => {
   const { path } = useRouter();
@@ -44,6 +46,9 @@ const AppContent: React.FC = () => {
     }
     if (path === '/admin/reviews') {
       return <AdminReviews />;
+    }
+    if (path === '/admin/settings') {
+      return <AdminSettings />;
     }
     // Default admin fallback
     return <AdminDashboard />;
@@ -107,10 +112,12 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <RouterProvider>
-        <AppContent />
-      </RouterProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <RouterProvider>
+          <AppContent />
+        </RouterProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
