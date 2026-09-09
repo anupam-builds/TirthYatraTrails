@@ -31,6 +31,63 @@ async function startServer() {
     }
   };
 
+  function parseDeviceDetails(userAgent?: string): string {
+    if (!userAgent) return 'Desktop Browser';
+    let browser = 'Browser';
+    let os = 'Unknown OS';
+
+    if (userAgent.includes('Edg/')) browser = 'Edge';
+    else if (userAgent.includes('Chrome/')) browser = 'Chrome';
+    else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome/')) browser = 'Safari';
+    else if (userAgent.includes('Firefox/')) browser = 'Firefox';
+
+    if (userAgent.includes('Windows')) os = 'Windows 11/10';
+    else if (userAgent.includes('Macintosh') || userAgent.includes('Mac OS')) os = 'macOS';
+    else if (userAgent.includes('iPhone')) os = 'iPhone iOS';
+    else if (userAgent.includes('iPad')) os = 'iPadOS';
+    else if (userAgent.includes('Android')) os = 'Android Device';
+    else if (userAgent.includes('Linux')) os = 'Linux OS';
+
+    return `${browser} on ${os}`;
+  }
+
+  const verifyStaffToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized. Staff credentials required.' });
+    }
+    const token = authHeader.replace('Bearer ', '');
+    try {
+      const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+      if (decoded.role === 'ADMIN') {
+        (req as any).staff = decoded;
+        return next();
+      }
+      if (decoded.role !== 'STAFF') {
+        return res.status(403).json({ error: 'Forbidden. Staff access required.' });
+      }
+
+      // Live access & block check against database
+      const liveStaff = db.getStaffMemberById(decoded.id);
+      if (!liveStaff) {
+        return res.status(401).json({ error: 'Staff account has been removed.' });
+      }
+
+      if (liveStaff.isBlocked || !liveStaff.isActive) {
+        return res.status(403).json({
+          error: 'Account Blocked: Your access has been revoked by the administrator. Active session terminated.',
+          isBlocked: true,
+          blockedReason: liveStaff.blockedReason || 'Revoked by administrator',
+        });
+      }
+
+      (req as any).staff = liveStaff;
+      next();
+    } catch {
+      return res.status(401).json({ error: 'Invalid authentication token.' });
+    }
+  };
+
   // ===================== AUTH ROUTES =====================
   // Google OAuth URL Generation
   app.get('/api/auth/google/url', (req, res) => {
@@ -163,6 +220,74 @@ async function startServer() {
       console.error('Login error:', err);
       return res.status(500).json({ error: err.message || 'Internal server error' });
     }
+  });
+
+  app.post('/api/auth/staff/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+      }
+
+      const staffMember = db.findStaffByEmail(email);
+      if (!staffMember) {
+        return res.status(401).json({ error: 'No staff account found with this email. Self-registration is disabled. Please request an administrator to create your staff account.' });
+      }
+
+      if (staffMember.password && staffMember.password !== password) {
+        return res.status(401).json({ error: 'Invalid staff credentials. Please check your email and password.' });
+      }
+
+      const clientIp = ((req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || '122.161.48.12').replace('::ffff:', '');
+      const deviceStr = parseDeviceDetails(req.headers['user-agent']);
+
+      if (staffMember.isBlocked || !staffMember.isActive) {
+        db.addStaffLog({
+          staffId: staffMember.id,
+          staffName: staffMember.name,
+          staffEmail: staffMember.email,
+          action: 'LOGIN',
+          description: `BLOCKED LOGIN ATTEMPT: Access denied due to admin block (${staffMember.blockedReason || 'Revoked'})`,
+          ipAddress: clientIp,
+          device: deviceStr,
+        });
+
+        return res.status(403).json({
+          error: `Access Blocked: Your staff account has been revoked by the administrator. Reason: ${staffMember.blockedReason || 'Access Revoked'}. All active sessions terminated.`,
+          isBlocked: true,
+          blockedReason: staffMember.blockedReason,
+        });
+      }
+
+      // Record login & active session tracking
+      db.recordStaffLogin(staffMember.id, clientIp, deviceStr);
+
+      const refreshedStaff = db.getStaffMemberById(staffMember.id) || staffMember;
+      const { password: _, ...safeStaff } = refreshedStaff;
+      const token = Buffer.from(JSON.stringify(safeStaff)).toString('base64');
+
+      return res.json({ user: safeStaff, token });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Staff authentication error' });
+    }
+  });
+
+  app.post('/api/auth/staff/logout', (req, res) => {
+    try {
+      const { staffId } = req.body;
+      if (staffId) {
+        db.recordStaffLogout(staffId);
+      }
+      return res.json({ success: true, message: 'Logged out successfully' });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Real-time Staff Session Verification / Heartbeat
+  app.get('/api/staff/session/check', verifyStaffToken, (req, res) => {
+    const staff = (req as any).staff;
+    return res.json({ ok: true, staff });
   });
 
   app.post('/api/auth/register', async (req, res) => {
@@ -371,6 +496,137 @@ async function startServer() {
   app.delete('/api/admin/inquiries/:id', verifyAdminToken, (req, res) => {
     try {
       db.deleteInquiry(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Staff Inquiry Status Update (restricted to CONTACTED / CLOSED, locked lead enforcement)
+  app.put('/api/staff/inquiries/:id/status', verifyStaffToken, (req, res) => {
+    try {
+      const { status, staff } = req.body;
+      const staffInfo = staff || (req as any).staff || { id: 'staff', name: 'Staff' };
+      const updated = db.updateInquiryStatusByStaff(req.params.id, status, staffInfo);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Admin Unlock Inquiry (Admin only)
+  app.post('/api/admin/inquiries/:id/unlock', verifyAdminToken, (req, res) => {
+    try {
+      const { newStatus } = req.body;
+      const updated = db.adminUnlockInquiry(req.params.id, newStatus);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Inquiry Follow-up Notes (Admin & Staff)
+  app.post('/api/inquiries/:id/notes', (req, res) => {
+    try {
+      const updated = db.addInquiryNote(req.params.id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Admin Assign Staff
+  app.post('/api/admin/inquiries/:id/assign', verifyAdminToken, (req, res) => {
+    try {
+      const { staffId, staffName } = req.body;
+      const updated = db.assignInquiryStaff(req.params.id, staffId, staffName);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ===================== ADMIN STAFF MANAGEMENT =====================
+  app.get('/api/admin/staff', verifyAdminToken, (req, res) => {
+    res.json(db.getStaffMembers());
+  });
+
+  // Session monitor tracking active staff logins and device metadata
+  app.get('/api/admin/staff/sessions', verifyAdminToken, (req, res) => {
+    res.json(db.getStaffSessionMonitor());
+  });
+
+  // Staff activity audit logs
+  app.get('/api/admin/staff/logs', verifyAdminToken, (req, res) => {
+    const staffId = req.query.staffId as string | undefined;
+    res.json(db.getStaffLogs(staffId));
+  });
+
+  app.post('/api/admin/staff', verifyAdminToken, (req, res) => {
+    try {
+      const clientIp = ((req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || '127.0.0.1').replace('::ffff:', '');
+      const created = db.createStaffMember(req.body, {
+        name: (req as any).user?.name || 'Administrator',
+        ip: clientIp,
+        device: parseDeviceDetails(req.headers['user-agent']),
+      });
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/admin/staff/:id', verifyAdminToken, (req, res) => {
+    try {
+      const updated = db.updateStaffMember(req.params.id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Admin Block / Revoke Access toggle (Immediate session termination)
+  app.patch('/api/admin/staff/:id/block', verifyAdminToken, (req, res) => {
+    try {
+      const { isBlocked, reason } = req.body;
+      const clientIp = ((req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || '127.0.0.1').replace('::ffff:', '');
+      const updated = db.blockStaffMember(req.params.id, Boolean(isBlocked), reason, {
+        name: (req as any).user?.name || 'Administrator',
+        ip: clientIp,
+        device: parseDeviceDetails(req.headers['user-agent']),
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Admin Reset Staff Password
+  app.post('/api/admin/staff/:id/reset-password', verifyAdminToken, (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.trim().length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+      }
+      const updated = db.updateStaffMember(req.params.id, { password: newPassword.trim() });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/admin/staff/:id/status', verifyAdminToken, (req, res) => {
+    try {
+      const updated = db.toggleStaffStatus(req.params.id);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/staff/:id', verifyAdminToken, (req, res) => {
+    try {
+      db.deleteStaffMember(req.params.id);
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });

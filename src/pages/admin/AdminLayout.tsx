@@ -38,7 +38,7 @@ import { AdminLoginPage } from './AdminLoginPage.js';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
-  activeTab: 'dashboard' | 'hotels' | 'packages' | 'inquiries' | 'cities' | 'users' | 'reviews' | 'settings';
+  activeTab: 'dashboard' | 'hotels' | 'packages' | 'inquiries' | 'staff' | 'cities' | 'users' | 'reviews' | 'settings';
 }
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab }) => {
@@ -167,6 +167,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { id: 'inquiries', label: 'Travel Desk Leads', path: '/admin/inquiries', icon: MessageSquare },
+    { id: 'staff', label: 'Staff & Access', path: '/admin/staff', icon: Users },
     { id: 'hotels', label: 'Hotels Inventory', path: '/admin/hotels', icon: Building },
     { id: 'packages', label: 'Yatra Packages', path: '/admin/packages', icon: Compass },
     { id: 'cities', label: 'Cities & Hubs', path: '/admin/cities', icon: MapPin },

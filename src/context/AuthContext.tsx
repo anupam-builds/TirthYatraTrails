@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '../types.js';
+import { User, StaffMember } from '../types.js';
 import { api } from '../services/api.js';
 
 interface AuthContextType {
@@ -19,6 +19,13 @@ interface AuthContextType {
   isAdminAuthenticated: boolean;
   loginAdmin: (email: string, pass: string) => Promise<void>;
   logoutAdmin: () => void;
+
+  // Staff Portal
+  staffUser: StaffMember | null;
+  isStaffLoading: boolean;
+  isStaffAuthenticated: boolean;
+  loginStaff: (email: string, pass: string) => Promise<void>;
+  logoutStaff: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,6 +36,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [isAdminLoading, setIsAdminLoading] = useState(true);
+
+  const [staffUser, setStaffUser] = useState<StaffMember | null>(null);
+  const [isStaffLoading, setIsStaffLoading] = useState(true);
 
   // Restore Customer Session
   useEffect(() => {
@@ -67,6 +77,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     initAdmin();
+  }, []);
+
+  // Restore Staff Session
+  useEffect(() => {
+    async function initStaff() {
+      try {
+        const token = localStorage.getItem('tyt_staff_token');
+        if (token) {
+          try {
+            const check = await api.checkStaffSession();
+            if (check?.ok && check.staff && !check.staff.isBlocked && check.staff.isActive) {
+              setStaffUser(check.staff);
+            } else {
+              localStorage.removeItem('tyt_staff_token');
+              setStaffUser(null);
+            }
+          } catch {
+            const decoded = JSON.parse(atob(token));
+            if (decoded && (decoded.role === 'STAFF' || decoded.role === 'ADMIN') && !decoded.isBlocked && decoded.isActive !== false) {
+              setStaffUser(decoded);
+            } else {
+              localStorage.removeItem('tyt_staff_token');
+              setStaffUser(null);
+            }
+          }
+        } else {
+          setStaffUser(null);
+        }
+      } catch {
+        localStorage.removeItem('tyt_staff_token');
+        setStaffUser(null);
+      } finally {
+        setIsStaffLoading(false);
+      }
+    }
+    initStaff();
   }, []);
 
   // Customer Login
@@ -114,6 +160,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAdminUser(null);
   };
 
+  // Staff Login
+  const loginStaff = async (email: string, pass: string) => {
+    const res = await api.loginStaff(email, pass);
+    localStorage.setItem('tyt_staff_token', res.token);
+    setStaffUser(res.user);
+  };
+
+  // Staff Logout
+  const logoutStaff = () => {
+    if (staffUser?.id) {
+      api.logoutStaff(staffUser.id).catch(() => {});
+    }
+    localStorage.removeItem('tyt_staff_token');
+    setStaffUser(null);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -130,6 +192,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdminAuthenticated: !!adminUser && adminUser.role === 'ADMIN',
         loginAdmin,
         logoutAdmin,
+        staffUser,
+        isStaffLoading,
+        isStaffAuthenticated: !!staffUser && (staffUser.role === 'STAFF' || (staffUser as any).role === 'ADMIN'),
+        loginStaff,
+        logoutStaff,
       }}
     >
       {children}

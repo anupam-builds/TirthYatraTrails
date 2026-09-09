@@ -20,12 +20,25 @@ import { AdminDashboard } from './pages/admin/AdminDashboard.js';
 import { AdminHotels } from './pages/admin/AdminHotels.js';
 import { AdminPackages } from './pages/admin/AdminPackages.js';
 import { AdminInquiries } from './pages/admin/AdminInquiries.js';
+import { AdminStaff } from './pages/admin/AdminStaff.js';
 import { AdminCities } from './pages/admin/AdminCities.js';
 import { AdminReviews } from './pages/admin/AdminReviews.js';
 import { AdminSettings } from './pages/admin/AdminSettings.js';
 
+// Staff Pages
+import { StaffLoginPage } from './pages/staff/StaffLoginPage.js';
+import { StaffPortalPage } from './pages/staff/StaffPortalPage.js';
+
 const AppContent: React.FC = () => {
   const { path } = useRouter();
+
+  // Handle Dedicated Staff Portal Routes
+  if (path.startsWith('/staff')) {
+    if (path === '/staff/login') {
+      return <StaffLoginPage />;
+    }
+    return <StaffPortalPage />;
+  }
 
   // Handle Admin Portal Routes
   if (path.startsWith('/admin')) {
@@ -40,6 +53,9 @@ const AppContent: React.FC = () => {
     }
     if (path === '/admin/inquiries') {
       return <AdminInquiries />;
+    }
+    if (path === '/admin/staff') {
+      return <AdminStaff />;
     }
     if (path === '/admin/cities') {
       return <AdminCities />;

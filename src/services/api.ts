@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review } from '../types.js';
+import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor } from '../types.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry } from './soundNotification.js';
 
@@ -11,6 +11,11 @@ function getAuthHeader() {
 
 function getAdminAuthHeader() {
   const token = localStorage.getItem('tyt_admin_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function getStaffAuthHeader() {
+  const token = localStorage.getItem('tyt_staff_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -74,6 +79,70 @@ export const api = {
       // If server error / 404 on Vercel static routing, fallback to localStore
       console.warn('Backend login unavailable, using local authentication store:', err.message);
       return localStore.login(email, password, portal);
+    }
+  },
+
+  async loginStaff(email: string, password: string): Promise<{ user: StaffMember; token: string }> {
+    try {
+      return await safeFetch<{ user: StaffMember; token: string }>(
+        `${API_BASE}/auth/staff/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        },
+        'Failed to authenticate staff member'
+      );
+    } catch (err: any) {
+      if (
+        err.message &&
+        (err.message.includes('Access Blocked') ||
+          err.message.includes('Invalid staff') ||
+          err.message.includes('No staff account') ||
+          err.message.includes('revoked'))
+      ) {
+        throw err;
+      }
+      console.warn('Backend staff login unavailable, using local store:', err.message);
+      return localStore.loginStaff(email, password);
+    }
+  },
+
+  async logoutStaff(staffId?: string): Promise<void> {
+    try {
+      await safeFetch(`${API_BASE}/auth/staff/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId }),
+      });
+    } catch {
+      if (staffId) localStore.logoutStaff(staffId);
+    }
+  },
+
+  async checkStaffSession(): Promise<{ ok: boolean; staff: StaffMember }> {
+    try {
+      return await safeFetch<{ ok: boolean; staff: StaffMember }>(
+        `${API_BASE}/staff/session/check`,
+        { headers: getStaffAuthHeader() },
+        'Staff session invalid'
+      );
+    } catch (err: any) {
+      const token = localStorage.getItem('tyt_staff_token');
+      if (token) {
+        try {
+          const parsed = JSON.parse(atob(token));
+          const list = localStore.getStaffMembers();
+          const match = list.find((s) => s.id === parsed.id);
+          if (match?.isBlocked) {
+            throw new Error('Account Blocked: Access revoked by administrator');
+          }
+          if (match) return { ok: true, staff: match };
+        } catch (e: any) {
+          throw e;
+        }
+      }
+      throw err;
     }
   },
 
@@ -304,6 +373,237 @@ export const api = {
     } catch {
       return localStore.deleteInquiry(id);
     }
+  },
+
+  async updateInquiryStatusByStaff(
+    id: string,
+    status: 'CONTACTED' | 'CLOSED',
+    staff: { id: string; name: string }
+  ): Promise<Inquiry> {
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/staff/inquiries/${id}/status`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getStaffAuthHeader(),
+          },
+          body: JSON.stringify({ status, staff }),
+        },
+        'Failed to update inquiry status as staff'
+      );
+    } catch (err) {
+      return localStore.updateInquiryStatusByStaff(id, status, staff);
+    }
+  },
+
+  async adminUnlockInquiry(id: string, newStatus: Inquiry['status'] = 'CONTACTED'): Promise<Inquiry> {
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/admin/inquiries/${id}/unlock`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify({ newStatus }),
+        },
+        'Failed to unlock inquiry'
+      );
+    } catch {
+      return localStore.adminUnlockInquiry(id, newStatus);
+    }
+  },
+
+  async addInquiryNote(
+    id: string,
+    noteData: { text: string; authorName: string; authorRole: 'ADMIN' | 'STAFF'; authorId?: string }
+  ): Promise<Inquiry> {
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/inquiries/${id}/notes`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(noteData.authorRole === 'ADMIN' ? getAdminAuthHeader() : getStaffAuthHeader()),
+          },
+          body: JSON.stringify(noteData),
+        },
+        'Failed to add follow-up note'
+      );
+    } catch {
+      return localStore.addInquiryNote(id, noteData);
+    }
+  },
+
+  async assignInquiryStaff(id: string, staffId: string, staffName: string): Promise<Inquiry> {
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/admin/inquiries/${id}/assign`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify({ staffId, staffName }),
+        },
+        'Failed to assign staff to inquiry'
+      );
+    } catch {
+      return localStore.assignInquiryStaff(id, staffId, staffName);
+    }
+  },
+
+  // Admin Staff Management
+  async getStaffMembers(): Promise<StaffMember[]> {
+    try {
+      return await safeFetch<StaffMember[]>(
+        `${API_BASE}/admin/staff`,
+        { headers: getAdminAuthHeader() },
+        'Failed to fetch staff members'
+      );
+    } catch {
+      return localStore.getStaffMembers();
+    }
+  },
+
+  async createStaffMember(staff: Partial<StaffMember>): Promise<StaffMember> {
+    try {
+      return await safeFetch<StaffMember>(
+        `${API_BASE}/admin/staff`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(staff),
+        },
+        'Failed to create staff member'
+      );
+    } catch {
+      return localStore.createStaffMember(staff);
+    }
+  },
+
+  async updateStaffMember(id: string, staff: Partial<StaffMember>): Promise<StaffMember> {
+    try {
+      return await safeFetch<StaffMember>(
+        `${API_BASE}/admin/staff/${id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify(staff),
+        },
+        'Failed to update staff member'
+      );
+    } catch {
+      return localStore.updateStaffMember(id, staff);
+    }
+  },
+
+  async toggleStaffStatus(id: string): Promise<StaffMember> {
+    try {
+      return await safeFetch<StaffMember>(
+        `${API_BASE}/admin/staff/${id}/status`,
+        {
+          method: 'PATCH',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to toggle staff status'
+      );
+    } catch {
+      return localStore.toggleStaffStatus(id);
+    }
+  },
+
+  async blockStaffMember(id: string, isBlocked: boolean, reason?: string): Promise<StaffMember> {
+    try {
+      return await safeFetch<StaffMember>(
+        `${API_BASE}/admin/staff/${id}/block`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify({ isBlocked, reason }),
+        },
+        'Failed to update staff block status'
+      );
+    } catch {
+      return localStore.blockStaffMember(id, isBlocked, reason);
+    }
+  },
+
+  async getStaffSessions(): Promise<StaffSessionMonitor> {
+    try {
+      return await safeFetch<StaffSessionMonitor>(
+        `${API_BASE}/admin/staff/sessions`,
+        { headers: getAdminAuthHeader() },
+        'Failed to fetch staff sessions'
+      );
+    } catch {
+      return localStore.getStaffSessionMonitor();
+    }
+  },
+
+  async getStaffLogs(staffId?: string): Promise<StaffActivityLog[]> {
+    try {
+      const url = staffId
+        ? `${API_BASE}/admin/staff/logs?staffId=${encodeURIComponent(staffId)}`
+        : `${API_BASE}/admin/staff/logs`;
+      return await safeFetch<StaffActivityLog[]>(
+        url,
+        { headers: getAdminAuthHeader() },
+        'Failed to fetch staff activity logs'
+      );
+    } catch {
+      return localStore.getStaffLogs(staffId);
+    }
+  },
+
+  async resetStaffPassword(id: string, newPassword: string): Promise<StaffMember> {
+    try {
+      return await safeFetch<StaffMember>(
+        `${API_BASE}/admin/staff/${id}/reset-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify({ newPassword }),
+        },
+        'Failed to reset staff password'
+      );
+    } catch {
+      return localStore.updateStaffMember(id, { password: newPassword });
+    }
+  },
+
+  async deleteStaffMember(id: string): Promise<boolean> {
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/staff/${id}`,
+        {
+          method: 'DELETE',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to delete staff member'
+      );
+    } catch (err) {
+      console.warn('Backend delete error, syncing local store:', err);
+    }
+    localStore.deleteStaffMember(id);
+    return true;
   },
 
   // Admin Hotels

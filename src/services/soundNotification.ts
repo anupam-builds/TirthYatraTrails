@@ -178,43 +178,37 @@ function executeTone(ctx: AudioContext, tone: NotificationTone, volume: number) 
     case 'temple_gong': {
       // 1. SACRED CONCH (SHANKH) BLAST INVOCATION:
       // Ascending frequency sweep from 290Hz to 432Hz (Sacred Vedic Pancham/Gandhar)
-      // with acoustic horn filtering, breath swell envelope, and subtle lip vibrato
+      // with acoustic horn filtering, breath swell envelope, and organic detune chorusing
       const shankhSaw = ctx.createOscillator();
       const shankhTri = ctx.createOscillator();
       const shankhFilter = ctx.createBiquadFilter();
       const shankhGain = ctx.createGain();
 
-      // Conch vibrato LFO (5.5 Hz modulation)
-      const vibratoOsc = ctx.createOscillator();
-      const vibratoGain = ctx.createGain();
-      vibratoOsc.frequency.setValueAtTime(5.5, now);
-      vibratoGain.gain.setValueAtTime(4.5, now);
-      vibratoOsc.connect(vibratoGain);
-      vibratoGain.connect(shankhSaw.frequency);
-      vibratoGain.connect(shankhTri.frequency);
-      vibratoOsc.start(now);
-      vibratoOsc.stop(now + 2.2);
-
       // Pitch sweep: breath entering conch and rising to full tonal resonance
       shankhSaw.type = 'sawtooth';
       shankhTri.type = 'triangle';
-      shankhSaw.frequency.setValueAtTime(290, now);
-      shankhSaw.frequency.exponentialRampToValueAtTime(432, now + 0.32);
-      shankhTri.frequency.setValueAtTime(290, now);
-      shankhTri.frequency.exponentialRampToValueAtTime(432, now + 0.32);
+
+      // Subtle natural chorusing without conflicting with AudioParam ramp
+      shankhSaw.detune.setValueAtTime(7, now);
+      shankhTri.detune.setValueAtTime(-7, now);
+
+      shankhSaw.frequency.setValueAtTime(280, now);
+      shankhSaw.frequency.exponentialRampToValueAtTime(432, now + 0.38);
+      shankhTri.frequency.setValueAtTime(280, now);
+      shankhTri.frequency.exponentialRampToValueAtTime(432, now + 0.38);
 
       // Warm acoustic conch horn lowpass resonance filter
       shankhFilter.type = 'lowpass';
-      shankhFilter.frequency.setValueAtTime(700, now);
-      shankhFilter.frequency.linearRampToValueAtTime(1400, now + 0.35);
-      shankhFilter.frequency.exponentialRampToValueAtTime(450, now + 1.8);
-      shankhFilter.Q.setValueAtTime(3.2, now);
+      shankhFilter.frequency.setValueAtTime(650, now);
+      shankhFilter.frequency.linearRampToValueAtTime(1300, now + 0.4);
+      shankhFilter.frequency.exponentialRampToValueAtTime(450, now + 1.9);
+      shankhFilter.Q.setValueAtTime(3.0, now);
 
       // Conch breath swell gain envelope
       shankhGain.gain.setValueAtTime(0.0001, now);
-      shankhGain.gain.linearRampToValueAtTime(0.32 * vol, now + 0.28);
-      shankhGain.gain.linearRampToValueAtTime(0.24 * vol, now + 0.8);
-      shankhGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.0);
+      shankhGain.gain.linearRampToValueAtTime(0.35 * vol, now + 0.3);
+      shankhGain.gain.linearRampToValueAtTime(0.26 * vol, now + 0.85);
+      shankhGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.1);
 
       shankhSaw.connect(shankhFilter);
       shankhTri.connect(shankhFilter);
@@ -222,17 +216,19 @@ function executeTone(ctx: AudioContext, tone: NotificationTone, volume: number) 
       shankhGain.connect(ctx.destination);
 
       shankhSaw.start(now);
-      shankhSaw.stop(now + 2.1);
+      shankhSaw.stop(now + 2.2);
       shankhTri.start(now);
-      shankhTri.stop(now + 2.1);
+      shankhTri.stop(now + 2.2);
 
       // 2. DEEP SACRED BRONZE TEMPLE GONG RESONANCE:
-      // Harmonic series rooted in 108Hz (108, 216, 324, 540 Hz) with rich acoustic decay
+      // Harmonic series rooted in 54Hz & 108Hz with massive courtyard depth and rich acoustic decay
       const gongHarmonics = [
-        { freq: 108.0, amp: 0.35, dur: 2.8, type: 'sine' as OscillatorType },
-        { freq: 216.0, amp: 0.25, dur: 2.3, type: 'sine' as OscillatorType },
-        { freq: 324.0, amp: 0.14, dur: 1.7, type: 'triangle' as OscillatorType },
-        { freq: 540.0, amp: 0.09, dur: 1.2, type: 'sine' as OscillatorType },
+        { freq: 54.0, amp: 0.35, dur: 3.2, type: 'sine' as OscillatorType },    // Sub-bass physical vibration
+        { freq: 108.0, amp: 0.40, dur: 2.9, type: 'sine' as OscillatorType },   // Primary bronze fundamental
+        { freq: 216.0, amp: 0.28, dur: 2.4, type: 'sine' as OscillatorType },   // Warm octave
+        { freq: 324.0, amp: 0.16, dur: 1.8, type: 'triangle' as OscillatorType },// Upper overtone
+        { freq: 432.0, amp: 0.12, dur: 1.5, type: 'sine' as OscillatorType },   // Pure resonance
+        { freq: 540.0, amp: 0.08, dur: 1.1, type: 'sine' as OscillatorType },   // High bronze edge
       ];
 
       gongHarmonics.forEach(({ freq, amp, dur, type }) => {
@@ -243,7 +239,7 @@ function executeTone(ctx: AudioContext, tone: NotificationTone, volume: number) 
         osc.frequency.setValueAtTime(freq, now);
 
         gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.linearRampToValueAtTime(amp * vol, now + 0.025);
+        gain.gain.linearRampToValueAtTime(amp * vol, now + 0.03);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
         osc.connect(gain);

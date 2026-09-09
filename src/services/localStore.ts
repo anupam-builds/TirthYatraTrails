@@ -1,10 +1,12 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review } from '../types.js';
+import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor } from '../types.js';
 import {
   INITIAL_CITIES,
   INITIAL_HOTELS,
   INITIAL_PACKAGES,
   INITIAL_INQUIRIES,
   INITIAL_REVIEWS,
+  INITIAL_STAFF,
+  INITIAL_STAFF_LOGS,
 } from '../server/seedData.js';
 
 const STORAGE_KEYS = {
@@ -14,6 +16,8 @@ const STORAGE_KEYS = {
   INQUIRIES: 'tyt_local_inquiries',
   REVIEWS: 'tyt_local_reviews',
   USERS: 'tyt_local_users',
+  STAFF: 'tyt_local_staff',
+  STAFF_LOGS: 'tyt_local_staff_logs',
 };
 
 function getStored<T>(key: string, defaultVal: T): T {
@@ -278,6 +282,97 @@ export const localStore = {
     if (idx === -1) throw new Error('Inquiry not found');
     inquiries[idx].status = status;
     inquiries[idx].isResolved = status === 'CONFIRMED' || status === 'CLOSED';
+    if (status !== 'CLOSED') {
+      inquiries[idx].isLockedForStaff = false;
+    }
+    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    return inquiries[idx];
+  },
+
+  updateInquiryStatusByStaff(
+    id: string,
+    status: 'CONTACTED' | 'CLOSED',
+    staff: { id: string; name: string }
+  ): Inquiry {
+    const inquiries = this.getInquiries();
+    const idx = inquiries.findIndex((i) => i.id === id);
+    if (idx === -1) throw new Error('Inquiry not found');
+
+    const inq = inquiries[idx];
+    if (inq.isLockedForStaff || inq.status === 'CLOSED') {
+      throw new Error('This inquiry is permanently locked. Only an Administrator can reopen closed leads.');
+    }
+
+    if (status === 'CLOSED') {
+      inquiries[idx].status = 'CLOSED';
+      inquiries[idx].isResolved = true;
+      inquiries[idx].isLockedForStaff = true;
+      inquiries[idx].closedAt = new Date().toISOString();
+      inquiries[idx].closedBy = `${staff.name} (Staff)`;
+    } else {
+      inquiries[idx].status = 'CONTACTED';
+      inquiries[idx].isResolved = false;
+    }
+
+    if (!inquiries[idx].assignedStaffId) {
+      inquiries[idx].assignedStaffId = staff.id;
+      inquiries[idx].assignedStaffName = staff.name;
+    }
+
+    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    return inquiries[idx];
+  },
+
+  adminUnlockInquiry(id: string, newStatus: Inquiry['status'] = 'CONTACTED'): Inquiry {
+    const inquiries = this.getInquiries();
+    const idx = inquiries.findIndex((i) => i.id === id);
+    if (idx === -1) throw new Error('Inquiry not found');
+
+    inquiries[idx].status = newStatus;
+    inquiries[idx].isLockedForStaff = false;
+    inquiries[idx].isResolved = newStatus === 'CONFIRMED' || newStatus === 'CLOSED';
+    inquiries[idx].closedAt = undefined;
+    inquiries[idx].closedBy = undefined;
+
+    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    return inquiries[idx];
+  },
+
+  addInquiryNote(
+    id: string,
+    noteData: { text: string; authorName: string; authorRole: 'ADMIN' | 'STAFF'; authorId?: string }
+  ): Inquiry {
+    const inquiries = this.getInquiries();
+    const idx = inquiries.findIndex((i) => i.id === id);
+    if (idx === -1) throw new Error('Inquiry not found');
+
+    const newNote: InquiryNote = {
+      id: `note-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      authorId: noteData.authorId,
+      authorName: noteData.authorName,
+      authorRole: noteData.authorRole,
+      text: noteData.text.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!inquiries[idx].followUpNotes) {
+      inquiries[idx].followUpNotes = [];
+    }
+    inquiries[idx].followUpNotes.unshift(newNote);
+    inquiries[idx].notes = newNote.text;
+
+    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    return inquiries[idx];
+  },
+
+  assignInquiryStaff(id: string, staffId: string, staffName: string): Inquiry {
+    const inquiries = this.getInquiries();
+    const idx = inquiries.findIndex((i) => i.id === id);
+    if (idx === -1) throw new Error('Inquiry not found');
+
+    inquiries[idx].assignedStaffId = staffId || undefined;
+    inquiries[idx].assignedStaffName = staffName || undefined;
+
     setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     return inquiries[idx];
   },
@@ -457,11 +552,314 @@ export const localStore = {
     return { user: safeUser, token };
   },
 
+  // Staff Members Management
+  getStaffMembers(): StaffMember[] {
+    const isCustomized = typeof window !== 'undefined' && localStorage.getItem('tyt_staff_customized');
+    let list = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
+    if (list.length === 0 && !isCustomized) {
+      list = [...INITIAL_STAFF];
+      setStored(STORAGE_KEYS.STAFF, list);
+    }
+    // Compute current assigned leads count dynamically
+    const inquiries = this.getInquiries();
+    return list.map((staff) => {
+      const assignedCount = inquiries.filter((inq) => inq.assignedStaffId === staff.id).length;
+      const contactedCount = inquiries.filter(
+        (inq) => (inq.assignedStaffId === staff.id || inq.closedBy?.includes(staff.name)) && inq.status === 'CONTACTED'
+      ).length;
+      const closedCount = inquiries.filter(
+        (inq) => (inq.assignedStaffId === staff.id || inq.closedBy?.includes(staff.name)) && inq.status === 'CLOSED'
+      ).length;
+      const notesCount = inquiries.reduce((count, inq) => {
+        const matching = (inq.followUpNotes || []).filter(
+          (n) => n.authorId === staff.id || n.authorName === staff.name
+        );
+        return count + matching.length;
+      }, 0);
+
+      return {
+        ...staff,
+        assignedLeadsCount: assignedCount,
+        contactedCount: Math.max(staff.contactedCount || 0, contactedCount),
+        closedCount: Math.max(staff.closedCount || 0, closedCount),
+        notesCount: Math.max(staff.notesCount || 0, notesCount),
+        isBlocked: Boolean(staff.isBlocked),
+        isCurrentlyLoggedIn: Boolean(staff.isCurrentlyLoggedIn && !staff.isBlocked),
+      };
+    });
+  },
+
+  createStaffMember(staffData: Partial<StaffMember>): StaffMember {
+    const list = this.getStaffMembers();
+    const email = (staffData.email || '').trim().toLowerCase();
+    if (!email) throw new Error('Staff Email ID is required.');
+    if (list.some((s) => s.email.toLowerCase() === email)) {
+      throw new Error('A staff member with this Email ID already exists.');
+    }
+    if (!staffData.password || staffData.password.trim().length < 6) {
+      throw new Error('Staff Password is required (minimum 6 characters).');
+    }
+
+    const newStaff: StaffMember = {
+      id: `stf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: (staffData.name || 'Travel Specialist').trim(),
+      email: email,
+      password: staffData.password.trim(),
+      phone: (staffData.phone || '').trim(),
+      designation: (staffData.designation || 'Pilgrim Operations Specialist').trim(),
+      role: 'STAFF',
+      isActive: staffData.isActive !== undefined ? Boolean(staffData.isActive) : true,
+      isBlocked: false,
+      permissions: {
+        canViewInquiries: staffData.permissions?.canViewInquiries !== undefined ? staffData.permissions.canViewInquiries : true,
+        canUpdateStatus: staffData.permissions?.canUpdateStatus !== undefined ? staffData.permissions.canUpdateStatus : true,
+        canAddNotes: staffData.permissions?.canAddNotes !== undefined ? staffData.permissions.canAddNotes : true,
+      },
+      assignedLeadsCount: 0,
+      contactedCount: 0,
+      closedCount: 0,
+      notesCount: 0,
+      isCurrentlyLoggedIn: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    list.unshift(newStaff);
+    setStored(STORAGE_KEYS.STAFF, list);
+
+    this.addStaffLog({
+      staffId: newStaff.id,
+      staffName: newStaff.name,
+      staffEmail: newStaff.email,
+      action: 'LOGIN',
+      description: `Staff account provisioned by Administrator: ${newStaff.name} (${newStaff.email})`,
+      details: `Designation: ${newStaff.designation}`,
+      ipAddress: '127.0.0.1',
+      device: 'Admin Console',
+    });
+
+    return newStaff;
+  },
+
+  updateStaffMember(id: string, updates: Partial<StaffMember>): StaffMember {
+    const list = this.getStaffMembers();
+    const idx = list.findIndex((s) => s.id === id);
+    if (idx === -1) throw new Error('Staff member not found');
+
+    const prevStaff = list[idx];
+    const passwordChanged = Boolean(updates.password && updates.password.trim() !== prevStaff.password);
+
+    const updated = {
+      ...list[idx],
+      ...updates,
+      permissions: {
+        ...list[idx].permissions,
+        ...(updates.permissions || {}),
+      },
+    };
+
+    list[idx] = updated;
+    setStored(STORAGE_KEYS.STAFF, list);
+
+    if (passwordChanged) {
+      this.addStaffLog({
+        staffId: prevStaff.id,
+        staffName: prevStaff.name,
+        staffEmail: prevStaff.email,
+        action: 'PASSWORD_RESET',
+        description: `Staff password updated by Administrator`,
+      });
+    }
+
+    return updated;
+  },
+
+  blockStaffMember(id: string, isBlocked: boolean, reason?: string): StaffMember {
+    const list = this.getStaffMembers();
+    const idx = list.findIndex((s) => s.id === id);
+    if (idx === -1) throw new Error('Staff member not found');
+
+    const staff = list[idx];
+    staff.isBlocked = isBlocked;
+
+    if (isBlocked) {
+      staff.isActive = false;
+      staff.isCurrentlyLoggedIn = false; // Immediately invalidate active session
+      staff.blockedAt = new Date().toISOString();
+      staff.blockedReason = reason || 'Revoked by Administrator due to security or policy guidelines';
+    } else {
+      staff.isActive = true;
+      staff.blockedAt = undefined;
+      staff.blockedReason = undefined;
+    }
+
+    list[idx] = staff;
+    setStored(STORAGE_KEYS.STAFF, list);
+
+    this.addStaffLog({
+      staffId: staff.id,
+      staffName: staff.name,
+      staffEmail: staff.email,
+      action: isBlocked ? 'BLOCKED' : 'UNBLOCKED',
+      description: isBlocked
+        ? `Administrator revoked access and terminated all active sessions. Reason: ${staff.blockedReason}`
+        : `Administrator restored access and unblocked staff account`,
+      details: reason,
+      ipAddress: '127.0.0.1',
+      device: 'Admin Console',
+    });
+
+    return staff;
+  },
+
+  toggleStaffStatus(id: string): StaffMember {
+    const list = this.getStaffMembers();
+    const idx = list.findIndex((s) => s.id === id);
+    if (idx === -1) throw new Error('Staff member not found');
+
+    const currentActive = Boolean(list[idx].isActive && !list[idx].isBlocked);
+    return this.blockStaffMember(id, currentActive, currentActive ? 'Status toggled to Inactive by Admin' : undefined);
+  },
+
+  deleteStaffMember(id: string): boolean {
+    const target = id.trim().toLowerCase();
+    const list = this.getStaffMembers().filter(
+      (s) => s.id !== id && s.email.toLowerCase() !== target
+    );
+    setStored(STORAGE_KEYS.STAFF, list);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tyt_staff_customized', 'true');
+    }
+    return true;
+  },
+
+  loginStaff(email: string, pass: string): { user: StaffMember; token: string } {
+    const normEmail = email.trim().toLowerCase();
+    const list = this.getStaffMembers();
+    const staff = list.find((s) => s.email.toLowerCase() === normEmail);
+
+    if (!staff) {
+      throw new Error('No staff account found with this email. Self-registration is disabled. Please request an administrator to create your staff account.');
+    }
+
+    if (staff.password && staff.password !== pass) {
+      throw new Error('Invalid staff credentials. Please check your email and password.');
+    }
+
+    if (staff.isBlocked || !staff.isActive) {
+      this.addStaffLog({
+        staffId: staff.id,
+        staffName: staff.name,
+        staffEmail: staff.email,
+        action: 'LOGIN',
+        description: `BLOCKED LOGIN ATTEMPT: Access denied due to admin block (${staff.blockedReason || 'Revoked'})`,
+        ipAddress: '122.161.48.12',
+        device: 'Staff Web Client',
+      });
+      throw new Error(`Access Blocked: Your staff account has been revoked by the administrator. Reason: ${staff.blockedReason || 'Access Revoked'}. All active sessions terminated.`);
+    }
+
+    // Update lastLogin & session metadata
+    staff.lastLogin = new Date().toISOString();
+    staff.lastActiveAt = new Date().toISOString();
+    staff.isCurrentlyLoggedIn = true;
+    staff.lastLoginIp = '122.161.48.12';
+    staff.lastLoginDevice = 'Chrome on Desktop';
+    setStored(STORAGE_KEYS.STAFF, list);
+
+    this.addStaffLog({
+      staffId: staff.id,
+      staffName: staff.name,
+      staffEmail: staff.email,
+      action: 'LOGIN',
+      description: 'Staff member authenticated successfully into Operations Desk',
+      ipAddress: staff.lastLoginIp,
+      device: staff.lastLoginDevice,
+    });
+
+    const safeStaff = { ...staff };
+    delete safeStaff.password;
+    const token = btoa(JSON.stringify(safeStaff));
+    return { user: safeStaff, token };
+  },
+
+  logoutStaff(staffId: string): void {
+    const list = this.getStaffMembers();
+    const idx = list.findIndex((s) => s.id === staffId);
+    if (idx !== -1) {
+      list[idx].isCurrentlyLoggedIn = false;
+      list[idx].lastActiveAt = new Date().toISOString();
+      setStored(STORAGE_KEYS.STAFF, list);
+
+      this.addStaffLog({
+        staffId,
+        staffName: list[idx].name,
+        staffEmail: list[idx].email,
+        action: 'LOGOUT',
+        description: 'Staff member logged out from session',
+        ipAddress: list[idx].lastLoginIp,
+        device: list[idx].lastLoginDevice,
+      });
+    }
+  },
+
+  addStaffLog(logData: Omit<StaffActivityLog, 'id' | 'timestamp'> & { timestamp?: string }): StaffActivityLog {
+    const logs = getStored<StaffActivityLog[]>(STORAGE_KEYS.STAFF_LOGS, [...INITIAL_STAFF_LOGS]);
+    const newLog: StaffActivityLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: logData.timestamp || new Date().toISOString(),
+      ...logData,
+    };
+    logs.unshift(newLog);
+    if (logs.length > 250) logs.splice(250);
+    setStored(STORAGE_KEYS.STAFF_LOGS, logs);
+    return newLog;
+  },
+
+  getStaffLogs(staffId?: string): StaffActivityLog[] {
+    const logs = getStored<StaffActivityLog[]>(STORAGE_KEYS.STAFF_LOGS, [...INITIAL_STAFF_LOGS]);
+    if (staffId) {
+      return logs.filter((l) => l.staffId === staffId);
+    }
+    return logs;
+  },
+
+  getStaffSessionMonitor(): StaffSessionMonitor {
+    const staffList = this.getStaffMembers();
+    const totalStaff = staffList.length;
+    const activeStaffCount = staffList.filter((s) => s.isActive && !s.isBlocked).length;
+    const blockedStaffCount = staffList.filter((s) => s.isBlocked).length;
+    const currentlyLoggedInCount = staffList.filter((s) => s.isCurrentlyLoggedIn && !s.isBlocked).length;
+
+    return {
+      totalStaff,
+      activeStaffCount,
+      blockedStaffCount,
+      currentlyLoggedInCount,
+      sessions: staffList.map((s) => ({
+        staffId: s.id,
+        staffName: s.name,
+        staffEmail: s.email,
+        designation: s.designation,
+        isCurrentlyLoggedIn: Boolean(s.isCurrentlyLoggedIn && !s.isBlocked),
+        lastActiveAt: s.lastActiveAt || s.lastLogin,
+        lastLogin: s.lastLogin,
+        ipAddress: s.lastLoginIp || '122.161.48.12',
+        device: s.lastLoginDevice || 'Desktop Web Browser',
+        isBlocked: Boolean(s.isBlocked),
+        contactedCount: s.contactedCount || 0,
+        closedCount: s.closedCount || 0,
+        notesCount: s.notesCount || 0,
+      })),
+    };
+  },
+
   resetData(): void {
     setStored(STORAGE_KEYS.CITIES, INITIAL_CITIES);
     setStored(STORAGE_KEYS.HOTELS, INITIAL_HOTELS);
     setStored(STORAGE_KEYS.PACKAGES, INITIAL_PACKAGES);
     setStored(STORAGE_KEYS.INQUIRIES, INITIAL_INQUIRIES);
     setStored(STORAGE_KEYS.REVIEWS, INITIAL_REVIEWS);
+    setStored(STORAGE_KEYS.STAFF, INITIAL_STAFF);
+    setStored(STORAGE_KEYS.STAFF_LOGS, INITIAL_STAFF_LOGS);
   },
 };

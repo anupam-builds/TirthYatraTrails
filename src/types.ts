@@ -1,4 +1,80 @@
-export type UserRole = 'USER' | 'ADMIN';
+export type UserRole = 'USER' | 'ADMIN' | 'STAFF';
+
+export interface StaffPermissions {
+  canViewInquiries: boolean;
+  canUpdateStatus: boolean;
+  canAddNotes: boolean;
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+  phone?: string;
+  designation?: string;
+  role: 'STAFF';
+  isActive: boolean;
+  isBlocked?: boolean;
+  blockedAt?: string;
+  blockedReason?: string;
+  permissions: StaffPermissions;
+  assignedLeadsCount?: number;
+  lastLogin?: string;
+  lastLoginIp?: string;
+  lastLoginDevice?: string;
+  lastActiveAt?: string;
+  isCurrentlyLoggedIn?: boolean;
+  contactedCount?: number;
+  closedCount?: number;
+  notesCount?: number;
+  createdAt: string;
+}
+
+export interface StaffActivityLog {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffEmail: string;
+  action: 'LOGIN' | 'LOGOUT' | 'STATUS_UPDATE' | 'NOTE_ADDED' | 'BLOCKED' | 'UNBLOCKED' | 'PASSWORD_RESET';
+  description: string;
+  inquiryId?: string;
+  details?: string;
+  ipAddress?: string;
+  device?: string;
+  timestamp: string;
+}
+
+export interface StaffSessionMonitor {
+  totalStaff: number;
+  activeStaffCount: number;
+  blockedStaffCount: number;
+  currentlyLoggedInCount: number;
+  sessions: Array<{
+    staffId: string;
+    staffName: string;
+    staffEmail: string;
+    designation?: string;
+    isCurrentlyLoggedIn: boolean;
+    lastActiveAt?: string;
+    lastLogin?: string;
+    ipAddress?: string;
+    device?: string;
+    isBlocked: boolean;
+    contactedCount: number;
+    closedCount: number;
+    notesCount: number;
+  }>;
+}
+
+export interface InquiryNote {
+  id: string;
+  authorId?: string;
+  authorName: string;
+  authorRole: 'ADMIN' | 'STAFF';
+  text: string;
+  createdAt: string;
+}
 
 export interface Account {
   id: string;
@@ -121,6 +197,13 @@ export interface Inquiry {
   specialRequests?: string;
   status: 'NEW' | 'CONTACTED' | 'CONFIRMED' | 'CLOSED';
   isResolved: boolean;
+  assignedStaffId?: string;
+  assignedStaffName?: string;
+  isLockedForStaff?: boolean;
+  closedAt?: string;
+  closedBy?: string;
+  notes?: string;
+  followUpNotes?: InquiryNote[];
   createdAt: string;
 }
 
