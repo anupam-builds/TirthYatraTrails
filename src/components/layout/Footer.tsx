@@ -5,9 +5,6 @@ import {
   Mail,
   MapPin,
   ShieldCheck,
-  Award,
-  Sparkles,
-  HeartHandshake,
   MessageCircle,
   Instagram,
   Facebook,
@@ -21,53 +18,6 @@ export const CustomerFooter: React.FC = () => {
   return (
     <>
       <footer id="customer-footer" className="bg-[#071526] text-white border-t border-[#122842] shrink-0 text-xs">
-        {/* Sacred Trust Highlights */}
-        <div className="border-b border-[#0f2847] py-6 bg-[#091b30]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/5 border border-white/10">
-                <div className="p-2 rounded-lg bg-orange-500/20 text-[#ea580c]">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-white">Verified Temple Stays</h4>
-                  <p className="text-[11px] text-gray-300">Sanctum-close vetted accommodations</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/5 border border-white/10">
-                <div className="p-2 rounded-lg bg-orange-500/20 text-[#ea580c]">
-                  <Award className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-white">VIP Darshan Assistance</h4>
-                  <p className="text-[11px] text-gray-300">Priority puja queues &amp; Vedic priests</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/5 border border-white/10">
-                <div className="p-2 rounded-lg bg-orange-500/20 text-[#ea580c]">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-white">100% Pure Sattvic Food</h4>
-                  <p className="text-[11px] text-gray-300">Guaranteed onion-garlic free meals</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/5 border border-white/10">
-                <div className="p-2 rounded-lg bg-orange-500/20 text-[#ea580c]">
-                  <HeartHandshake className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-white">Senior Citizen Care</h4>
-                  <p className="text-[11px] text-gray-300">Temple shuttles &amp; wheelchair support</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* 4 Main Footer Columns */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
