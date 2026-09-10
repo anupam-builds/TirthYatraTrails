@@ -31,39 +31,40 @@ import { StaffPortalPage } from './pages/staff/StaffPortalPage.js';
 
 const AppContent: React.FC = () => {
   const { path } = useRouter();
+  const cleanPath = (path.split('?')[0].split('#')[0].replace(/\/+$/, '')) || '/';
 
   // Handle Dedicated Staff Portal Routes
-  if (path.startsWith('/staff')) {
-    if (path === '/staff/login') {
+  if (cleanPath.startsWith('/staff')) {
+    if (cleanPath === '/staff/login') {
       return <StaffLoginPage />;
     }
     return <StaffPortalPage />;
   }
 
   // Handle Admin Portal Routes
-  if (path.startsWith('/admin')) {
-    if (path === '/admin/login') {
+  if (cleanPath.startsWith('/admin')) {
+    if (cleanPath === '/admin/login') {
       return <AdminLoginPage />;
     }
-    if (path === '/admin/hotels') {
+    if (cleanPath === '/admin/hotels') {
       return <AdminHotels />;
     }
-    if (path === '/admin/packages') {
+    if (cleanPath === '/admin/packages') {
       return <AdminPackages />;
     }
-    if (path === '/admin/inquiries') {
+    if (cleanPath === '/admin/inquiries') {
       return <AdminInquiries />;
     }
-    if (path === '/admin/staff') {
+    if (cleanPath === '/admin/staff') {
       return <AdminStaff />;
     }
-    if (path === '/admin/cities') {
+    if (cleanPath === '/admin/cities') {
       return <AdminCities />;
     }
-    if (path === '/admin/reviews') {
+    if (cleanPath === '/admin/reviews') {
       return <AdminReviews />;
     }
-    if (path === '/admin/settings') {
+    if (cleanPath === '/admin/settings') {
       return <AdminSettings />;
     }
     // Default admin fallback
@@ -71,8 +72,8 @@ const AppContent: React.FC = () => {
   }
 
   // Handle Dynamic Hotel Detail Route `/hotel/:id`
-  if (path.startsWith('/hotel/')) {
-    const hotelId = path.replace('/hotel/', '').split('?')[0];
+  if (cleanPath.startsWith('/hotel/')) {
+    const hotelId = cleanPath.replace('/hotel/', '').split('/')[0];
     return (
       <div className="flex flex-col min-h-screen bg-[#fdfbf7]">
         <CustomerNavbar />
@@ -85,8 +86,8 @@ const AppContent: React.FC = () => {
   }
 
   // Handle Dynamic Package Detail Route `/package/:id`
-  if (path.startsWith('/package/')) {
-    const packageId = path.replace('/package/', '').split('?')[0];
+  if (cleanPath.startsWith('/package/')) {
+    const packageId = cleanPath.replace('/package/', '').split('/')[0];
     return (
       <div className="flex flex-col min-h-screen bg-[#fdfbf7]">
         <CustomerNavbar />
@@ -100,19 +101,19 @@ const AppContent: React.FC = () => {
 
   // Render Customer Portal Pages
   const renderCustomerPage = () => {
-    switch (path) {
-      case '/hotels':
-        return <HotelsPage />;
-      case '/packages':
-        return <PackagesPage />;
-      case '/flights':
-        return <FlightsPage />;
-      case '/my-inquiries':
-        return <MyInquiriesPage />;
-      case '/':
-      default:
-        return <HomePage />;
+    if (cleanPath === '/hotels' || cleanPath.startsWith('/hotels')) {
+      return <HotelsPage />;
     }
+    if (cleanPath === '/packages' || cleanPath.startsWith('/packages')) {
+      return <PackagesPage />;
+    }
+    if (cleanPath === '/flights' || cleanPath.startsWith('/flights')) {
+      return <FlightsPage />;
+    }
+    if (cleanPath === '/my-inquiries' || cleanPath.startsWith('/my-inquiries')) {
+      return <MyInquiriesPage />;
+    }
+    return <HomePage />;
   };
 
   return (

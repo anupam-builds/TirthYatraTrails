@@ -22,6 +22,7 @@ const STORAGE_KEYS = {
 
 function getStored<T>(key: string, defaultVal: T): T {
   try {
+    if (typeof window === 'undefined' || !window.localStorage) return defaultVal;
     const raw = localStorage.getItem(key);
     if (!raw) return defaultVal;
     return JSON.parse(raw);
@@ -32,6 +33,7 @@ function getStored<T>(key: string, defaultVal: T): T {
 
 function setStored<T>(key: string, val: T): void {
   try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
     localStorage.setItem(key, JSON.stringify(val));
   } catch (e) {
     console.warn('Could not write to localStorage:', e);
@@ -191,6 +193,9 @@ export const localStore = {
     };
     hotels.unshift(newHotel);
     setStored(STORAGE_KEYS.HOTELS, hotels);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: newHotel } }));
+    }
     return newHotel;
   },
 
@@ -200,6 +205,9 @@ export const localStore = {
     if (idx === -1) throw new Error('Hotel not found');
     hotels[idx] = { ...hotels[idx], ...updates };
     setStored(STORAGE_KEYS.HOTELS, hotels);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: hotels[idx] } }));
+    }
     return hotels[idx];
   },
 
@@ -226,6 +234,9 @@ export const localStore = {
       return !matches;
     });
     setStored(STORAGE_KEYS.HOTELS, hotels);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', target } }));
+    }
     return true;
   },
 

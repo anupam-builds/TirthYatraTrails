@@ -48,6 +48,35 @@ export const HomePage: React.FC = () => {
       }
     }
     loadHomeData();
+
+    // Dynamically synchronize stay count & inventory when hotels change in Admin Panel
+    const handleHotelChange = () => {
+      api.getHotels()
+        .then((freshHotels) => {
+          if (Array.isArray(freshHotels)) {
+            setHotels(freshHotels);
+          }
+        })
+        .catch((err) => console.warn('Failed refreshing hotels on homepage:', err));
+
+      api.getCities()
+        .then((freshCities) => {
+          if (Array.isArray(freshCities)) {
+            setCities(freshCities);
+          }
+        })
+        .catch((err) => console.warn('Failed refreshing cities on homepage:', err));
+    };
+
+    window.addEventListener('tirth-hotel-changed', handleHotelChange);
+    window.addEventListener('storage', handleHotelChange);
+    window.addEventListener('focus', handleHotelChange);
+
+    return () => {
+      window.removeEventListener('tirth-hotel-changed', handleHotelChange);
+      window.removeEventListener('storage', handleHotelChange);
+      window.removeEventListener('focus', handleHotelChange);
+    };
   }, []);
 
   const handlePrevReview = () => {
@@ -211,14 +240,18 @@ export const HomePage: React.FC = () => {
               Direct holy dham rates, spotless premises, morning temple transfers, and 100% Sattvic food.
             </p>
           </div>
-          <button
+          <a
+            href="/hotels"
             id="view-all-hotels-link"
-            onClick={() => navigate('/hotels')}
-            className="text-xs font-bold text-[#ea580c] hover:text-[#d44e0a] uppercase flex items-center gap-1 shrink-0"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/hotels');
+            }}
+            className="text-xs font-bold text-[#ea580c] hover:text-[#d44e0a] uppercase flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
           >
-            <span>View All ({hotels.length})</span>
+            <span>VIEW ALL ({hotels.length})</span>
             <ChevronRight className="w-3.5 h-3.5" />
-          </button>
+          </a>
         </div>
 
         {/* 4 Hotel Cards Grid */}

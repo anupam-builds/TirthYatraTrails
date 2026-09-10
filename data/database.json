@@ -1,5 +1,14 @@
 {
-  "users": [],
+  "users": [
+    {
+      "id": "usr-admin-1",
+      "name": "Enterprise Yatra Admin",
+      "email": "admin@tirthyatratrails.com",
+      "password": "$2b$10$FIhJqXaAxPVG5Ulqq41TVOPJuI1OFaijfGZsmYSDqUFxupaY3VLYy",
+      "role": "ADMIN",
+      "createdAt": "2026-01-10T08:00:00.000Z"
+    }
+  ],
   "staff": [
     {
       "id": "stf-1",
