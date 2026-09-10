@@ -39,18 +39,48 @@ function setStored<T>(key: string, val: T): void {
 }
 
 export const localStore = {
+  // Stay / Hotel Count Calculation
+  countHotelsForCity(city: City, hotels?: Hotel[]): number {
+    if (!city) return 0;
+    const hList = hotels || this.getHotels();
+    const cId = (city.id || '').toLowerCase().trim();
+    const cName = (city.name || '').toLowerCase().trim();
+    return (hList || []).filter((h) => {
+      const hCityId = (h.cityId || '').toLowerCase().trim();
+      const hCityName = (h.cityName || '').toLowerCase().trim();
+      if (hCityId && (hCityId === cId || hCityId === cId.replace('city-', '') || `city-${hCityId}` === cId)) {
+        return true;
+      }
+      if (hCityName && (hCityName === cName || cName.includes(hCityName) || hCityName.includes(cName))) {
+        return true;
+      }
+      const hAddr = (h.address || '').toLowerCase();
+      if (hAddr && (hAddr.includes(cName) || (cName.includes('&') && cName.split('&').some((p) => hAddr.includes(p.trim()))))) {
+        return true;
+      }
+      return false;
+    }).length;
+  },
+
   // Cities
   getCities(): City[] {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.CITIES) : null;
+    let list: City[];
     if (raw === null) {
       setStored(STORAGE_KEYS.CITIES, INITIAL_CITIES);
-      return [...INITIAL_CITIES];
+      list = [...INITIAL_CITIES];
+    } else {
+      try {
+        list = JSON.parse(raw);
+      } catch {
+        list = [...INITIAL_CITIES];
+      }
     }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return [...INITIAL_CITIES];
-    }
+    const hotels = this.getHotels();
+    return list.map((c) => ({
+      ...c,
+      hotelCount: this.countHotelsForCity(c, hotels),
+    }));
   },
 
   createCity(cityData: Partial<City>): City {

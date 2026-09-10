@@ -42,6 +42,10 @@ class DatabaseStore {
   };
   private isInitialized = false;
 
+  constructor() {
+    this.syncCityHotelCounts();
+  }
+
   public async init() {
     if (this.isInitialized) return;
     
@@ -140,10 +144,12 @@ class DatabaseStore {
           this.data.reviews = seed.reviews;
         }
 
+        this.syncCityHotelCounts();
         this.save();
       } else {
         const seed = await getInitialSeedData();
         this.data = seed as any;
+        this.syncCityHotelCounts();
         this.save();
       }
       this.isInitialized = true;
@@ -151,6 +157,7 @@ class DatabaseStore {
       console.error('Error initializing database file, running with in-memory seed data:', err);
       const seed = await getInitialSeedData();
       this.data = seed as any;
+      this.syncCityHotelCounts();
       this.isInitialized = true;
     }
   }
@@ -294,13 +301,49 @@ class DatabaseStore {
     return safeUser;
   }
 
+  // Dynamic Stay / Hotel Count Calculation
+  public countHotelsForCity(city: City): number {
+    if (!city) return 0;
+    const cId = (city.id || '').toLowerCase().trim();
+    const cName = (city.name || '').toLowerCase().trim();
+    return (this.data.hotels || []).filter((h) => {
+      const hCityId = (h.cityId || '').toLowerCase().trim();
+      const hCityName = (h.cityName || '').toLowerCase().trim();
+      if (hCityId && (hCityId === cId || hCityId === cId.replace('city-', '') || `city-${hCityId}` === cId)) {
+        return true;
+      }
+      if (hCityName && (hCityName === cName || cName.includes(hCityName) || hCityName.includes(cName))) {
+        return true;
+      }
+      const hAddr = (h.address || '').toLowerCase();
+      if (hAddr && (hAddr.includes(cName) || (cName.includes('&') && cName.split('&').some((p) => hAddr.includes(p.trim()))))) {
+        return true;
+      }
+      return false;
+    }).length;
+  }
+
+  public syncCityHotelCounts() {
+    if (!this.data.cities || !Array.isArray(this.data.cities)) return;
+    this.data.cities = this.data.cities.map((city) => ({
+      ...city,
+      hotelCount: this.countHotelsForCity(city),
+    }));
+  }
+
   // Cities
-  public getCities() {
+  public getCities(): City[] {
+    this.syncCityHotelCounts();
     return this.data.cities;
   }
 
-  public getCityById(id: string) {
-    return this.data.cities.find((c) => c.id === id);
+  public getCityById(id: string): City | undefined {
+    const city = this.data.cities.find((c) => c.id === id);
+    if (!city) return undefined;
+    return {
+      ...city,
+      hotelCount: this.countHotelsForCity(city),
+    };
   }
 
   public createCity(cityData: Partial<City>) {
@@ -309,10 +352,11 @@ class DatabaseStore {
       id: cityData.id || id,
       name: cityData.name || 'Sacred Destination',
       state: cityData.state || 'India',
-      hotelCount: Number(cityData.hotelCount) || 1,
+      hotelCount: 0,
       imageUrl: cityData.imageUrl || 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
       popularFor: cityData.popularFor || 'Sacred Pilgrimage & Aarti',
     };
+    newCity.hotelCount = this.countHotelsForCity(newCity);
     this.data.cities.push(newCity);
     this.save();
     return newCity;
@@ -400,9 +444,7 @@ class DatabaseStore {
       darshanType: hotelData.darshanType || '',
     };
     this.data.hotels.unshift(newHotel);
-    if (city) {
-      city.hotelCount = (city.hotelCount || 0) + 1;
-    }
+    this.syncCityHotelCounts();
     this.save();
     return newHotel;
   }
@@ -417,6 +459,7 @@ class DatabaseStore {
       if (city) updated.cityName = city.name;
     }
     this.data.hotels[index] = updated;
+    this.syncCityHotelCounts();
     this.save();
     return updated;
   }
@@ -445,12 +488,8 @@ class DatabaseStore {
     });
 
     if (index !== -1) {
-      const hotel = this.data.hotels[index];
-      const city = this.getCityById(hotel.cityId);
-      if (city && city.hotelCount > 0) {
-        city.hotelCount -= 1;
-      }
       this.data.hotels.splice(index, 1);
+      this.syncCityHotelCounts();
       this.save();
     }
     return true;

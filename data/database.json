@@ -1,30 +1,5 @@
 {
-  "users": [
-    {
-      "id": "usr-admin-1",
-      "name": "Enterprise Yatra Admin",
-      "email": "admin@tirthyatratrails.com",
-      "password": "$2b$10$CY8qrfJH6k7MojAA8jnSU.WNSvoB822GgMiwnGhHvPvatJ7KSLSSK",
-      "role": "ADMIN",
-      "createdAt": "2026-09-10T19:01:48.358Z"
-    },
-    {
-      "id": "usr-admin-2",
-      "name": "Executive Yatra Admin",
-      "email": "admin@tirthyatra.com",
-      "password": "$2b$10$iJjvkOU3q5yqNq/Wb1d3Su54WUO5Tzv.Qd58NYwxiC0/4a3xRU2D6",
-      "role": "ADMIN",
-      "createdAt": "2026-01-10T08:00:00.000Z"
-    },
-    {
-      "id": "usr-demo-1",
-      "name": "Rohan Sharma",
-      "email": "rohan.sharma@example.com",
-      "password": "$2b$10$kXqK3yD2sf4nYKCHX9CeIuZNIN6kekYgD0S1lV99r9k9gHSOCFbQK",
-      "role": "USER",
-      "createdAt": "2026-02-15T10:30:00.000Z"
-    }
-  ],
+  "users": [],
   "staff": [
     {
       "id": "stf-1",
@@ -179,6 +154,7 @@
       "timestamp": "2026-09-09T10:15:00.000Z"
     }
   ],
+  "accounts": [],
   "cities": [
     {
       "id": "city-varanasi",
@@ -186,7 +162,7 @@
       "state": "Uttar Pradesh",
       "popularFor": "Kashi Vishwanath & Ganga Aarti",
       "imageUrl": "https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 38
+      "hotelCount": 4
     },
     {
       "id": "city-ayodhya",
@@ -194,7 +170,7 @@
       "state": "Uttar Pradesh",
       "popularFor": "Shri Ram Janmabhoomi & Saryu River",
       "imageUrl": "https://images.unsplash.com/photo-1706857053427-4c3e8006bbca?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 24
+      "hotelCount": 1
     },
     {
       "id": "city-kedarnath",
@@ -202,7 +178,7 @@
       "state": "Uttarakhand",
       "popularFor": "Kedarnath Jyotirlinga & Himalayas",
       "imageUrl": "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 19
+      "hotelCount": 2
     },
     {
       "id": "city-rishikesh",
@@ -210,7 +186,7 @@
       "state": "Uttarakhand",
       "popularFor": "Yoga Capital & Sacred Har Ki Pauri",
       "imageUrl": "https://images.unsplash.com/photo-1600100397608-f010f443bbf6?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 42
+      "hotelCount": 1
     },
     {
       "id": "city-tirupati",
@@ -218,7 +194,7 @@
       "state": "Andhra Pradesh",
       "popularFor": "Lord Sri Venkateswara Swamy Temple",
       "imageUrl": "https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 31
+      "hotelCount": 1
     },
     {
       "id": "city-puri",
@@ -226,7 +202,7 @@
       "state": "Odisha",
       "popularFor": "Lord Jagannath Mandir & Golden Beach",
       "imageUrl": "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 29
+      "hotelCount": 1
     },
     {
       "id": "city-rameshwaram",
@@ -234,7 +210,7 @@
       "state": "Tamil Nadu",
       "popularFor": "Ramanathaswamy Jyotirlinga & Ram Setu",
       "imageUrl": "https://images.unsplash.com/photo-1621847468516-1ed5d0df56fe?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 22
+      "hotelCount": 0
     },
     {
       "id": "city-dwarka",
@@ -242,7 +218,7 @@
       "state": "Gujarat",
       "popularFor": "Dwarkadhish Temple & 1st Jyotirlinga",
       "imageUrl": "https://images.unsplash.com/photo-1609766857041-ed402ea8069a?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 26
+      "hotelCount": 0
     },
     {
       "id": "city-vrindavan",
@@ -250,7 +226,7 @@
       "state": "Uttar Pradesh",
       "popularFor": "Banke Bihari & Prem Mandir",
       "imageUrl": "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 35
+      "hotelCount": 0
     },
     {
       "id": "city-shirdi",
@@ -258,7 +234,7 @@
       "state": "Maharashtra",
       "popularFor": "Sai Baba Samadhi Mandir",
       "imageUrl": "https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 28
+      "hotelCount": 0
     },
     {
       "id": "city-ujjain",
@@ -266,7 +242,7 @@
       "state": "Madhya Pradesh",
       "popularFor": "Mahakaleshwar Jyotirlinga & Bhasma Aarti",
       "imageUrl": "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 20
+      "hotelCount": 0
     },
     {
       "id": "city-amritsar",
@@ -274,7 +250,7 @@
       "state": "Punjab",
       "popularFor": "Sacred Harmandir Sahib (Golden Temple)",
       "imageUrl": "https://images.unsplash.com/photo-1514222134-b57cbb8ce073?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 34
+      "hotelCount": 0
     }
   ],
   "hotels": [
@@ -797,6 +773,56 @@
       ]
     },
     {
+      "id": "pkg-ujjain-mahakal",
+      "title": "Ujjain Mahakaleshwar Jyotirlinga & Omkareshwar Spiritual Yatra",
+      "location": "Indore • Ujjain • Omkareshwar • Maheshwar",
+      "duration": "3 Nights 4 Days",
+      "bookedRank": "Special Jyotirlinga Darshan",
+      "imageUrl": "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=1200&q=80",
+      "galleryImages": [
+        "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1609766857041-ed402ea8069a?auto=format&fit=crop&w=800&q=80"
+      ],
+      "startingPrice": 14500,
+      "category": "Jyotirlinga",
+      "packageType": "Divine Jyotirlinga Yatra",
+      "experienceLevel": "Comfortable • Senior Devotee Friendly",
+      "hotelsLevel": "3 & 4 Star Deluxe Stays near Mahakal Lok",
+      "transfers": "Private AC Sedan / Innova from Indore Airport",
+      "overview": "A sacred expedition to Lord Mahakal. Includes guaranteed early morning 4 AM Bhasma Aarti darshan assistance, Mahakal Lok Corridor guided tour, holy dip in River Shipra, Sandipani Ashram, and pilgrimage to Omkareshwar Jyotirlinga on the holy Narmada River.",
+      "highlights": [
+        "Guaranteed assistance for 4 AM Mahakaleshwar Bhasma Aarti entry",
+        "Guided walk across the magnificent Mahakal Lok Corridor",
+        "Boat ride around Mandhata Island at Omkareshwar Jyotirlinga",
+        "Holy Shipra River Ram Ghat Snan & Sandhya Aarti",
+        "Visit Kal Bhairav Temple & Harsiddhi Mata Shaktipeeth",
+        "Deluxe AC accommodation with Sattvic Breakfast & Dinner"
+      ],
+      "cancellationPolicy": "100% refund up to 10 days before journey start date.",
+      "itinerary": [
+        {
+          "day": 1,
+          "title": "Arrival Indore - Transfer to Ujjain & Mahakal Lok Evening Walk",
+          "desc": "Airport/station pickup, hotel check-in at Ujjain, evening stroll through the lit Mahakal Lok."
+        },
+        {
+          "day": 2,
+          "title": "4 AM Bhasma Aarti Darshan, Kal Bhairav & Harsiddhi Mata",
+          "desc": "Divine Bhasma Aarti darshan at Mahakaleshwar, followed by Mangalnath and Sandipani Ashram."
+        },
+        {
+          "day": 3,
+          "title": "Ujjain to Omkareshwar & Mamleshwar Jyotirlinga",
+          "desc": "Scenic drive to Narmada river, boat ride to Omkareshwar island, darshan at Mamleshwar temple."
+        },
+        {
+          "day": 4,
+          "title": "Maheshwar Fort, Narmada Ghats & Indore Departure",
+          "desc": "Visit historic Ahilya Fort on Narmada banks, transfer to Indore airport/station for departure."
+        }
+      ]
+    },
+    {
       "id": "pkg-meghalaya-kamakhya",
       "title": "Meghalaya & Kamakhya Devi Sacred Nature & Temple Trail",
       "location": "Guwahati • Shillong • Cherrapunji • Dawki • Mawlynnong",
@@ -1128,56 +1154,6 @@
           "desc": "Shopping for traditional handicrafts and departure flight from Rajkot or Ahmedabad."
         }
       ]
-    },
-    {
-      "id": "pkg-ujjain-mahakal",
-      "title": "Ujjain Mahakaleshwar Jyotirlinga & Omkareshwar Spiritual Yatra",
-      "location": "Indore • Ujjain • Omkareshwar • Maheshwar",
-      "duration": "3 Nights 4 Days",
-      "bookedRank": "Special Jyotirlinga Darshan",
-      "imageUrl": "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=1200&q=80",
-      "galleryImages": [
-        "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=800&q=80",
-        "https://images.unsplash.com/photo-1609766857041-ed402ea8069a?auto=format&fit=crop&w=800&q=80"
-      ],
-      "startingPrice": 14500,
-      "category": "Jyotirlinga",
-      "packageType": "Divine Jyotirlinga Yatra",
-      "experienceLevel": "Comfortable • Senior Devotee Friendly",
-      "hotelsLevel": "3 & 4 Star Deluxe Stays near Mahakal Lok",
-      "transfers": "Private AC Sedan / Innova from Indore Airport",
-      "overview": "A sacred expedition to Lord Mahakal. Includes guaranteed early morning 4 AM Bhasma Aarti darshan assistance, Mahakal Lok Corridor guided tour, holy dip in River Shipra, Sandipani Ashram, and pilgrimage to Omkareshwar Jyotirlinga on the holy Narmada River.",
-      "highlights": [
-        "Guaranteed assistance for 4 AM Mahakaleshwar Bhasma Aarti entry",
-        "Guided walk across the magnificent Mahakal Lok Corridor",
-        "Boat ride around Mandhata Island at Omkareshwar Jyotirlinga",
-        "Holy Shipra River Ram Ghat Snan & Sandhya Aarti",
-        "Visit Kal Bhairav Temple & Harsiddhi Mata Shaktipeeth",
-        "Deluxe AC accommodation with Sattvic Breakfast & Dinner"
-      ],
-      "cancellationPolicy": "100% refund up to 10 days before journey start date.",
-      "itinerary": [
-        {
-          "day": 1,
-          "title": "Arrival Indore - Transfer to Ujjain & Mahakal Lok Evening Walk",
-          "desc": "Airport/station pickup, hotel check-in at Ujjain, evening stroll through the lit Mahakal Lok."
-        },
-        {
-          "day": 2,
-          "title": "4 AM Bhasma Aarti Darshan, Kal Bhairav & Harsiddhi Mata",
-          "desc": "Divine Bhasma Aarti darshan at Mahakaleshwar, followed by Mangalnath and Sandipani Ashram."
-        },
-        {
-          "day": 3,
-          "title": "Ujjain to Omkareshwar & Mamleshwar Jyotirlinga",
-          "desc": "Scenic drive to Narmada river, boat ride to Omkareshwar island, darshan at Mamleshwar temple."
-        },
-        {
-          "day": 4,
-          "title": "Maheshwar Fort, Narmada Ghats & Indore Departure",
-          "desc": "Visit historic Ahilya Fort on Narmada banks, transfer to Indore airport/station for departure."
-        }
-      ]
     }
   ],
   "inquiries": [
@@ -1258,18 +1234,17 @@
   "reviews": [
     {
       "id": "rev-1",
-      "authorName": "Milind Pawar",
+      "authorName": "Milind Pawarc",
       "authorLocation": "Mathura · Vrindavan",
       "authorInitials": "MP",
       "rating": 5,
-      "reviewText": "We arranged a 3-day spiritual tour for our family to Mathura and Vrindavan. TirthYatraTrails ensured our hotel was barely 5 minutes from Banke Bihari and Prem Mandir. The VIP aarti passes saved us hours of standing in queue. Truly blessed experience!",
+      "reviewText": "We arranged a 3-day spiritual tour for our family to Mathura and Vrindavan. TirthYatraTrails ensured our hotel was barely 5 minutes from Banke Bihari and Prem Mandir. The morning temple transfer, clean Sattvic dining, and dedicated tour manager made our darshan utterly blissful without any stress.",
       "destinationImage": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
       "isVerified": true,
-      "googleReviewUrl": "",
+      "googleReviewUrl": "https://maps.google.com/?q=Vrindavan+Temples",
       "isFeatured": true,
       "order": 1,
-      "createdAt": "2026-08-15T10:00:00.000Z",
-      "updatedAt": "2026-09-10T19:09:20.539Z"
+      "createdAt": "2026-08-15T10:00:00.000Z"
     },
     {
       "id": "rev-2",
@@ -1299,6 +1274,5 @@
       "order": 3,
       "createdAt": "2026-08-01T09:15:00.000Z"
     }
-  ],
-  "accounts": []
+  ]
 }

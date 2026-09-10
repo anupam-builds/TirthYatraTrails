@@ -641,8 +641,9 @@ export const api = {
 
   // Admin Hotels
   async createHotel(hotel: Partial<Hotel>): Promise<Hotel> {
+    let result: Hotel;
     try {
-      return await safeFetch<Hotel>(
+      result = await safeFetch<Hotel>(
         `${API_BASE}/admin/hotels`,
         {
           method: 'POST',
@@ -654,14 +655,20 @@ export const api = {
         },
         'Failed to create hotel'
       );
+      localStore.createHotel(result);
     } catch {
-      return localStore.createHotel(hotel);
+      result = localStore.createHotel(hotel);
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: result } }));
+    }
+    return result;
   },
 
   async updateHotel(id: string, hotel: Partial<Hotel>): Promise<Hotel> {
+    let result: Hotel;
     try {
-      return await safeFetch<Hotel>(
+      result = await safeFetch<Hotel>(
         `${API_BASE}/admin/hotels/${id}`,
         {
           method: 'PUT',
@@ -673,9 +680,14 @@ export const api = {
         },
         'Failed to update hotel'
       );
+      localStore.updateHotel(id, result);
     } catch {
-      return localStore.updateHotel(id, hotel);
+      result = localStore.updateHotel(id, hotel);
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: result } }));
+    }
+    return result;
   },
 
   async deleteHotel(idOrName: string): Promise<boolean> {
@@ -692,11 +704,14 @@ export const api = {
         'Failed to delete hotel'
       );
       localStore.deleteHotel(raw);
-      return true;
     } catch (err) {
       console.warn('Backend deleteHotel fallback to localStore:', err);
-      return localStore.deleteHotel(raw);
+      localStore.deleteHotel(raw);
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', target: raw } }));
+    }
+    return true;
   },
 
   // Admin Packages

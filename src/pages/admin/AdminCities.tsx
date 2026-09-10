@@ -41,6 +41,17 @@ export const AdminCities: React.FC = () => {
 
   useEffect(() => {
     loadCities();
+
+    const handleHotelChange = () => {
+      loadCities();
+    };
+    window.addEventListener('tirth-hotel-changed', handleHotelChange);
+    window.addEventListener('storage', handleHotelChange);
+
+    return () => {
+      window.removeEventListener('tirth-hotel-changed', handleHotelChange);
+      window.removeEventListener('storage', handleHotelChange);
+    };
   }, []);
 
   async function loadCities() {
@@ -251,7 +262,7 @@ export const AdminCities: React.FC = () => {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 dark:from-[#0d1d33] via-transparent to-transparent" />
                   <div className="absolute top-3 left-3 bg-white/90 dark:bg-[#081220]/90 backdrop-blur-md px-2.5 py-1 rounded-full text-slate-900 dark:text-white text-[10px] font-extrabold shadow-xs">
-                    {city.hotelCount} Stays
+                    {city.hotelCount} {city.hotelCount === 1 ? 'Stay' : 'Stays'}
                   </div>
                 </div>
 

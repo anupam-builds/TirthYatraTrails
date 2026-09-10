@@ -70,8 +70,16 @@ export const AdminDashboard: React.FC = () => {
       }));
     });
 
+    const handleHotelChange = () => {
+      loadDashboard();
+    };
+    window.addEventListener('tirth-hotel-changed', handleHotelChange);
+    window.addEventListener('storage', handleHotelChange);
+
     return () => {
       unsub();
+      window.removeEventListener('tirth-hotel-changed', handleHotelChange);
+      window.removeEventListener('storage', handleHotelChange);
     };
   }, []);
 
@@ -339,7 +347,7 @@ export const AdminDashboard: React.FC = () => {
                 >
                   <span className="font-bold text-slate-800 dark:text-slate-200">{city.name}</span>
                   <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-950/60 px-2 py-0.5 rounded-md">
-                    {city.hotelCount} Stays Listed
+                    {city.hotelCount} {city.hotelCount === 1 ? 'Stay Listed' : 'Stays Listed'}
                   </span>
                 </div>
               ))}

@@ -63,6 +63,17 @@ export const AdminHotels: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    const handleHotelChange = () => {
+      loadData();
+    };
+    window.addEventListener('tirth-hotel-changed', handleHotelChange);
+    window.addEventListener('storage', handleHotelChange);
+
+    return () => {
+      window.removeEventListener('tirth-hotel-changed', handleHotelChange);
+      window.removeEventListener('storage', handleHotelChange);
+    };
   }, [selectedCityId, searchQuery]);
 
   async function loadData() {
@@ -143,6 +154,16 @@ export const AdminHotels: React.FC = () => {
     setHotels((prev) =>
       prev.filter((h) => h.id !== id && h.name.toLowerCase() !== hotelName.toLowerCase())
     );
+    if (deletedRecord) {
+      setCities((prevCities) =>
+        prevCities.map((c) => {
+          const isTargetCity =
+            c.id === deletedRecord.cityId ||
+            (deletedRecord.cityName && c.name.toLowerCase() === deletedRecord.cityName.toLowerCase());
+          return isTargetCity ? { ...c, hotelCount: Math.max(0, c.hotelCount - 1) } : c;
+        })
+      );
+    }
 
     // 2. Trigger confirmation toast alert
     const toastId = String(Date.now());
@@ -165,6 +186,8 @@ export const AdminHotels: React.FC = () => {
       if (hName && hName !== id) {
         api.deleteHotel(hName).catch(() => {});
       }
+      const freshCities = await api.getCities();
+      setCities(freshCities);
     } catch (err: any) {
       console.error('Failed to delete hotel:', err);
       setToast({
@@ -185,6 +208,8 @@ export const AdminHotels: React.FC = () => {
     try {
       const restored = await api.createHotel(hotelToRestore);
       setHotels((prev) => [restored, ...prev]);
+      const freshCities = await api.getCities();
+      setCities(freshCities);
       setToast({
         id: String(Date.now()),
         type: 'info',
@@ -239,6 +264,8 @@ export const AdminHotels: React.FC = () => {
       if (editingHotel) {
         const updated = await api.updateHotel(editingHotel.id, hotelData);
         setHotels((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+        const freshCities = await api.getCities();
+        setCities(freshCities);
         setToast({
           id: String(Date.now()),
           type: 'success',
@@ -248,6 +275,8 @@ export const AdminHotels: React.FC = () => {
       } else {
         const created = await api.createHotel(hotelData);
         setHotels((prev) => [created, ...prev]);
+        const freshCities = await api.getCities();
+        setCities(freshCities);
         setToast({
           id: String(Date.now()),
           type: 'success',

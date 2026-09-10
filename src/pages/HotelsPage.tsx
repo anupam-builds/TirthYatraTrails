@@ -70,6 +70,17 @@ export const HotelsPage: React.FC = () => {
       }
     }
     loadData();
+
+    const handleHotelChange = () => {
+      loadData();
+    };
+    window.addEventListener('tirth-hotel-changed', handleHotelChange);
+    window.addEventListener('storage', handleHotelChange);
+
+    return () => {
+      window.removeEventListener('tirth-hotel-changed', handleHotelChange);
+      window.removeEventListener('storage', handleHotelChange);
+    };
   }, [selectedCityId, searchQuery]);
 
   const filteredHotels = hotels.filter((hotel) => {
@@ -147,7 +158,7 @@ export const HotelsPage: React.FC = () => {
                           <p className="text-[10px] text-slate-500">{c.popularFor || c.state}</p>
                         </div>
                         <span className="text-[11px] font-semibold bg-orange-100 text-[#ea580c] px-2 py-0.5 rounded-full">
-                          {c.hotelCount}
+                          {c.hotelCount} {c.hotelCount === 1 ? 'stay' : 'stays'}
                         </span>
                       </div>
                     ))}
@@ -258,7 +269,7 @@ export const HotelsPage: React.FC = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0f294a] via-[#0f294a]/30 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3 text-white">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full inline-block mb-1">
-                    {city.hotelCount} Stays
+                    {city.hotelCount} {city.hotelCount === 1 ? 'Stay' : 'Stays'}
                   </span>
                   <h3 className="font-bold text-base leading-tight text-white">{city.name}</h3>
                   <p className="text-[11px] text-slate-200 truncate mt-0.5 opacity-90">
