@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api } from '../../services/api.js';
 import { Package } from '../../types.js';
+import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import {
   Compass,
   Plus,
@@ -12,6 +13,9 @@ import {
   MapPin,
   X,
   Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 
 const CATEGORIES = ['Pilgrimage', 'Char Dham', 'Varanasi Ayodhya', 'South India', 'Jyotirlinga'];
@@ -21,6 +25,15 @@ export const AdminPackages: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+
+  // Toast Notification State
+  const [toast, setToast] = useState<{
+    id: string;
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+    undoPackage?: Package;
+  } | null>(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,6 +47,9 @@ export const AdminPackages: React.FC = () => {
   const [startingPrice, setStartingPrice] = useState(38000);
   const [bookedRank, setBookedRank] = useState('#1 Most Booked Yatra');
   const [imageUrl, setImageUrl] = useState('https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80');
+  const [packageImages, setPackageImages] = useState<string[]>([
+    'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80',
+  ]);
   const [overview, setOverview] = useState('Embark on the sacred Himalayan journey covering the four revered shrines with helicopter coordination, VIP darshan assistance, and deluxe stays.');
   const [highlightsString, setHighlightsString] = useState('VIP Darshan passes included, Dedicated Pilgrim Officer, Pure Sattvic Meals Buffet, Oxygen Cylinder and Doctor Support');
   const [cancellationPolicy, setCancellationPolicy] = useState('Full refund up to 15 days before yatra commencement. 50% refund between 7-14 days.');
@@ -62,7 +78,9 @@ export const AdminPackages: React.FC = () => {
     setLocation('Sacred Circuit');
     setStartingPrice(24000);
     setBookedRank('Popular Divine Yatra');
-    setImageUrl('https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80');
+    const defaultImg = 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80';
+    setImageUrl(defaultImg);
+    setPackageImages([defaultImg]);
     setOverview('All-inclusive pilgrimage package with VIP darshan passes, private AC coach, and pure Sattvic culinary arrangements.');
     setHighlightsString('VIP Darshan Pass included, Dedicated Guide, Sattvic Buffet Meals, Deluxe Verified Accommodations');
     setCancellationPolicy('100% refund up to 14 days before departure.');
@@ -77,27 +95,93 @@ export const AdminPackages: React.FC = () => {
     setLocation(p.location);
     setStartingPrice(p.startingPrice);
     setBookedRank(p.bookedRank || '');
-    setImageUrl(p.imageUrl);
+    const existing = (p.galleryImages && p.galleryImages.length > 0)
+      ? p.galleryImages
+      : (p.imageUrl ? [p.imageUrl] : []);
+    setImageUrl(p.imageUrl || existing[0] || '');
+    setPackageImages(existing.length > 0 ? existing : [
+      'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80'
+    ]);
     setOverview(p.overview);
     setHighlightsString(p.highlights.join(', '));
     setCancellationPolicy(p.cancellationPolicy);
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, pTitle: string) => {
-    if (window.confirm(`Are you sure you want to delete "${pTitle}"?`)) {
-      try {
-        await api.deletePackage(id);
-        setPackages((prev) => prev.filter((p) => p.id !== id));
-      } catch (err) {
-        alert('Failed to delete package');
+  /**
+   * Package Deletion Handler
+   * Instantly removes from state (optimistic update), shows toast notification with Undo,
+   * and synchronizes persistent storage across API and localStore.
+   */
+  const handleDeletePackage = async (id: string, pTitle?: string) => {
+    const pkgTitle = pTitle || id;
+    const deletedRecord = packages.find(
+      (p) => p.id === id || p.title.toLowerCase() === pkgTitle.toLowerCase()
+    );
+
+    // 1. Instant optimistic state update
+    setPackages((prev) =>
+      prev.filter((p) => p.id !== id && p.title.toLowerCase() !== pkgTitle.toLowerCase())
+    );
+
+    // 2. Trigger confirmation toast alert with undo
+    const toastId = String(Date.now());
+    setToast({
+      id: toastId,
+      type: 'success',
+      title: 'Package Removed',
+      message: `"${pkgTitle}" was successfully removed from packages inventory and database.`,
+      undoPackage: deletedRecord,
+    });
+
+    // Auto dismiss toast after 6 seconds
+    setTimeout(() => {
+      setToast((curr) => (curr?.id === toastId ? null : curr));
+    }, 6000);
+
+    // 3. Persist deletion to backend and local storage
+    try {
+      await api.deletePackage(id);
+      if (pTitle && pTitle !== id) {
+        api.deletePackage(pTitle).catch(() => {});
       }
+    } catch (err: any) {
+      console.error('Failed to delete package', err);
+      setToast({
+        id: String(Date.now()),
+        type: 'error',
+        title: 'Deletion Failed',
+        message: `Could not delete "${pkgTitle}". Please check connection.`,
+      });
+      loadData();
     }
   };
+
+  const handleUndoDelete = async (packageToRestore: Package) => {
+    try {
+      const restored = await api.createPackage(packageToRestore);
+      setPackages((prev) => [restored, ...prev]);
+      setToast({
+        id: String(Date.now()),
+        type: 'info',
+        title: 'Package Restored',
+        message: `"${packageToRestore.title}" has been restored to packages inventory.`,
+      });
+      setTimeout(() => setToast(null), 4000);
+    } catch (err) {
+      console.error('Failed to restore package:', err);
+    }
+  };
+
+  const handleDelete = handleDeletePackage;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const highlights = highlightsString.split(',').map((s) => s.trim()).filter(Boolean);
+    const validImages = packageImages.length > 0 ? packageImages : (imageUrl ? [imageUrl] : [
+      'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80'
+    ]);
+    const primaryCover = validImages[0];
 
     const packageData: Partial<Package> = {
       title,
@@ -106,7 +190,8 @@ export const AdminPackages: React.FC = () => {
       location,
       startingPrice: Number(startingPrice),
       bookedRank,
-      imageUrl,
+      imageUrl: primaryCover,
+      galleryImages: validImages,
       overview,
       highlights,
       cancellationPolicy,
@@ -242,7 +327,8 @@ export const AdminPackages: React.FC = () => {
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => handleDelete(pkg.id, pkg.title)}
+                        id={`btn-delete-package-${pkg.id}`}
+                        onClick={() => handleDeletePackage(pkg.id, pkg.title)}
                         className="p-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950/60 dark:hover:bg-red-900 dark:text-red-300 rounded-lg transition-colors cursor-pointer"
                         title="Delete Package"
                       >
@@ -341,16 +427,19 @@ export const AdminPackages: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Cover Image URL</label>
-                <input
-                  type="url"
-                  required
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
-                />
-              </div>
+              <ImageUploadField
+                id="package-images-uploader"
+                label="Package Cover & Gallery Photos"
+                helpText="Upload yatra photos directly from your computer or drag & drop files. The first photo will be used as the package cover banner."
+                images={packageImages}
+                onChange={(imgs) => {
+                  setPackageImages(imgs);
+                  if (imgs.length > 0) {
+                    setImageUrl(imgs[0]);
+                  }
+                }}
+                multiple={true}
+              />
 
               <div>
                 <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Overview / Description</label>
@@ -402,6 +491,52 @@ export const AdminPackages: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {/* FLOATING ACTION TOAST NOTIFICATION */}
+      {toast && (
+        <div
+          id="package-toast-notification"
+          className="fixed bottom-6 right-6 z-50 max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xl flex items-start justify-between gap-3 animate-fade-in transition-all duration-300"
+        >
+          <div className="flex items-start gap-3">
+            {toast.type === 'success' && (
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            )}
+            {toast.type === 'error' && (
+              <div className="p-2 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-xl">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+            )}
+            {toast.type === 'info' && (
+              <div className="p-2 bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 rounded-xl">
+                <Sparkles className="w-5 h-5" />
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">{toast.title}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{toast.message}</p>
+              {toast.undoPackage && (
+                <button
+                  id="btn-undo-package-delete"
+                  onClick={() => handleUndoDelete(toast.undoPackage!)}
+                  className="mt-2.5 inline-flex items-center gap-1 px-3 py-1 bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/50 dark:hover:bg-orange-900/60 text-orange-600 dark:text-orange-400 text-xs font-bold rounded-lg border border-orange-200 dark:border-orange-800/80 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Undo Deletion
+                </button>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+            title="Dismiss notification"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </AdminLayout>

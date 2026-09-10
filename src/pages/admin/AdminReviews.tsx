@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api } from '../../services/api.js';
 import { Review } from '../../types.js';
+import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import {
   Quote,
   Plus,
@@ -18,6 +19,7 @@ import {
   Image as ImageIcon,
   Check,
   AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 
 export const AdminReviews: React.FC = () => {
@@ -28,6 +30,15 @@ export const AdminReviews: React.FC = () => {
   const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Floating Toast Notification State
+  const [toast, setToast] = useState<{
+    id: string;
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+    undoReview?: Review;
+  } | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -122,18 +133,72 @@ export const AdminReviews: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, authorName: string) => {
-    if (!window.confirm(`Are you sure you want to delete the review by "${authorName}"?`)) {
-      return;
-    }
+  /**
+   * Dedicated Traveller Story / Review Deletion Handler
+   * Instantly removes the story from state (optimistic update),
+   * triggers toast confirmation with Undo, and synchronizes persistent storage.
+   */
+  const handleDeleteReview = async (id: string, authorName?: string) => {
+    const name = authorName || id;
+    const deletedRecord = reviews.find(
+      (r) => r.id === id || r.authorName.toLowerCase() === name.toLowerCase()
+    );
+
+    // 1. Instant optimistic state update
+    setReviews((prev) =>
+      prev.filter((r) => r.id !== id && r.authorName.toLowerCase() !== name.toLowerCase())
+    );
+
+    // 2. Trigger confirmation toast alert with undo
+    const toastId = String(Date.now());
+    setToast({
+      id: toastId,
+      type: 'success',
+      title: 'Traveller Story Removed',
+      message: `Story by "${name}" was successfully removed from reviews and database.`,
+      undoReview: deletedRecord,
+    });
+
+    // Auto dismiss toast after 6 seconds
+    setTimeout(() => {
+      setToast((curr) => (curr?.id === toastId ? null : curr));
+    }, 6000);
+
+    // 3. Persist deletion to backend and local storage
     try {
       await api.deleteReview(id);
-      setReviews((prev) => prev.filter((r) => r.id !== id));
-      showNotification(`Review by "${authorName}" deleted successfully`);
+      if (authorName && authorName !== id) {
+        api.deleteReview(authorName).catch(() => {});
+      }
     } catch (err: any) {
-      showNotification(err.message || 'Failed to delete review', 'error');
+      console.error('Failed to delete review:', err);
+      setToast({
+        id: String(Date.now()),
+        type: 'error',
+        title: 'Deletion Failed',
+        message: `Could not delete story by "${name}". Please check connection.`,
+      });
+      loadReviews();
     }
   };
+
+  const handleUndoDelete = async (reviewToRestore: Review) => {
+    try {
+      const restored = await api.createReview(reviewToRestore);
+      setReviews((prev) => [restored, ...prev]);
+      setToast({
+        id: String(Date.now()),
+        type: 'info',
+        title: 'Story Restored',
+        message: `Review by "${reviewToRestore.authorName}" has been restored.`,
+      });
+      setTimeout(() => setToast(null), 4000);
+    } catch (err) {
+      console.error('Failed to restore review:', err);
+    }
+  };
+
+  const handleDelete = handleDeleteReview;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,12 +209,19 @@ export const AdminReviews: React.FC = () => {
 
     try {
       setIsSubmitting(true);
+      const payload = {
+        ...formData,
+        destinationImage:
+          formData.destinationImage.trim() ||
+          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80',
+      };
+
       if (editingReview) {
-        const updated = await api.updateReview(editingReview.id, formData);
+        const updated = await api.updateReview(editingReview.id, payload);
         setReviews((prev) => prev.map((r) => (r.id === editingReview.id ? updated : r)));
         showNotification(`Review by "${formData.authorName}" updated successfully`);
       } else {
-        const created = await api.createReview(formData);
+        const created = await api.createReview(payload);
         setReviews((prev) => [created, ...prev]);
         showNotification(`New review by "${formData.authorName}" published successfully`);
       }
@@ -384,7 +456,7 @@ export const AdminReviews: React.FC = () => {
                           </button>
                           <button
                             id={`delete-review-${review.id}`}
-                            onClick={() => handleDelete(review.id, review.authorName)}
+                            onClick={() => handleDeleteReview(review.id, review.authorName)}
                             className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/60 dark:text-red-300 dark:hover:text-red-200 transition-colors cursor-pointer"
                             title="Delete Review"
                           >
@@ -504,36 +576,15 @@ export const AdminReviews: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Destination Image URL */}
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>Destination Photo Image URL <span className="text-orange-500">*</span></span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Temple or spiritual vista</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      required
-                      placeholder="https://images.unsplash.com/..."
-                      value={formData.destinationImage}
-                      onChange={(e) => setFormData({ ...formData, destinationImage: e.target.value })}
-                      className="flex-1 bg-slate-50 dark:bg-[#0f233f] border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                    {formData.destinationImage && (
-                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 shrink-0">
-                        <img
-                          src={formData.destinationImage}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src =
-                                'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=100&q=80';
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {/* Destination Photo File Upload & Live Preview Interface */}
+                <ImageUploadField
+                  id="story-destination-photo-uploader"
+                  label="Destination Photo"
+                  helpText="Upload a high-resolution photo from your device (JPG, PNG, WEBP). It will be automatically optimized and converted to a local Base64 data URL."
+                  images={formData.destinationImage ? [formData.destinationImage] : []}
+                  onChange={(imgs) => setFormData({ ...formData, destinationImage: imgs[0] || '' })}
+                  multiple={false}
+                />
 
                 {/* Review Body (Textarea) */}
                 <div className="space-y-1">
@@ -609,6 +660,52 @@ export const AdminReviews: React.FC = () => {
         )}
 
       </div>
+      {/* FLOATING ACTION TOAST NOTIFICATION */}
+      {toast && (
+        <div
+          id="review-toast-notification"
+          className="fixed bottom-6 right-6 z-50 max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xl flex items-start justify-between gap-3 animate-fade-in transition-all duration-300"
+        >
+          <div className="flex items-start gap-3">
+            {toast.type === 'success' && (
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            )}
+            {toast.type === 'error' && (
+              <div className="p-2 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-xl">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+            )}
+            {toast.type === 'info' && (
+              <div className="p-2 bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 rounded-xl">
+                <Sparkles className="w-5 h-5" />
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">{toast.title}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{toast.message}</p>
+              {toast.undoReview && (
+                <button
+                  id="btn-undo-review-delete"
+                  onClick={() => handleUndoDelete(toast.undoReview!)}
+                  className="mt-2.5 inline-flex items-center gap-1 px-3 py-1 bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/50 dark:hover:bg-orange-900/60 text-orange-600 dark:text-orange-400 text-xs font-bold rounded-lg border border-orange-200 dark:border-orange-800/80 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Undo Deletion
+                </button>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+            title="Dismiss notification"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </AdminLayout>
   );
 };

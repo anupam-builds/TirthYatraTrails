@@ -41,12 +41,16 @@ function setStored<T>(key: string, val: T): void {
 export const localStore = {
   // Cities
   getCities(): City[] {
-    const stored = getStored<City[]>(STORAGE_KEYS.CITIES, []);
-    if (stored.length === 0) {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.CITIES) : null;
+    if (raw === null) {
       setStored(STORAGE_KEYS.CITIES, INITIAL_CITIES);
-      return INITIAL_CITIES;
+      return [...INITIAL_CITIES];
     }
-    return stored;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [...INITIAL_CITIES];
+    }
   },
 
   createCity(cityData: Partial<City>): City {
@@ -74,18 +78,45 @@ export const localStore = {
     return cities[idx];
   },
 
-  deleteCity(id: string): boolean {
-    const cities = this.getCities().filter((c) => c.id !== id);
+  deleteCity(idOrName: string): boolean {
+    if (!idOrName) return true;
+    const raw = String(idOrName).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const cities = this.getCities().filter((c) => {
+      const cId = (c.id || '').toLowerCase();
+      const cName = (c.name || '').toLowerCase();
+      const matches =
+        cId === target ||
+        cName === target ||
+        cId === `city-${target}` ||
+        `city-${cId}` === target ||
+        target.includes(cId) ||
+        (target.length > 3 && cName.includes(target)) ||
+        (cName.length > 3 && target.includes(cName));
+      return !matches;
+    });
     setStored(STORAGE_KEYS.CITIES, cities);
     return true;
   },
 
   // Hotels
   getHotels(cityId?: string, query?: string): Hotel[] {
-    let list = getStored<Hotel[]>(STORAGE_KEYS.HOTELS, []);
-    if (list.length === 0) {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.HOTELS) : null;
+    let list: Hotel[];
+    if (raw === null) {
+      setStored(STORAGE_KEYS.HOTELS, INITIAL_HOTELS);
       list = [...INITIAL_HOTELS];
-      setStored(STORAGE_KEYS.HOTELS, list);
+    } else {
+      try {
+        list = JSON.parse(raw);
+      } catch {
+        list = [...INITIAL_HOTELS];
+      }
     }
     if (cityId) {
       list = list.filter((h) => h.cityId === cityId);
@@ -111,7 +142,7 @@ export const localStore = {
   createHotel(hotelData: Partial<Hotel>): Hotel {
     const hotels = this.getHotels();
     const newHotel: Hotel = {
-      id: `htl-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: hotelData.id || `htl-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: hotelData.name || 'Sacred Hotel',
       cityId: hotelData.cityId || 'city-varanasi',
       cityName: hotelData.cityName || 'Varanasi',
@@ -142,18 +173,45 @@ export const localStore = {
     return hotels[idx];
   },
 
-  deleteHotel(id: string): boolean {
-    const hotels = this.getHotels().filter((h) => h.id !== id);
+  deleteHotel(idOrName: string): boolean {
+    if (!idOrName) return true;
+    const raw = String(idOrName).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const hotels = this.getHotels().filter((h) => {
+      const hId = (h.id || '').toLowerCase();
+      const hName = (h.name || '').toLowerCase();
+      const matches =
+        hId === target ||
+        hName === target ||
+        hId === `htl-${target}` ||
+        `htl-${hId}` === target ||
+        target.includes(hId) ||
+        (target.length > 4 && hName.includes(target)) ||
+        (hName.length > 4 && target.includes(hName));
+      return !matches;
+    });
     setStored(STORAGE_KEYS.HOTELS, hotels);
     return true;
   },
 
   // Packages
   getPackages(category?: string, query?: string): Package[] {
-    let list = getStored<Package[]>(STORAGE_KEYS.PACKAGES, []);
-    if (list.length === 0) {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.PACKAGES) : null;
+    let list: Package[];
+    if (raw === null) {
+      setStored(STORAGE_KEYS.PACKAGES, INITIAL_PACKAGES);
       list = [...INITIAL_PACKAGES];
-      setStored(STORAGE_KEYS.PACKAGES, list);
+    } else {
+      try {
+        list = JSON.parse(raw);
+      } catch {
+        list = [...INITIAL_PACKAGES];
+      }
     }
     if (category && category !== 'All') {
       list = list.filter(
@@ -182,7 +240,7 @@ export const localStore = {
   createPackage(pkgData: Partial<Package>): Package {
     const packages = this.getPackages();
     const newPkg: Package = {
-      id: `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: pkgData.id || `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: pkgData.title || 'Sacred Pilgrimage Yatra',
       location: pkgData.location || 'Sacred Dhams',
       duration: pkgData.duration || '3 Nights 4 Days',
@@ -214,8 +272,28 @@ export const localStore = {
     return packages[idx];
   },
 
-  deletePackage(id: string): boolean {
-    const packages = this.getPackages().filter((p) => p.id !== id);
+  deletePackage(idOrTitle: string): boolean {
+    if (!idOrTitle) return true;
+    const raw = String(idOrTitle).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const packages = this.getPackages().filter((p) => {
+      const pId = (p.id || '').toLowerCase();
+      const pTitle = (p.title || '').toLowerCase();
+      const matches =
+        pId === target ||
+        pTitle === target ||
+        pId === `pkg-${target}` ||
+        `pkg-${pId}` === target ||
+        target.includes(pId) ||
+        (target.length > 4 && pTitle.includes(target)) ||
+        (pTitle.length > 4 && target.includes(pTitle));
+      return !matches;
+    });
     setStored(STORAGE_KEYS.PACKAGES, packages);
     return true;
   },
@@ -395,10 +473,17 @@ export const localStore = {
 
   // Reviews
   getReviews(featuredOnly = false): Review[] {
-    let list = getStored<Review[]>(STORAGE_KEYS.REVIEWS, []);
-    if (list.length === 0) {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.REVIEWS) : null;
+    let list: Review[];
+    if (raw === null) {
+      setStored(STORAGE_KEYS.REVIEWS, INITIAL_REVIEWS);
       list = [...INITIAL_REVIEWS];
-      setStored(STORAGE_KEYS.REVIEWS, list);
+    } else {
+      try {
+        list = JSON.parse(raw);
+      } catch {
+        list = [...INITIAL_REVIEWS];
+      }
     }
     if (featuredOnly) {
       list = list.filter((r) => r.isFeatured);
@@ -415,7 +500,7 @@ export const localStore = {
       'TT';
 
     const newReview: Review = {
-      id: `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: reviewData.id || `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       authorName,
       authorLocation: reviewData.authorLocation || 'Sacred Dham',
       authorInitials: computedInitials,
@@ -472,8 +557,28 @@ export const localStore = {
     return reviews[idx];
   },
 
-  deleteReview(id: string): boolean {
-    const reviews = this.getReviews().filter((r) => r.id !== id);
+  deleteReview(idOrName: string): boolean {
+    if (!idOrName) return true;
+    const raw = String(idOrName).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const reviews = this.getReviews().filter((r) => {
+      const rId = (r.id || '').toLowerCase();
+      const rName = (r.authorName || '').toLowerCase();
+      const matches =
+        rId === target ||
+        rName === target ||
+        rId === `rev-${target}` ||
+        `rev-${rId}` === target ||
+        target.includes(rId) ||
+        (target.length > 4 && rName.includes(target)) ||
+        (rName.length > 4 && target.includes(rName));
+      return !matches;
+    });
     setStored(STORAGE_KEYS.REVIEWS, reviews);
     return true;
   },

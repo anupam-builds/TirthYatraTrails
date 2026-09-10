@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api } from '../../services/api.js';
 import { Hotel, City, Room } from '../../types.js';
+import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import {
   Building,
   Plus,
@@ -14,7 +15,18 @@ import {
   Check,
   Sparkles,
   ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
+
+interface ToastAlert {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+  undoHotel?: Hotel;
+}
 
 export const AdminHotels: React.FC = () => {
   const [hotels, setHotels] = useState<Hotel[]>([]);
@@ -22,6 +34,9 @@ export const AdminHotels: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('');
+
+  // Floating confirmation toast alert
+  const [toast, setToast] = useState<ToastAlert | null>(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,7 +56,10 @@ export const AdminHotels: React.FC = () => {
   const [darshanType, setDarshanType] = useState('VIP Darshan Pass Desk Available');
   const [isTopRated, setIsTopRated] = useState(true);
   const [amenitiesString, setAmenitiesString] = useState('24/7 Hot Water, Pure Sattvic Restaurant, Free Temple Shuttle, Luggage Cloakroom');
-  const [imagesString, setImagesString] = useState('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80');
+  const [images, setImages] = useState<string[]>([
+    'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80',
+  ]);
 
   useEffect(() => {
     loadData();
@@ -83,7 +101,10 @@ export const AdminHotels: React.FC = () => {
     setDarshanType('VIP Darshan & Priest Assistance Available');
     setIsTopRated(true);
     setAmenitiesString('Pure Sattvic Food, Free Wi-Fi, 24hr Hot Water, Temple Drop & Pickup');
-    setImagesString('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80\nhttps://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80');
+    setImages([
+      'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80',
+    ]);
     setIsModalOpen(true);
   };
 
@@ -102,42 +123,103 @@ export const AdminHotels: React.FC = () => {
     setDarshanType(h.darshanType || '');
     setIsTopRated(h.isTopRated || false);
     setAmenitiesString(h.amenities.join(', '));
-    setImagesString(h.images.join('\n'));
+    setImages(h.images && h.images.length > 0 ? h.images : [
+      'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'
+    ]);
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, hName: string) => {
-    if (window.confirm(`Are you sure you want to delete "${hName}"?`)) {
-      try {
-        await api.deleteHotel(id);
-        setHotels((prev) => prev.filter((h) => h.id !== id));
-      } catch (err) {
-        alert('Failed to delete hotel');
+  /**
+   * Dedicated Hotel Deletion Handler
+   * Removes from table state immediately, triggers confirmation toast, and persists to DB and local storage.
+   */
+  const handleDeleteHotel = async (id: string, hName?: string) => {
+    const hotelName = hName || id;
+    const deletedRecord = hotels.find(
+      (h) => h.id === id || h.name.toLowerCase() === hotelName.toLowerCase()
+    );
+
+    // 1. Instant optimistic state update in the UI
+    setHotels((prev) =>
+      prev.filter((h) => h.id !== id && h.name.toLowerCase() !== hotelName.toLowerCase())
+    );
+
+    // 2. Trigger confirmation toast alert
+    const toastId = String(Date.now());
+    setToast({
+      id: toastId,
+      type: 'success',
+      title: 'Hotel Removed',
+      message: `"${hotelName}" was successfully removed from inventory and database.`,
+      undoHotel: deletedRecord,
+    });
+
+    // Auto dismiss toast after 6 seconds
+    setTimeout(() => {
+      setToast((curr) => (curr?.id === toastId ? null : curr));
+    }, 6000);
+
+    // 3. Persist deletion to backend and local store
+    try {
+      await api.deleteHotel(id);
+      if (hName && hName !== id) {
+        api.deleteHotel(hName).catch(() => {});
       }
+    } catch (err: any) {
+      console.error('Failed to delete hotel:', err);
+      setToast({
+        id: String(Date.now()),
+        type: 'error',
+        title: 'Deletion Failed',
+        message: `Could not delete "${hotelName}". Please check connection.`,
+      });
+      loadData();
+    }
+  };
+
+  // Backwards compatibility alias
+  const handleDelete = handleDeleteHotel;
+
+  // Undo deletion handler
+  const handleUndoDelete = async (hotelToRestore: Hotel) => {
+    try {
+      const restored = await api.createHotel(hotelToRestore);
+      setHotels((prev) => [restored, ...prev]);
+      setToast({
+        id: String(Date.now()),
+        type: 'info',
+        title: 'Hotel Restored',
+        message: `"${hotelToRestore.name}" has been restored to the inventory.`,
+      });
+      setTimeout(() => setToast(null), 4000);
+    } catch (err) {
+      console.error('Failed to restore hotel:', err);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amenities = amenitiesString.split(',').map((s) => s.trim()).filter(Boolean);
-    const images = imagesString.split('\n').map((s) => s.trim()).filter(Boolean);
+    const validImages = images.length > 0 ? images : [
+      'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'
+    ];
     const selectedCity = cities.find((c) => c.id === cityId);
 
     const hotelData: Partial<Hotel> = {
-      name,
+      name: name.trim(),
       cityId,
       cityName: selectedCity?.name || cityName,
-      address,
-      description,
+      address: address.trim(),
+      description: description.trim(),
       starRating: Number(starRating),
       googleRating: Number(googleRating),
       reviewCount: Number(reviewCount),
       basePrice: Number(basePrice),
-      distanceToTemple,
-      darshanType,
+      distanceToTemple: distanceToTemple.trim(),
+      darshanType: darshanType.trim(),
       isTopRated,
       amenities,
-      images,
+      images: validImages,
       rooms: editingHotel?.rooms || [
         {
           id: 'room-1',
@@ -148,7 +230,7 @@ export const AdminHotels: React.FC = () => {
           breakfastPrice: Number(basePrice) + 800,
           halfBoardPrice: Number(basePrice) + 1600,
           fullBoardPrice: Number(basePrice) + 2400,
-          imageUrl: images[0] || 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
+          imageUrl: validImages[0],
         },
       ],
     };
@@ -157,13 +239,31 @@ export const AdminHotels: React.FC = () => {
       if (editingHotel) {
         const updated = await api.updateHotel(editingHotel.id, hotelData);
         setHotels((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+        setToast({
+          id: String(Date.now()),
+          type: 'success',
+          title: 'Hotel Updated',
+          message: `Changes to "${updated.name}" have been saved successfully.`,
+        });
       } else {
         const created = await api.createHotel(hotelData);
         setHotels((prev) => [created, ...prev]);
+        setToast({
+          id: String(Date.now()),
+          type: 'success',
+          title: 'Hotel Published',
+          message: `"${created.name}" is now live in the accommodations inventory.`,
+        });
       }
       setIsModalOpen(false);
+      setTimeout(() => setToast(null), 5000);
     } catch (err) {
-      alert('Failed saving hotel');
+      setToast({
+        id: String(Date.now()),
+        type: 'error',
+        title: 'Save Failed',
+        message: 'Failed saving hotel details.',
+      });
     }
   };
 
@@ -236,62 +336,91 @@ export const AdminHotels: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {hotels.map((hotel) => (
-                  <tr key={hotel.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={hotel.images[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=150&q=80'}
-                          alt={hotel.name}
-                          className="w-12 h-12 rounded-xl object-cover shrink-0 bg-slate-100 dark:bg-slate-800"
-                        />
-                        <div>
-                          <p className="font-bold text-slate-900 dark:text-white leading-snug">{hotel.name}</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[200px]">{hotel.address}</p>
-                          {hotel.isTopRated && (
-                            <span className="inline-block mt-0.5 px-1.5 py-0.2 text-[9px] font-bold bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-800 rounded">
-                              Top Rated
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-500">
+                      <div className="inline-block w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mb-2" />
+                      <p className="text-xs">Loading accommodations inventory...</p>
                     </td>
-                    <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
-                      {hotel.cityName}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1 text-amber-500 font-bold">
-                        <span>G {hotel.googleRating.toFixed(1)}</span>
-                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        <span className="text-slate-400 text-[10px]">({hotel.reviewCount})</span>
-                      </div>
-                      <div className="text-[10px] text-slate-500">{hotel.starRating} Star Stay</div>
-                    </td>
-                    <td className="py-3.5 px-4 font-extrabold text-slate-900 dark:text-white">
-                      ₹{hotel.basePrice.toLocaleString('en-IN')}{' '}
-                      <span className="text-[10px] font-normal text-slate-400">/nt</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 text-[11px]">
-                      {hotel.distanceToTemple || 'Steps from temple'}
-                    </td>
-                    <td className="py-3.5 px-4 text-right space-x-2">
+                  </tr>
+                ) : hotels.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-500">
+                      <Building className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                      <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">No hotels found</p>
+                      <p className="text-xs text-slate-400 mt-1">Try changing your search query or city filter.</p>
                       <button
-                        onClick={() => handleOpenEdit(hotel)}
-                        className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-lg transition-colors cursor-pointer"
-                        title="Edit Hotel"
+                        onClick={handleOpenAdd}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-bold text-xs cursor-pointer transition-all"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(hotel.id, hotel.name)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950/60 dark:hover:bg-red-900 dark:text-red-300 rounded-lg transition-colors cursor-pointer"
-                        title="Delete Hotel"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Plus className="w-3.5 h-3.5" /> Add Hotel
                       </button>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  hotels.map((hotel) => (
+                    <tr
+                      key={hotel.id}
+                      id={`hotel-row-${hotel.id}`}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={hotel.images[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=150&q=80'}
+                            alt={hotel.name}
+                            className="w-12 h-12 rounded-xl object-cover shrink-0 bg-slate-100 dark:bg-slate-800"
+                          />
+                          <div>
+                            <p className="font-bold text-slate-900 dark:text-white leading-snug">{hotel.name}</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[200px]">{hotel.address}</p>
+                            {hotel.isTopRated && (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.2 text-[9px] font-bold bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-800 rounded">
+                                Top Rated
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
+                        {hotel.cityName}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1 text-amber-500 font-bold">
+                          <span>G {hotel.googleRating.toFixed(1)}</span>
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span className="text-slate-400 text-[10px]">({hotel.reviewCount})</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500">{hotel.starRating} Star Stay</div>
+                      </td>
+                      <td className="py-3.5 px-4 font-extrabold text-slate-900 dark:text-white">
+                        ₹{hotel.basePrice.toLocaleString('en-IN')}{' '}
+                        <span className="text-[10px] font-normal text-slate-400">/nt</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 text-[11px]">
+                        {hotel.distanceToTemple || 'Steps from temple'}
+                      </td>
+                      <td className="py-3.5 px-4 text-right space-x-2 whitespace-nowrap">
+                        <button
+                          id={`btn-edit-hotel-${hotel.id}`}
+                          onClick={() => handleOpenEdit(hotel)}
+                          className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-lg transition-colors cursor-pointer"
+                          title={`Edit ${hotel.name}`}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          id={`btn-delete-hotel-${hotel.id}`}
+                          onClick={() => handleDeleteHotel(hotel.id, hotel.name)}
+                          className="p-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950/60 dark:hover:bg-red-900 dark:text-red-300 rounded-lg transition-colors cursor-pointer"
+                          title={`Delete ${hotel.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -446,17 +575,14 @@ export const AdminHotels: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">
-                  Image URLs (one URL per line)
-                </label>
-                <textarea
-                  rows={3}
-                  value={imagesString}
-                  onChange={(e) => setImagesString(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-[11px]"
-                />
-              </div>
+              <ImageUploadField
+                id="hotel-images-uploader"
+                label="Hotel Photos & Gallery"
+                helpText="Upload hotel images directly from your computer or drag & drop files. The first photo is the main card cover."
+                images={images}
+                onChange={setImages}
+                multiple={true}
+              />
 
               <div className="flex items-center gap-2 pt-1">
                 <input
@@ -488,6 +614,56 @@ export const AdminHotels: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {/* FLOATING ACTION TOAST WITH UNDO OPTION */}
+      {toast && (
+        <div
+          id="hotel-action-toast"
+          className="fixed bottom-6 right-6 z-50 max-w-md bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl p-4 flex items-start gap-3 transition-all animate-in slide-in-from-bottom-5"
+        >
+          <div
+            className={`p-2 rounded-xl shrink-0 ${
+              toast.type === 'success'
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                : toast.type === 'error'
+                ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400'
+                : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5" />
+            ) : toast.type === 'error' ? (
+              <AlertCircle className="w-5 h-5" />
+            ) : (
+              <Sparkles className="w-5 h-5" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0 pr-1">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white">{toast.title}</h4>
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">{toast.message}</p>
+            {toast.undoHotel && (
+              <button
+                id="btn-undo-delete-hotel"
+                onClick={() => {
+                  if (toast.undoHotel) {
+                    handleUndoDelete(toast.undoHotel);
+                  }
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Undo Deletion</span>
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md"
+            title="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </AdminLayout>

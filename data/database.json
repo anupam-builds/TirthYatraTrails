@@ -4,15 +4,15 @@
       "id": "usr-admin-1",
       "name": "Enterprise Yatra Admin",
       "email": "admin@tirthyatratrails.com",
-      "password": "$2b$10$pViSL974uThw5K8GadVwTe9bVC9n99jwLC3ZqYNKzP798We4w2n9q",
+      "password": "$2b$10$CY8qrfJH6k7MojAA8jnSU.WNSvoB822GgMiwnGhHvPvatJ7KSLSSK",
       "role": "ADMIN",
-      "createdAt": "2026-09-01T19:46:27.624Z"
+      "createdAt": "2026-09-10T19:01:48.358Z"
     },
     {
       "id": "usr-admin-2",
       "name": "Executive Yatra Admin",
       "email": "admin@tirthyatra.com",
-      "password": "$2b$10$iplNHUSrBS0SHd6nJpRqXuL/WAB1i0qmhmRIMuSZfi7mvc0FViOIy",
+      "password": "$2b$10$iJjvkOU3q5yqNq/Wb1d3Su54WUO5Tzv.Qd58NYwxiC0/4a3xRU2D6",
       "role": "ADMIN",
       "createdAt": "2026-01-10T08:00:00.000Z"
     },
@@ -20,9 +20,163 @@
       "id": "usr-demo-1",
       "name": "Rohan Sharma",
       "email": "rohan.sharma@example.com",
-      "password": "$2b$10$Z.MnTadudSk3DsqUhri9IeY8YkVx1Aa4ForwxFc2cYqRHFfVcTkDK",
+      "password": "$2b$10$kXqK3yD2sf4nYKCHX9CeIuZNIN6kekYgD0S1lV99r9k9gHSOCFbQK",
       "role": "USER",
       "createdAt": "2026-02-15T10:30:00.000Z"
+    }
+  ],
+  "staff": [
+    {
+      "id": "stf-1",
+      "name": "Priya Sharma",
+      "email": "priya.staff@tirthyatra.com",
+      "password": "Staff@123",
+      "phone": "+91 98111 22334",
+      "designation": "Senior Pilgrimage Coordinator",
+      "role": "STAFF",
+      "isActive": true,
+      "isBlocked": false,
+      "permissions": {
+        "canViewInquiries": true,
+        "canUpdateStatus": true,
+        "canAddNotes": true
+      },
+      "assignedLeadsCount": 1,
+      "contactedCount": 14,
+      "closedCount": 9,
+      "notesCount": 21,
+      "lastLogin": "2026-09-09T11:45:00.000Z",
+      "lastActiveAt": "2026-09-09T12:55:00.000Z",
+      "lastLoginIp": "122.161.48.12",
+      "lastLoginDevice": "Chrome on Windows 11/10",
+      "isCurrentlyLoggedIn": true,
+      "createdAt": "2026-01-15T09:00:00.000Z"
+    },
+    {
+      "id": "stf-2",
+      "name": "Arun Verma",
+      "email": "arun.staff@tirthyatra.com",
+      "password": "Staff@123",
+      "phone": "+91 98222 33445",
+      "designation": "Travel Desk Specialist",
+      "role": "STAFF",
+      "isActive": true,
+      "isBlocked": false,
+      "permissions": {
+        "canViewInquiries": true,
+        "canUpdateStatus": true,
+        "canAddNotes": true
+      },
+      "assignedLeadsCount": 1,
+      "contactedCount": 8,
+      "closedCount": 5,
+      "notesCount": 12,
+      "lastLogin": "2026-09-09T08:30:00.000Z",
+      "lastActiveAt": "2026-09-09T10:15:00.000Z",
+      "lastLoginIp": "49.36.128.95",
+      "lastLoginDevice": "Safari on macOS",
+      "isCurrentlyLoggedIn": false,
+      "createdAt": "2026-02-01T11:00:00.000Z"
+    },
+    {
+      "id": "stf-3",
+      "name": "Vikram Joshi",
+      "email": "vikram.staff@tirthyatra.com",
+      "password": "Staff@123",
+      "phone": "+91 98333 44556",
+      "designation": "Kedarnath Yatra Assistant",
+      "role": "STAFF",
+      "isActive": true,
+      "isBlocked": false,
+      "permissions": {
+        "canViewInquiries": true,
+        "canUpdateStatus": true,
+        "canAddNotes": true
+      },
+      "assignedLeadsCount": 0,
+      "contactedCount": 3,
+      "closedCount": 1,
+      "notesCount": 4,
+      "lastLogin": "2026-09-07T16:20:00.000Z",
+      "lastActiveAt": "2026-09-07T17:00:00.000Z",
+      "lastLoginIp": "157.34.201.88",
+      "lastLoginDevice": "Mobile Safari on iPhone",
+      "isCurrentlyLoggedIn": false,
+      "createdAt": "2026-03-10T14:00:00.000Z"
+    }
+  ],
+  "staffLogs": [
+    {
+      "id": "log-1",
+      "staffId": "stf-1",
+      "staffName": "Priya Sharma",
+      "staffEmail": "priya.staff@tirthyatra.com",
+      "action": "LOGIN",
+      "description": "Authenticated into Staff Operations Desk",
+      "ipAddress": "122.161.48.12",
+      "device": "Chrome on Windows 11/10",
+      "timestamp": "2026-09-09T11:45:00.000Z"
+    },
+    {
+      "id": "log-2",
+      "staffId": "stf-1",
+      "staffName": "Priya Sharma",
+      "staffEmail": "priya.staff@tirthyatra.com",
+      "action": "STATUS_UPDATE",
+      "description": "Updated lead #103 (The Ramayana Royal Retreat) status to CONTACTED",
+      "inquiryId": "inq-103",
+      "details": "Devotee Vikramaditya Rao verified for 25th anniversary puja and Ram Mandir darshan.",
+      "ipAddress": "122.161.48.12",
+      "device": "Chrome on Windows 11/10",
+      "timestamp": "2026-09-09T11:52:14.000Z"
+    },
+    {
+      "id": "log-3",
+      "staffId": "stf-1",
+      "staffName": "Priya Sharma",
+      "staffEmail": "priya.staff@tirthyatra.com",
+      "action": "NOTE_ADDED",
+      "description": "Added follow-up note for inquiry #103",
+      "inquiryId": "inq-103",
+      "details": "Devotee requested morning Saryu Aarti boat timing and pure Sattvic kitchen arrangement.",
+      "ipAddress": "122.161.48.12",
+      "device": "Chrome on Windows 11/10",
+      "timestamp": "2026-09-09T12:05:30.000Z"
+    },
+    {
+      "id": "log-4",
+      "staffId": "stf-2",
+      "staffName": "Arun Verma",
+      "staffEmail": "arun.staff@tirthyatra.com",
+      "action": "LOGIN",
+      "description": "Authenticated into Staff Operations Desk",
+      "ipAddress": "49.36.128.95",
+      "device": "Safari on macOS",
+      "timestamp": "2026-09-09T08:30:00.000Z"
+    },
+    {
+      "id": "log-5",
+      "staffId": "stf-2",
+      "staffName": "Arun Verma",
+      "staffEmail": "arun.staff@tirthyatra.com",
+      "action": "STATUS_UPDATE",
+      "description": "Updated lead #101 (BrijRama Palace) status to CONTACTED",
+      "inquiryId": "inq-101",
+      "details": "Spoke with Rohan Sharma; confirmed wheelchair assistance and priority temple entry.",
+      "ipAddress": "49.36.128.95",
+      "device": "Safari on macOS",
+      "timestamp": "2026-09-09T08:42:00.000Z"
+    },
+    {
+      "id": "log-6",
+      "staffId": "stf-2",
+      "staffName": "Arun Verma",
+      "staffEmail": "arun.staff@tirthyatra.com",
+      "action": "LOGOUT",
+      "description": "Signed out from Staff Portal session",
+      "ipAddress": "49.36.128.95",
+      "device": "Safari on macOS",
+      "timestamp": "2026-09-09T10:15:00.000Z"
     }
   ],
   "cities": [
@@ -643,56 +797,6 @@
       ]
     },
     {
-      "id": "pkg-ujjain-mahakal",
-      "title": "Ujjain Mahakaleshwar Jyotirlinga & Omkareshwar Spiritual Yatra",
-      "location": "Indore • Ujjain • Omkareshwar • Maheshwar",
-      "duration": "3 Nights 4 Days",
-      "bookedRank": "Special Jyotirlinga Darshan",
-      "imageUrl": "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=1200&q=80",
-      "galleryImages": [
-        "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=800&q=80",
-        "https://images.unsplash.com/photo-1609766857041-ed402ea8069a?auto=format&fit=crop&w=800&q=80"
-      ],
-      "startingPrice": 14500,
-      "category": "Jyotirlinga",
-      "packageType": "Divine Jyotirlinga Yatra",
-      "experienceLevel": "Comfortable • Senior Devotee Friendly",
-      "hotelsLevel": "3 & 4 Star Deluxe Stays near Mahakal Lok",
-      "transfers": "Private AC Sedan / Innova from Indore Airport",
-      "overview": "A sacred expedition to Lord Mahakal. Includes guaranteed early morning 4 AM Bhasma Aarti darshan assistance, Mahakal Lok Corridor guided tour, holy dip in River Shipra, Sandipani Ashram, and pilgrimage to Omkareshwar Jyotirlinga on the holy Narmada River.",
-      "highlights": [
-        "Guaranteed assistance for 4 AM Mahakaleshwar Bhasma Aarti entry",
-        "Guided walk across the magnificent Mahakal Lok Corridor",
-        "Boat ride around Mandhata Island at Omkareshwar Jyotirlinga",
-        "Holy Shipra River Ram Ghat Snan & Sandhya Aarti",
-        "Visit Kal Bhairav Temple & Harsiddhi Mata Shaktipeeth",
-        "Deluxe AC accommodation with Sattvic Breakfast & Dinner"
-      ],
-      "cancellationPolicy": "100% refund up to 10 days before journey start date.",
-      "itinerary": [
-        {
-          "day": 1,
-          "title": "Arrival Indore - Transfer to Ujjain & Mahakal Lok Evening Walk",
-          "desc": "Airport/station pickup, hotel check-in at Ujjain, evening stroll through the lit Mahakal Lok."
-        },
-        {
-          "day": 2,
-          "title": "4 AM Bhasma Aarti Darshan, Kal Bhairav & Harsiddhi Mata",
-          "desc": "Divine Bhasma Aarti darshan at Mahakaleshwar, followed by Mangalnath and Sandipani Ashram."
-        },
-        {
-          "day": 3,
-          "title": "Ujjain to Omkareshwar & Mamleshwar Jyotirlinga",
-          "desc": "Scenic drive to Narmada river, boat ride to Omkareshwar island, darshan at Mamleshwar temple."
-        },
-        {
-          "day": 4,
-          "title": "Maheshwar Fort, Narmada Ghats & Indore Departure",
-          "desc": "Visit historic Ahilya Fort on Narmada banks, transfer to Indore airport/station for departure."
-        }
-      ]
-    },
-    {
       "id": "pkg-meghalaya-kamakhya",
       "title": "Meghalaya & Kamakhya Devi Sacred Nature & Temple Trail",
       "location": "Guwahati • Shillong • Cherrapunji • Dawki • Mawlynnong",
@@ -1024,6 +1128,56 @@
           "desc": "Shopping for traditional handicrafts and departure flight from Rajkot or Ahmedabad."
         }
       ]
+    },
+    {
+      "id": "pkg-ujjain-mahakal",
+      "title": "Ujjain Mahakaleshwar Jyotirlinga & Omkareshwar Spiritual Yatra",
+      "location": "Indore • Ujjain • Omkareshwar • Maheshwar",
+      "duration": "3 Nights 4 Days",
+      "bookedRank": "Special Jyotirlinga Darshan",
+      "imageUrl": "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=1200&q=80",
+      "galleryImages": [
+        "https://images.unsplash.com/photo-1571536802807-30451e3955d8?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1609766857041-ed402ea8069a?auto=format&fit=crop&w=800&q=80"
+      ],
+      "startingPrice": 14500,
+      "category": "Jyotirlinga",
+      "packageType": "Divine Jyotirlinga Yatra",
+      "experienceLevel": "Comfortable • Senior Devotee Friendly",
+      "hotelsLevel": "3 & 4 Star Deluxe Stays near Mahakal Lok",
+      "transfers": "Private AC Sedan / Innova from Indore Airport",
+      "overview": "A sacred expedition to Lord Mahakal. Includes guaranteed early morning 4 AM Bhasma Aarti darshan assistance, Mahakal Lok Corridor guided tour, holy dip in River Shipra, Sandipani Ashram, and pilgrimage to Omkareshwar Jyotirlinga on the holy Narmada River.",
+      "highlights": [
+        "Guaranteed assistance for 4 AM Mahakaleshwar Bhasma Aarti entry",
+        "Guided walk across the magnificent Mahakal Lok Corridor",
+        "Boat ride around Mandhata Island at Omkareshwar Jyotirlinga",
+        "Holy Shipra River Ram Ghat Snan & Sandhya Aarti",
+        "Visit Kal Bhairav Temple & Harsiddhi Mata Shaktipeeth",
+        "Deluxe AC accommodation with Sattvic Breakfast & Dinner"
+      ],
+      "cancellationPolicy": "100% refund up to 10 days before journey start date.",
+      "itinerary": [
+        {
+          "day": 1,
+          "title": "Arrival Indore - Transfer to Ujjain & Mahakal Lok Evening Walk",
+          "desc": "Airport/station pickup, hotel check-in at Ujjain, evening stroll through the lit Mahakal Lok."
+        },
+        {
+          "day": 2,
+          "title": "4 AM Bhasma Aarti Darshan, Kal Bhairav & Harsiddhi Mata",
+          "desc": "Divine Bhasma Aarti darshan at Mahakaleshwar, followed by Mangalnath and Sandipani Ashram."
+        },
+        {
+          "day": 3,
+          "title": "Ujjain to Omkareshwar & Mamleshwar Jyotirlinga",
+          "desc": "Scenic drive to Narmada river, boat ride to Omkareshwar island, darshan at Mamleshwar temple."
+        },
+        {
+          "day": 4,
+          "title": "Maheshwar Fort, Narmada Ghats & Indore Departure",
+          "desc": "Visit historic Ahilya Fort on Narmada banks, transfer to Indore airport/station for departure."
+        }
+      ]
     }
   ],
   "inquiries": [
@@ -1104,17 +1258,18 @@
   "reviews": [
     {
       "id": "rev-1",
-      "authorName": "Milind Pawarc",
+      "authorName": "Milind Pawar",
       "authorLocation": "Mathura · Vrindavan",
       "authorInitials": "MP",
       "rating": 5,
-      "reviewText": "We arranged a 3-day spiritual tour for our family to Mathura and Vrindavan. TirthYatraTrails ensured our hotel was barely 5 minutes from Banke Bihari and Prem Mandir. The morning temple transfer, clean Sattvic dining, and dedicated tour manager made our darshan utterly blissful without any stress.",
+      "reviewText": "We arranged a 3-day spiritual tour for our family to Mathura and Vrindavan. TirthYatraTrails ensured our hotel was barely 5 minutes from Banke Bihari and Prem Mandir. The VIP aarti passes saved us hours of standing in queue. Truly blessed experience!",
       "destinationImage": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
       "isVerified": true,
-      "googleReviewUrl": "https://maps.google.com/?q=Vrindavan+Temples",
+      "googleReviewUrl": "",
       "isFeatured": true,
       "order": 1,
-      "createdAt": "2026-08-15T10:00:00.000Z"
+      "createdAt": "2026-08-15T10:00:00.000Z",
+      "updatedAt": "2026-09-10T19:09:20.539Z"
     },
     {
       "id": "rev-2",
@@ -1144,5 +1299,6 @@
       "order": 3,
       "createdAt": "2026-08-01T09:15:00.000Z"
     }
-  ]
+  ],
+  "accounts": []
 }

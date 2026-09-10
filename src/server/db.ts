@@ -326,11 +326,33 @@ class DatabaseStore {
     return this.data.cities[index];
   }
 
-  public deleteCity(id: string) {
-    const index = this.data.cities.findIndex((c) => c.id === id);
-    if (index === -1) throw new Error('City not found');
-    this.data.cities.splice(index, 1);
-    this.save();
+  public deleteCity(idOrName: string) {
+    if (!idOrName) return true;
+    const raw = String(idOrName).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const index = this.data.cities.findIndex((c) => {
+      const cId = (c.id || '').toLowerCase();
+      const cName = (c.name || '').toLowerCase();
+      return (
+        cId === target ||
+        cName === target ||
+        cId === `city-${target}` ||
+        `city-${cId}` === target ||
+        target.includes(cId) ||
+        (target.length > 3 && cName.includes(target)) ||
+        (cName.length > 3 && target.includes(cName))
+      );
+    });
+
+    if (index !== -1) {
+      this.data.cities.splice(index, 1);
+      this.save();
+    }
     return true;
   }
 
@@ -399,16 +421,38 @@ class DatabaseStore {
     return updated;
   }
 
-  public deleteHotel(id: string) {
-    const index = this.data.hotels.findIndex((h) => h.id === id);
-    if (index === -1) throw new Error('Hotel not found');
-    const hotel = this.data.hotels[index];
-    const city = this.getCityById(hotel.cityId);
-    if (city && city.hotelCount > 0) {
-      city.hotelCount -= 1;
+  public deleteHotel(idOrName: string) {
+    if (!idOrName) return true;
+    const raw = String(idOrName).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const index = this.data.hotels.findIndex((h) => {
+      const hId = (h.id || '').toLowerCase();
+      const hName = (h.name || '').toLowerCase();
+      return (
+        hId === target ||
+        hName === target ||
+        hId === `htl-${target}` ||
+        `htl-${hId}` === target ||
+        target.includes(hId) ||
+        (target.length > 4 && hName.includes(target)) ||
+        (hName.length > 4 && target.includes(hName))
+      );
+    });
+
+    if (index !== -1) {
+      const hotel = this.data.hotels[index];
+      const city = this.getCityById(hotel.cityId);
+      if (city && city.hotelCount > 0) {
+        city.hotelCount -= 1;
+      }
+      this.data.hotels.splice(index, 1);
+      this.save();
     }
-    this.data.hotels.splice(index, 1);
-    this.save();
     return true;
   }
 
@@ -467,11 +511,33 @@ class DatabaseStore {
     return this.data.packages[index];
   }
 
-  public deletePackage(id: string) {
-    const index = this.data.packages.findIndex((p) => p.id === id);
-    if (index === -1) throw new Error('Package not found');
-    this.data.packages.splice(index, 1);
-    this.save();
+  public deletePackage(idOrTitle: string) {
+    if (!idOrTitle) return true;
+    const raw = String(idOrTitle).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const index = this.data.packages.findIndex((p) => {
+      const pId = (p.id || '').toLowerCase();
+      const pTitle = (p.title || '').toLowerCase();
+      return (
+        pId === target ||
+        pTitle === target ||
+        pId === `pkg-${target}` ||
+        `pkg-${pId}` === target ||
+        target.includes(pId) ||
+        (target.length > 4 && pTitle.includes(target)) ||
+        (pTitle.length > 4 && target.includes(pTitle))
+      );
+    });
+
+    if (index !== -1) {
+      this.data.packages.splice(index, 1);
+      this.save();
+    }
     return true;
   }
 
@@ -1081,12 +1147,34 @@ class DatabaseStore {
     return this.data.reviews[index];
   }
 
-  public deleteReview(id: string) {
+  public deleteReview(idOrName: string) {
     if (!this.data.reviews) this.data.reviews = [];
-    const index = this.data.reviews.findIndex((r) => r.id === id);
-    if (index === -1) throw new Error('Review not found');
-    this.data.reviews.splice(index, 1);
-    this.save();
+    if (!idOrName) return true;
+    const raw = String(idOrName).trim();
+    let decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {}
+    const target = decoded.toLowerCase();
+
+    const index = this.data.reviews.findIndex((r) => {
+      const rId = (r.id || '').toLowerCase();
+      const rName = (r.authorName || '').toLowerCase();
+      return (
+        rId === target ||
+        rName === target ||
+        rId === `rev-${target}` ||
+        `rev-${rId}` === target ||
+        target.includes(rId) ||
+        (target.length > 4 && rName.includes(target)) ||
+        (rName.length > 4 && target.includes(rName))
+      );
+    });
+
+    if (index !== -1) {
+      this.data.reviews.splice(index, 1);
+      this.save();
+    }
     return true;
   }
 }
