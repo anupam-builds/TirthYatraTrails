@@ -216,24 +216,36 @@ export const CustomerFooter: React.FC = () => {
               </h3>
               <ul className="space-y-2 text-xs text-gray-300 font-medium">
                 <li>
-                  <span className="hover:text-white cursor-pointer transition-colors block">
+                  <button
+                    onClick={() => navigate('/privacy')}
+                    className="hover:text-orange-400 cursor-pointer transition-colors text-left block w-full"
+                  >
                     Privacy Policy
-                  </span>
+                  </button>
                 </li>
                 <li>
-                  <span className="hover:text-white cursor-pointer transition-colors block">
+                  <button
+                    onClick={() => navigate('/terms')}
+                    className="hover:text-orange-400 cursor-pointer transition-colors text-left block w-full"
+                  >
                     Terms &amp; Conditions
-                  </span>
+                  </button>
                 </li>
                 <li>
-                  <span className="hover:text-white cursor-pointer transition-colors block">
+                  <button
+                    onClick={() => navigate('/refunds')}
+                    className="hover:text-orange-400 cursor-pointer transition-colors text-left block w-full"
+                  >
                     Refunds &amp; Cancellations
-                  </span>
+                  </button>
                 </li>
                 <li>
-                  <span className="hover:text-white cursor-pointer transition-colors block">
+                  <button
+                    onClick={() => navigate('/guarantee')}
+                    className="hover:text-orange-400 cursor-pointer transition-colors text-left block w-full"
+                  >
                     Spiritual Hospitality Guarantee
-                  </span>
+                  </button>
                 </li>
                 <li className="pt-2">
                   <button

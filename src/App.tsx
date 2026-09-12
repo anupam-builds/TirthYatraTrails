@@ -14,6 +14,12 @@ import { PackageDetailPage } from './pages/PackageDetailPage.js';
 import { FlightsPage } from './pages/FlightsPage.js';
 import { MyInquiriesPage } from './pages/MyInquiriesPage.js';
 
+// Legal & Policy Pages
+import { PrivacyPolicyPage } from './pages/legal/PrivacyPolicyPage.js';
+import { TermsPage } from './pages/legal/TermsPage.js';
+import { RefundsPage } from './pages/legal/RefundsPage.js';
+import { GuaranteePage } from './pages/legal/GuaranteePage.js';
+
 // Admin Pages
 import { AdminLoginPage } from './pages/admin/AdminLoginPage.js';
 import { AdminDashboard } from './pages/admin/AdminDashboard.js';
@@ -112,6 +118,18 @@ const AppContent: React.FC = () => {
     }
     if (cleanPath === '/my-inquiries' || cleanPath.startsWith('/my-inquiries')) {
       return <MyInquiriesPage />;
+    }
+    if (cleanPath === '/privacy' || cleanPath.startsWith('/privacy')) {
+      return <PrivacyPolicyPage />;
+    }
+    if (cleanPath === '/terms' || cleanPath.startsWith('/terms')) {
+      return <TermsPage />;
+    }
+    if (cleanPath === '/refunds' || cleanPath.startsWith('/refunds')) {
+      return <RefundsPage />;
+    }
+    if (cleanPath === '/guarantee' || cleanPath.startsWith('/guarantee')) {
+      return <GuaranteePage />;
     }
     return <HomePage />;
   };
