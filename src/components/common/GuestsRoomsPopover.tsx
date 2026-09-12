@@ -110,7 +110,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
           <div className="flex items-center justify-between py-1 border-b border-gray-100">
             <div>
               <p className="text-xs font-bold text-[#0f294a]">Adults</p>
-              <p className="text-[10px] text-gray-400">Ages 18 or above</p>
+              <p className="text-[10px] text-gray-500 font-medium">Ages 18+</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -118,7 +118,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                 id="adults-minus-btn"
                 onClick={() => onAdultsChange(Math.max(1, adults - 1))}
                 disabled={adults <= 1}
-                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-40 flex items-center justify-center text-gray-700 transition-colors"
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-40 flex items-center justify-center text-gray-700 transition-colors cursor-pointer"
                 aria-label="Decrease Adults"
               >
                 <Minus className="w-3.5 h-3.5" />
@@ -130,7 +130,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                 type="button"
                 id="adults-plus-btn"
                 onClick={() => onAdultsChange(adults + 1)}
-                className="w-7 h-7 rounded-full bg-orange-100 hover:bg-orange-200 flex items-center justify-center text-[#ea580c] font-bold transition-colors"
+                className="w-7 h-7 rounded-full bg-orange-100 hover:bg-orange-200 flex items-center justify-center text-[#ea580c] font-bold transition-colors cursor-pointer"
                 aria-label="Increase Adults"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -142,7 +142,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
           <div className="flex items-center justify-between py-1 border-b border-gray-100">
             <div>
               <p className="text-xs font-bold text-[#0f294a]">Children</p>
-              <p className="text-[10px] text-gray-400">Ages 0 to 17 years</p>
+              <p className="text-[10px] text-gray-500 font-medium">Ages 0-17</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -150,7 +150,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                 id="children-minus-btn"
                 onClick={handleRemoveChild}
                 disabled={childAges.length === 0}
-                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-40 flex items-center justify-center text-gray-700 transition-colors"
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-40 flex items-center justify-center text-gray-700 transition-colors cursor-pointer"
                 aria-label="Decrease Children"
               >
                 <Minus className="w-3.5 h-3.5" />
@@ -162,7 +162,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                 type="button"
                 id="children-plus-btn"
                 onClick={handleAddChild}
-                className="w-7 h-7 rounded-full bg-orange-100 hover:bg-orange-200 flex items-center justify-center text-[#ea580c] font-bold transition-colors"
+                className="w-7 h-7 rounded-full bg-orange-100 hover:bg-orange-200 flex items-center justify-center text-[#ea580c] font-bold transition-colors cursor-pointer"
                 aria-label="Increase Children"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -199,12 +199,12 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                       id={`child-age-select-${index}`}
                       value={age}
                       onChange={(e) => handleAgeChange(index, Number(e.target.value))}
-                      className="w-full text-xs font-semibold bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#0f294a] focus:ring-2 focus:ring-orange-500 focus:outline-none shadow-xs"
+                      className="w-full text-xs font-semibold bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#0f294a] focus:ring-2 focus:ring-orange-500 focus:outline-none shadow-xs cursor-pointer"
                     >
                       <option value={0}>0 (Under 1)</option>
                       {Array.from({ length: 17 }, (_, i) => i + 1).map((val) => (
                         <option key={val} value={val}>
-                          {val}
+                          {val} {val === 1 ? 'year' : 'years'}
                         </option>
                       ))}
                     </select>
@@ -218,7 +218,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
           <div className="flex items-center justify-between py-1">
             <div>
               <p className="text-xs font-bold text-[#0f294a]">Rooms</p>
-              <p className="text-[10px] text-gray-400">Required room units</p>
+              <p className="text-[10px] text-gray-500 font-medium">Room units</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -226,7 +226,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                 id="rooms-minus-btn"
                 onClick={() => onRoomsChange(Math.max(1, rooms - 1))}
                 disabled={rooms <= 1}
-                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-40 flex items-center justify-center text-gray-700 transition-colors"
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-40 flex items-center justify-center text-gray-700 transition-colors cursor-pointer"
                 aria-label="Decrease Rooms"
               >
                 <Minus className="w-3.5 h-3.5" />
@@ -238,7 +238,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                 type="button"
                 id="rooms-plus-btn"
                 onClick={() => onRoomsChange(rooms + 1)}
-                className="w-7 h-7 rounded-full bg-orange-100 hover:bg-orange-200 flex items-center justify-center text-[#ea580c] font-bold transition-colors"
+                className="w-7 h-7 rounded-full bg-orange-100 hover:bg-orange-200 flex items-center justify-center text-[#ea580c] font-bold transition-colors cursor-pointer"
                 aria-label="Increase Rooms"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -251,7 +251,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
             type="button"
             id="guests-rooms-done-btn"
             onClick={onClose}
-            className="w-full py-2 bg-[#0f294a] hover:bg-[#163964] text-white text-xs font-bold rounded-xl shadow-md transition-colors text-center"
+            className="w-full py-2.5 bg-[#ea580c] hover:bg-[#c2410c] active:scale-98 text-white text-xs font-bold rounded-xl shadow-md transition-all text-center cursor-pointer"
           >
             Apply &amp; Done
           </button>

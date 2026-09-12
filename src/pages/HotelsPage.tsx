@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { City, Hotel } from '../types.js';
-import { GuestsRoomsPopover } from '../components/common/GuestsRoomsPopover.js';
+import { HeroSearchBar } from '../components/common/HeroSearchBar.js';
 import {
   MapPin,
   Calendar,
@@ -56,9 +56,6 @@ export const HotelsPage: React.FC = () => {
   const [adults, setAdults] = useState<number>(Number(initialParams.get('adults')) || 2);
   const [childAges, setChildAges] = useState<number[]>(initialChildAges);
   const [rooms, setRooms] = useState<number>(Number(initialParams.get('rooms')) || 1);
-
-  const [showGuestsPopover, setShowGuestsPopover] = useState(false);
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
 
   // Sync state whenever URL path changes
   useEffect(() => {
@@ -168,7 +165,6 @@ export const HotelsPage: React.FC = () => {
 
   const handleSelectCity = (cityId: string, cityName?: string) => {
     setSelectedCityId(cityId);
-    setShowCityDropdown(false);
     const params = new URLSearchParams();
     if (cityId) {
       params.set('cityId', cityId);
@@ -214,124 +210,38 @@ export const HotelsPage: React.FC = () => {
           </p>
 
           {/* Floating Pill-Shaped Search Bar */}
-          <div className="pt-4">
-            <div className="bg-white text-[#0f294a] rounded-3xl sm:rounded-full p-2.5 sm:p-3 shadow-2xl border border-orange-200/50 max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-left relative">
-              
-              {/* City/Area */}
-              <div className="relative w-full sm:w-1/3 border-b sm:border-b-0 sm:border-r border-slate-100 px-4 py-2">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  City / Area
-                </label>
-                <div
-                  onClick={() => setShowCityDropdown(!showCityDropdown)}
-                  className="flex items-center justify-between cursor-pointer py-1"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MapPin className="w-4 h-4 text-orange-600 shrink-0" />
-                    <span className="text-sm font-bold text-[#0f294a] truncate">
-                      {selectedCityName}
-                    </span>
-                  </div>
-                  <ChevronRight className={`w-4 h-4 text-slate-400 transform transition-transform ${showCityDropdown ? 'rotate-90' : ''}`} />
-                </div>
+          <div className="pt-4 max-w-5xl mx-auto text-left">
+            <HeroSearchBar
+              key={`${selectedCityId}-${checkIn}-${checkOut}-${adults}-${rooms}`}
+              cities={cities}
+              initialCityId={selectedCityId}
+              initialCityName={currentCityObj?.name}
+              initialCheckIn={checkIn}
+              initialCheckOut={checkOut}
+              initialAdults={adults}
+              initialChildAges={childAges}
+              initialRooms={rooms}
+              showPopularChips={false}
+              onSearch={({ cityId, cityName, checkIn: inDate, checkOut: outDate, adults: ad, childAges: ca, rooms: rm }) => {
+                setSelectedCityId(cityId);
+                setCheckIn(inDate);
+                setCheckOut(outDate);
+                setAdults(ad);
+                setChildAges(ca);
+                setRooms(rm);
 
-                {showCityDropdown && (
-                  <div className="absolute top-full left-0 mt-2 z-50 bg-white shadow-xl border border-slate-100 w-72 sm:w-80 rounded-2xl p-2 max-h-72 overflow-y-auto animate-in fade-in duration-150">
-                    <div
-                      onClick={() => handleClearCityFilter()}
-                      className={`p-2.5 rounded-xl hover:bg-orange-50 cursor-pointer text-xs font-bold text-slate-700 flex items-center justify-between ${!selectedCityId ? 'bg-orange-50 text-orange-600' : ''}`}
-                    >
-                      <span>All Sacred Cities</span>
-                      <span className="text-[10px] text-slate-400">All India</span>
-                    </div>
-                    {cities.map((c) => (
-                      <div
-                        key={c.id}
-                        onClick={() => handleSelectCity(c.id, c.name)}
-                        className={`p-2.5 rounded-xl hover:bg-orange-50 cursor-pointer flex items-center justify-between border-t border-slate-50 ${selectedCityId === c.id ? 'bg-orange-50 font-bold text-orange-600' : ''}`}
-                      >
-                        <div>
-                          <p className="text-xs font-bold text-[#0f294a]">{c.name}</p>
-                          <p className="text-[10px] text-slate-500">{c.popularFor || c.state}</p>
-                        </div>
-                        <span className="text-[11px] font-semibold bg-orange-100 text-[#ea580c] px-2 py-0.5 rounded-full">
-                          {c.hotelCount} {c.hotelCount === 1 ? 'stay' : 'stays'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Dates */}
-              <div className="w-full sm:w-1/3 border-b sm:border-b-0 sm:border-r border-slate-100 px-4 py-2">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Dates
-                </label>
-                <div className="flex items-center gap-2 pt-1">
-                  <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
-                  <div className="flex items-center gap-1 text-xs font-semibold text-slate-700">
-                    <input
-                      type="date"
-                      value={checkIn}
-                      onChange={(e) => setCheckIn(e.target.value)}
-                      className="bg-transparent border-0 p-0 text-xs font-bold focus:ring-0 focus:outline-none w-24"
-                    />
-                    <span className="text-slate-400">→</span>
-                    <input
-                      type="date"
-                      value={checkOut}
-                      onChange={(e) => setCheckOut(e.target.value)}
-                      className="bg-transparent border-0 p-0 text-xs font-bold focus:ring-0 focus:outline-none w-24"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Guests/Rooms */}
-              <div className="relative w-full sm:w-1/3 px-4 py-2">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Guests &amp; Rooms
-                </label>
-                <GuestsRoomsPopover
-                  adults={adults}
-                  onAdultsChange={setAdults}
-                  childAges={childAges}
-                  onChildAgesChange={setChildAges}
-                  rooms={rooms}
-                  onRoomsChange={setRooms}
-                  isOpen={showGuestsPopover}
-                  onToggle={() => setShowGuestsPopover(!showGuestsPopover)}
-                  onClose={() => setShowGuestsPopover(false)}
-                />
-              </div>
-
-              {/* Search Button */}
-              <button
-                id="hotels-search-btn"
-                onClick={() => {
-                  const params = new URLSearchParams();
-                  if (selectedCityId) {
-                    params.set('cityId', selectedCityId);
-                    if (currentCityObj) params.set('city', currentCityObj.name);
-                  }
-                  if (searchQuery) params.set('query', searchQuery);
-                  params.set('adults', adults.toString());
-                  params.set('children', childAges.length.toString());
-                  if (childAges.length > 0) {
-                    params.set('childAges', childAges.join(','));
-                  }
-                  params.set('rooms', rooms.toString());
-                  if (checkIn) params.set('checkIn', checkIn);
-                  if (checkOut) params.set('checkOut', checkOut);
-                  navigate(`/hotels?${params.toString()}`);
-                }}
-                className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold flex items-center justify-center gap-2 shadow-md transition-all text-sm shrink-0 active:scale-95"
-              >
-                <Search className="w-4 h-4" />
-                <span>Search</span>
-              </button>
-            </div>
+                const params = new URLSearchParams();
+                if (cityId) params.set('cityId', cityId);
+                if (cityName) params.set('city', cityName);
+                if (searchQuery) params.set('query', searchQuery);
+                if (inDate) params.set('checkIn', inDate);
+                if (outDate) params.set('checkOut', outDate);
+                params.set('adults', String(ad));
+                if (ca.length > 0) params.set('childAges', ca.join(','));
+                params.set('rooms', String(rm));
+                navigate(`/hotels?${params.toString()}`);
+              }}
+            />
           </div>
         </div>
       </section>
