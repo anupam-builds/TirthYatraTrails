@@ -333,7 +333,7 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Meals:</span>
-                    <span className="font-bold text-slate-800">100% Pure Sattvic</span>
+                    <span className="font-bold text-slate-800">100% Pure Vegetarian</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Medical:</span>

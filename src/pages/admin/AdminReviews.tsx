@@ -594,7 +594,7 @@ export const AdminReviews: React.FC = () => {
                   <textarea
                     required
                     rows={4}
-                    placeholder="Describe the devotee's spiritual journey, proximity to sanctum, VIP darshan comfort, or Sattvic dining experience..."
+                    placeholder="Describe the devotee's spiritual journey, proximity to sanctum, VIP darshan comfort, or hospitality dining experience..."
                     value={formData.reviewText}
                     onChange={(e) => setFormData({ ...formData, reviewText: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-[#0f233f] border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 leading-relaxed font-sans"

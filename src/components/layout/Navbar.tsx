@@ -46,7 +46,7 @@ export const CustomerNavbar: React.FC = () => {
           <span className="text-slate-600">|</span>
           <span className="flex items-center gap-1">
             <HeartHandshake className="w-3 h-3 text-orange-400" />
-            <span>100% Sattvic &amp; Senior Friendly</span>
+            <span>Spiritual Care &amp; Senior Friendly</span>
           </span>
         </div>
       </div>
@@ -60,10 +60,19 @@ export const CustomerNavbar: React.FC = () => {
             onClick={() => navigate('/')}
             className="flex items-center gap-2.5 cursor-pointer group"
           >
-            <div className="w-8 h-8 bg-[#ea580c] rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
-              T
+            <img
+              src="/logo-navy.svg"
+              alt="TirthYatraTrails.in"
+              className="h-10 sm:h-11 w-auto object-contain transition-transform group-hover:scale-105"
+            />
+            <div className="flex flex-col">
+              <span className="font-serif font-extrabold text-base sm:text-lg tracking-tight leading-none text-[#0f294a]">
+                Tirth<span className="text-[#ea580c]">Yatra</span>Trails<span className="text-[#ea580c] text-xs font-sans">.in</span>
+              </span>
+              <span className="text-[8px] font-bold tracking-widest text-[#0f294a]/75 uppercase hidden sm:block">
+                DIVINE JOURNEYS, MEMORABLE EXPERIENCES
+              </span>
             </div>
-            <span className="text-xl font-extrabold tracking-tight text-[#0f294a]">TirthYatraTrails</span>
           </div>
 
           {/* Center Navigation Links: Hotels, Packages, Flights */}

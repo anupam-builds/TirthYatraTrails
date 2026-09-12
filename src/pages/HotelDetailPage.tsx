@@ -357,7 +357,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                           <span className="text-[10px] font-bold uppercase tracking-wider text-[#ea580c]">
                             Bed &amp; Breakfast
                           </span>
-                          <h4 className="text-xs font-bold text-slate-800 mt-0.5">With Sattvic Breakfast</h4>
+                          <h4 className="text-xs font-bold text-slate-800 mt-0.5">With Complimentary Breakfast</h4>
                           <p className="text-sm font-extrabold text-[#0f294a] mt-1">
                             ₹{room.breakfastPrice.toLocaleString('en-IN')}{' '}
                             <span className="text-[10px] font-normal text-slate-500">/ night</span>
@@ -477,7 +477,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Utensils className="w-4 h-4 text-orange-500" />
-                  <span>Pure Sattvic culinary dining on premise</span>
+                  <span>Pure vegetarian culinary dining on premise</span>
                 </div>
               </div>
 
@@ -508,8 +508,8 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                   <div className="flex items-start gap-2.5">
                     <Utensils className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-bold text-slate-800">Breakfast &amp; Sattvic Meals</span>
-                      <p className="text-slate-500">Pure vegetarian buffet with onion-garlic-free food items and special fasting platters.</p>
+                      <span className="font-bold text-slate-800">Breakfast &amp; Wholesome Meals</span>
+                      <p className="text-slate-500">Pure vegetarian buffet with wholesome food items and special fasting platters.</p>
                     </div>
                   </div>
 

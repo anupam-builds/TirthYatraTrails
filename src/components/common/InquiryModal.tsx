@@ -463,7 +463,7 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. VIP darshan passes needed, senior citizens traveling, pure Jain sattvic meals..."
+                  placeholder="e.g. VIP darshan passes needed, senior citizens traveling, pure Jain meals..."
                   value={specialRequests}
                   onChange={(e) => setSpecialRequests(e.target.value)}
                   className="w-full p-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none"

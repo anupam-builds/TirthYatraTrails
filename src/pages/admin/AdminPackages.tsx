@@ -51,7 +51,7 @@ export const AdminPackages: React.FC = () => {
     'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80',
   ]);
   const [overview, setOverview] = useState('Embark on the sacred Himalayan journey covering the four revered shrines with helicopter coordination, VIP darshan assistance, and deluxe stays.');
-  const [highlightsString, setHighlightsString] = useState('VIP Darshan passes included, Dedicated Pilgrim Officer, Pure Sattvic Meals Buffet, Oxygen Cylinder and Doctor Support');
+  const [highlightsString, setHighlightsString] = useState('VIP Darshan passes included, Dedicated Pilgrim Officer, Wholesome Vegetarian Meals Buffet, Oxygen Cylinder and Doctor Support');
   const [cancellationPolicy, setCancellationPolicy] = useState('Full refund up to 15 days before yatra commencement. 50% refund between 7-14 days.');
 
   useEffect(() => {
@@ -81,8 +81,8 @@ export const AdminPackages: React.FC = () => {
     const defaultImg = 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80';
     setImageUrl(defaultImg);
     setPackageImages([defaultImg]);
-    setOverview('All-inclusive pilgrimage package with VIP darshan passes, private AC coach, and pure Sattvic culinary arrangements.');
-    setHighlightsString('VIP Darshan Pass included, Dedicated Guide, Sattvic Buffet Meals, Deluxe Verified Accommodations');
+    setOverview('All-inclusive pilgrimage package with VIP darshan passes, private AC coach, and wholesome culinary arrangements.');
+    setHighlightsString('VIP Darshan Pass included, Dedicated Guide, Wholesome Buffet Meals, Deluxe Verified Accommodations');
     setCancellationPolicy('100% refund up to 14 days before departure.');
     setIsModalOpen(true);
   };
@@ -202,7 +202,7 @@ export const AdminPackages: React.FC = () => {
       itinerary: editingPackage?.itinerary || [
         { day: 1, title: 'Arrival & Welcome Puja', desc: 'Arrival at holy base, check-in to deluxe hotel, evening Ganga Aarti blessing.' },
         { day: 2, title: 'Sacred Temple Darshan', desc: 'Early morning VIP Abhishek and Darshan with temple priest facilitation.' },
-        { day: 3, title: 'Return & Farewell Blessings', desc: 'Sattvic breakfast and airport drop with sacred Prasad box.' },
+        { day: 3, title: 'Return & Farewell Blessings', desc: 'Wholesome breakfast and airport drop with sacred Prasad box.' },
       ],
     };
 

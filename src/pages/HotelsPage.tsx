@@ -107,7 +107,7 @@ export const HotelsPage: React.FC = () => {
           </h1>
 
           <p className="text-slate-300 text-sm max-w-xl mx-auto">
-            Choose from peaceful pilgrim retreats with early morning temple shuttle, puja kits, and Sattvic food.
+            Devoted retreats offering temple tours, spiritual consultations, prayer group access, and wellness rituals.
           </p>
 
           {/* Floating Pill-Shaped Search Bar */}

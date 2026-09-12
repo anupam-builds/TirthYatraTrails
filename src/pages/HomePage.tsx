@@ -106,6 +106,15 @@ export const HomePage: React.FC = () => {
             <span>VERIFIED SACRED TEMPLE ACCOMMODATIONS</span>
           </div>
 
+          {/* Prominently Centered TirthYatraTrails.in Brand Logo */}
+          <div className="flex justify-center pt-2 pb-1">
+            <img
+              src="/logo.svg"
+              alt="TirthYatraTrails.in - Divine Journeys, Memorable Experiences"
+              className="w-auto h-auto max-w-[320px] mx-auto object-contain transition-transform duration-300 hover:scale-[1.02]"
+            />
+          </div>
+
           {/* Headline */}
           <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-tight font-serif">
             Find a hotel steps from your <span className="text-[#ea580c]">darshan</span>
@@ -113,7 +122,7 @@ export const HomePage: React.FC = () => {
 
           {/* Subtitle */}
           <p className="text-sm sm:text-lg text-slate-300 max-w-2xl mx-auto font-normal leading-relaxed">
-            Choose from peaceful pilgrim retreats with early morning temple shuttle, puja kits, and Sattvic food.
+            Devoted retreats offering temple tours, spiritual consultations, prayer group access, and wellness rituals
           </p>
 
           {/* Action CTAs */}
@@ -150,7 +159,7 @@ export const HomePage: React.FC = () => {
               Top-selling <span className="italic text-blue-600 font-serif">packages</span>
             </h2>
             <p className="text-xs sm:text-sm text-gray-500 mt-1">
-              Curated spiritual journeys with luxury transfers, VIP darshan passes, and pure Sattvic dining.
+              Curated spiritual journeys with luxury transfers, VIP darshan passes, and wholesome pilgrim dining.
             </p>
           </div>
           <button
@@ -237,7 +246,7 @@ export const HomePage: React.FC = () => {
               Top-rated stays, <span className="italic text-blue-600 font-serif">no aggregator margin</span>
             </h2>
             <p className="text-xs sm:text-sm text-gray-500 mt-1">
-              Direct holy dham rates, spotless premises, morning temple transfers, and 100% Sattvic food.
+              Direct holy dham rates, spotless premises, morning temple transfers, and dedicated pilgrim hospitality.
             </p>
           </div>
           <a

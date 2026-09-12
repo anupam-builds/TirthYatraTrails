@@ -55,7 +55,7 @@ export const AdminHotels: React.FC = () => {
   const [distanceToTemple, setDistanceToTemple] = useState('200m from Sanctum');
   const [darshanType, setDarshanType] = useState('VIP Darshan Pass Desk Available');
   const [isTopRated, setIsTopRated] = useState(true);
-  const [amenitiesString, setAmenitiesString] = useState('24/7 Hot Water, Pure Sattvic Restaurant, Free Temple Shuttle, Luggage Cloakroom');
+  const [amenitiesString, setAmenitiesString] = useState('24/7 Hot Water, Pure Vegetarian Restaurant, Free Temple Shuttle, Luggage Cloakroom');
   const [images, setImages] = useState<string[]>([
     'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
     'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80',
@@ -111,7 +111,7 @@ export const AdminHotels: React.FC = () => {
     setDistanceToTemple('300m from Temple');
     setDarshanType('VIP Darshan & Priest Assistance Available');
     setIsTopRated(true);
-    setAmenitiesString('Pure Sattvic Food, Free Wi-Fi, 24hr Hot Water, Temple Drop & Pickup');
+    setAmenitiesString('Pure Vegetarian Dining, Free Wi-Fi, 24hr Hot Water, Temple Drop & Pickup');
     setImages([
       'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
       'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80',

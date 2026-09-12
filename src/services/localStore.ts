@@ -184,7 +184,7 @@ export const localStore = {
       address: hotelData.address || '',
       description: hotelData.description || '',
       images: hotelData.images || ['https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80'],
-      amenities: hotelData.amenities || ['Free Wi-Fi', 'Sattvic Food'],
+      amenities: hotelData.amenities || ['Free Wi-Fi', 'Pure Vegetarian Dining'],
       basePrice: Number(hotelData.basePrice) || 3500,
       isTopRated: Boolean(hotelData.isTopRated),
       rooms: hotelData.rooms || [],

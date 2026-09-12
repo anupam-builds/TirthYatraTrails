@@ -9,87 +9,35 @@
       "createdAt": "2026-01-10T08:00:00.000Z"
     }
   ],
-  "staff": [
-    {
-      "id": "stf-1",
-      "name": "Priya Sharma",
-      "email": "priya.staff@tirthyatra.com",
-      "password": "Staff@123",
-      "phone": "+91 98111 22334",
-      "designation": "Senior Pilgrimage Coordinator",
-      "role": "STAFF",
-      "isActive": true,
-      "isBlocked": false,
-      "permissions": {
-        "canViewInquiries": true,
-        "canUpdateStatus": true,
-        "canAddNotes": true
-      },
-      "assignedLeadsCount": 1,
-      "contactedCount": 14,
-      "closedCount": 9,
-      "notesCount": 21,
-      "lastLogin": "2026-09-09T11:45:00.000Z",
-      "lastActiveAt": "2026-09-09T12:55:00.000Z",
-      "lastLoginIp": "122.161.48.12",
-      "lastLoginDevice": "Chrome on Windows 11/10",
-      "isCurrentlyLoggedIn": true,
-      "createdAt": "2026-01-15T09:00:00.000Z"
-    },
-    {
-      "id": "stf-2",
-      "name": "Arun Verma",
-      "email": "arun.staff@tirthyatra.com",
-      "password": "Staff@123",
-      "phone": "+91 98222 33445",
-      "designation": "Travel Desk Specialist",
-      "role": "STAFF",
-      "isActive": true,
-      "isBlocked": false,
-      "permissions": {
-        "canViewInquiries": true,
-        "canUpdateStatus": true,
-        "canAddNotes": true
-      },
-      "assignedLeadsCount": 1,
-      "contactedCount": 8,
-      "closedCount": 5,
-      "notesCount": 12,
-      "lastLogin": "2026-09-09T08:30:00.000Z",
-      "lastActiveAt": "2026-09-09T10:15:00.000Z",
-      "lastLoginIp": "49.36.128.95",
-      "lastLoginDevice": "Safari on macOS",
-      "isCurrentlyLoggedIn": false,
-      "createdAt": "2026-02-01T11:00:00.000Z"
-    },
-    {
-      "id": "stf-3",
-      "name": "Vikram Joshi",
-      "email": "vikram.staff@tirthyatra.com",
-      "password": "Staff@123",
-      "phone": "+91 98333 44556",
-      "designation": "Kedarnath Yatra Assistant",
-      "role": "STAFF",
-      "isActive": true,
-      "isBlocked": false,
-      "permissions": {
-        "canViewInquiries": true,
-        "canUpdateStatus": true,
-        "canAddNotes": true
-      },
-      "assignedLeadsCount": 0,
-      "contactedCount": 3,
-      "closedCount": 1,
-      "notesCount": 4,
-      "lastLogin": "2026-09-07T16:20:00.000Z",
-      "lastActiveAt": "2026-09-07T17:00:00.000Z",
-      "lastLoginIp": "157.34.201.88",
-      "lastLoginDevice": "Mobile Safari on iPhone",
-      "isCurrentlyLoggedIn": false,
-      "createdAt": "2026-03-10T14:00:00.000Z"
-    }
-  ],
+  "staff": [],
   "staffLogs": [
+    {
+      "id": "log-1789194081852-msjm",
+      "timestamp": "2026-09-12T06:21:21.852Z",
+      "staffId": "stf-3",
+      "staffName": "Vikram Joshi",
+      "staffEmail": "vikram.staff@tirthyatra.com",
+      "action": "BLOCKED",
+      "description": "Staff account permanently deleted by Administrator: Vikram Joshi (vikram.staff@tirthyatra.com)"
+    },
+    {
+      "id": "log-1789194078444-71cf",
+      "timestamp": "2026-09-12T06:21:18.444Z",
+      "staffId": "stf-2",
+      "staffName": "Arun Verma",
+      "staffEmail": "arun.staff@tirthyatra.com",
+      "action": "BLOCKED",
+      "description": "Staff account permanently deleted by Administrator: Arun Verma (arun.staff@tirthyatra.com)"
+    },
+    {
+      "id": "log-1789194074763-vzy2",
+      "timestamp": "2026-09-12T06:21:14.763Z",
+      "staffId": "stf-1",
+      "staffName": "Priya Sharma",
+      "staffEmail": "priya.staff@tirthyatra.com",
+      "action": "BLOCKED",
+      "description": "Staff account permanently deleted by Administrator: Priya Sharma (priya.staff@tirthyatra.com)"
+    },
     {
       "id": "log-1",
       "staffId": "stf-1",
@@ -122,7 +70,7 @@
       "action": "NOTE_ADDED",
       "description": "Added follow-up note for inquiry #103",
       "inquiryId": "inq-103",
-      "details": "Devotee requested morning Saryu Aarti boat timing and pure Sattvic kitchen arrangement.",
+      "details": "Devotee requested morning Saryu Aarti boat timing and pure vegetarian kitchen arrangement.",
       "ipAddress": "122.161.48.12",
       "device": "Chrome on Windows 11/10",
       "timestamp": "2026-09-09T12:05:30.000Z"
@@ -195,7 +143,7 @@
       "state": "Uttarakhand",
       "popularFor": "Yoga Capital & Sacred Har Ki Pauri",
       "imageUrl": "https://images.unsplash.com/photo-1600100397608-f010f443bbf6?auto=format&fit=crop&w=800&q=80",
-      "hotelCount": 1
+      "hotelCount": 0
     },
     {
       "id": "city-tirupati",
@@ -274,7 +222,7 @@
       "address": "54/1 Cantt Station Road, Cantonment, Varanasi, Uttar Pradesh 221002",
       "distanceToTemple": "3.2 km to Kashi Vishwanath Corridor (12 mins direct)",
       "darshanType": "Complimentary Temple Shuttle & Darshan Desk",
-      "description": "Quality Inn Varanasi is a premier hospitality destination located in the serene Cantonment enclave. Equipped with modern plush accommodations, multi-cuisine Sattvic dining at Rasoi, swift airport accessibility, and a dedicated travel desk coordinating VIP passes for Kashi Vishwanath Mangala Aarti.",
+      "description": "Quality Inn Varanasi is a premier hospitality destination located in the serene Cantonment enclave. Equipped with modern plush accommodations, multi-cuisine pure vegetarian dining at Rasoi, swift airport accessibility, and a dedicated travel desk coordinating VIP passes for Kashi Vishwanath Mangala Aarti.",
       "images": [
         "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80",
         "https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80",
@@ -282,7 +230,7 @@
       ],
       "amenities": [
         "Complimentary Temple Shuttle to Godowlia Gate",
-        "Pure Veg & Sattvic Restaurant (Rasoi)",
+        "Pure Vegetarian Restaurant (Rasoi)",
         "24-Hour Travel & Darshan Help Desk",
         "Free High-Speed Wi-Fi & Power Backup",
         "Continuous Hot Water Geysers",
@@ -328,7 +276,7 @@
       "address": "D-37/10, Godowlia Crossing, Near Dashashwamedh Ghat, Varanasi 221001",
       "distanceToTemple": "300m from Kashi Vishwanath Corridor Gate 4",
       "darshanType": "Walking distance to Sanctum & Morning Ganga Aarti",
-      "description": "Hotel Arihant offers clean, comfortable, and budget-friendly pilgrimage accommodations right at Godowlia Chowk. Pilgrims can walk effortlessly to the Kashi Vishwanath temple corridor and Dashashwamedh Ghat within 4 minutes. Features authentic pure vegetarian and Jain Sattvic dining.",
+      "description": "Hotel Arihant offers clean, comfortable, and budget-friendly pilgrimage accommodations right at Godowlia Chowk. Pilgrims can walk effortlessly to the Kashi Vishwanath temple corridor and Dashashwamedh Ghat within 4 minutes. Features authentic pure vegetarian and Jain dining.",
       "images": [
         "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1200&q=80",
         "https://images.unsplash.com/photo-1590381105924-c72589b9ef3f?auto=format&fit=crop&w=800&q=80",
@@ -336,7 +284,7 @@
       ],
       "amenities": [
         "Walking distance to Kashi Vishwanath Gate 4",
-        "100% Pure Jain & Sattvic Thali available",
+        "100% Pure Jain & Vegetarian Thali available",
         "24x7 Hot Water & Power Backup",
         "Elevator Access to all floors",
         "Luggage Cloakroom & Travel Desk"
@@ -380,7 +328,7 @@
         "Thermal Heated Cottages & Warm Blankets",
         "24/7 Geyser Hot Water & Room Heaters",
         "In-House Medical Oxygen Station",
-        "Hot Sattvic Herbal Buffet Meals"
+        "Hot Herbal Buffet Meals"
       ],
       "basePrice": 6500,
       "isTopRated": true,
@@ -410,7 +358,7 @@
       "address": "Darbhanga Ghat, Dashashwamedh, Varanasi, Uttar Pradesh 221001",
       "distanceToTemple": "350m from Kashi Vishwanath Corridor",
       "darshanType": "Private VIP Boat to Temple Ghat",
-      "description": "One of the oldest structures on the sacred Ganga ghats dating back to the 18th century. BrijRama Palace offers unrivaled spiritual luxury with private morning Mangala Aarti boat transfers, classical thumri live recitals in the Bada Aangan atrium, and pure vegetarian Sattvic gourmet dining curated for pilgrims.",
+      "description": "One of the oldest structures on the sacred Ganga ghats dating back to the 18th century. BrijRama Palace offers unrivaled spiritual luxury with private morning Mangala Aarti boat transfers, classical thumri live recitals in the Bada Aangan atrium, and pure vegetarian gourmet dining curated for pilgrims.",
       "images": [
         "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80",
         "https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80",
@@ -420,7 +368,7 @@
       ],
       "amenities": [
         "Free Temple Escort & VIP Pass Assistance",
-        "Pure Sattvic & Jain Vegetarian Kitchen",
+        "Pure Jain & Vegetarian Kitchen",
         "Private Bajra Ghat Boat Service",
         "Morning Vedic Yoga & Meditation Terrace",
         "High-Speed Wi-Fi & Concierge Desk",
@@ -576,7 +524,7 @@
         "Continuous Hot Water Geysers",
         "Medical Emergency Oxygen Station",
         "Helicopter Shuttle Assistance & Pithu/Pony Booking",
-        "Hot Herbal Kadha & Nutritious Sattvic Meals"
+        "Hot Herbal Kadha & Nutritious Meals"
       ],
       "basePrice": 8500,
       "isTopRated": true,
@@ -615,7 +563,7 @@
       "amenities": [
         "Tirumala Hilltop Private AC Cab Coordination",
         "Authentic Tirupati Laddu Prasadam on Check-in",
-        "Two Multi-Cuisine Sattvic Restaurants",
+        "Two Multi-Cuisine Pure Veg Restaurants",
         "Swimming Pool & Ayurvedic Rejuvenation Spa",
         "Luggage Safe Keep during Hilltop Yatra"
       ],
@@ -658,7 +606,7 @@
         "Direct Panda Priest Coordination for Mahaprasad",
         "Jagannath Temple Car Pickup & Drop",
         "Swimming Pool & Spa Therapy",
-        "Multi-Cuisine Fine Dining & Sattvic Options"
+        "Multi-Cuisine Fine Dining & Vegetarian Options"
       ],
       "basePrice": 8200,
       "isTopRated": true,
@@ -673,47 +621,6 @@
           "fullBoardPrice": 11900,
           "imageUrl": "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&q=80",
           "bedType": "1 King Bed with Balcony",
-          "capacity": "2 Adults, 1 Child"
-        }
-      ]
-    },
-    {
-      "id": "htl-rishikesh-1",
-      "cityId": "city-rishikesh",
-      "cityName": "Rishikesh & Haridwar",
-      "name": "Ganga Kinare - A Riverside Heritage Boutique Resort",
-      "starRating": 4,
-      "googleRating": 4.8,
-      "reviewCount": 1890,
-      "address": "237 Virbhadra Road, Barrage Road, Rishikesh, Uttarakhand 249201",
-      "distanceToTemple": "Direct private ghat on River Ganga",
-      "darshanType": "Private Evening Ganga Aarti on Hotel Ghat",
-      "description": "Perched on the holy banks of Mother Ganga, Ganga Kinare is the only boutique hotel in Rishikesh with its own serene private riverfront ghat. Experience sunrise yoga, riverside meditation, Ayurvedic wellness, and evening Aarti away from the bustling crowds.",
-      "images": [
-        "https://images.unsplash.com/photo-1600100397608-f010f443bbf6?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=800&q=80",
-        "https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=800&q=80"
-      ],
-      "amenities": [
-        "Private Ganga Riverfront Ghat & Daily Aarti",
-        "Daily Morning Hatha Yoga & Guided Meditation",
-        "Ayurveda Spa & Detox Panchakarma",
-        "Jal & Jalebi Specialty Pure Veg Restaurant",
-        "Bicycle Tours along the Sacred Canal"
-      ],
-      "basePrice": 6200,
-      "isTopRated": true,
-      "rooms": [
-        {
-          "id": "room-gng-1",
-          "hotelId": "htl-rishikesh-1",
-          "name": "Lotus Holy Ganga View Deluxe",
-          "roomOnlyPrice": 6200,
-          "breakfastPrice": 7100,
-          "halfBoardPrice": 8300,
-          "fullBoardPrice": 9400,
-          "imageUrl": "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80",
-          "bedType": "1 King Bed",
           "capacity": "2 Adults, 1 Child"
         }
       ]
@@ -805,7 +712,7 @@
         "Boat ride around Mandhata Island at Omkareshwar Jyotirlinga",
         "Holy Shipra River Ram Ghat Snan & Sandhya Aarti",
         "Visit Kal Bhairav Temple & Harsiddhi Mata Shaktipeeth",
-        "Deluxe AC accommodation with Sattvic Breakfast & Dinner"
+        "Deluxe AC accommodation with Wholesome Breakfast & Dinner"
       ],
       "cancellationPolicy": "100% refund up to 10 days before journey start date.",
       "itinerary": [
@@ -916,7 +823,7 @@
         "Helicopter ticket assistance for Phata/Sersi/Guptkashi route",
         "Comfortable heated rooms in high-altitude zones",
         "Dedicated knowledgeable Pandit & Pilgrimage Coordinator throughout",
-        "All Sattvic vegetarian buffet meals (Breakfast, Lunch & Dinner)",
+        "All vegetarian buffet meals (Breakfast, Lunch & Dinner)",
         "Emergency oxygen support kits & 24x7 medical emergency on-call",
         "Evening Ganga Aarti experience at Har Ki Pauri Haridwar"
       ],
@@ -1247,7 +1154,7 @@
       "authorLocation": "Mathura · Vrindavan",
       "authorInitials": "MP",
       "rating": 5,
-      "reviewText": "We arranged a 3-day spiritual tour for our family to Mathura and Vrindavan. TirthYatraTrails ensured our hotel was barely 5 minutes from Banke Bihari and Prem Mandir. The morning temple transfer, clean Sattvic dining, and dedicated tour manager made our darshan utterly blissful without any stress.",
+      "reviewText": "We arranged a 3-day spiritual tour for our family to Mathura and Vrindavan. TirthYatraTrails ensured our hotel was barely 5 minutes from Banke Bihari and Prem Mandir. The morning temple transfer, clean vegetarian dining, and dedicated tour manager made our darshan utterly blissful without any stress.",
       "destinationImage": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
       "isVerified": true,
       "googleReviewUrl": "https://maps.google.com/?q=Vrindavan+Temples",
@@ -1261,7 +1168,7 @@
       "authorLocation": "Kashi · Ayodhya",
       "authorInitials": "RS",
       "rating": 5,
-      "reviewText": "We arranged a 6-day pilgrimage for our elderly parents to Kashi Vishwanath and Ayodhya Ram Mandir. TirthYatraTrails managed everything with utmost devotion — wheelchair assistance was waiting right at the ghats, our hotel was 4 minutes from the sanctum gate, and the kitchen prepared pure Jain-Sattvic meals daily. Having a dedicated 24x7 travel desk gave our entire family complete peace of mind.",
+      "reviewText": "We arranged a 6-day pilgrimage for our elderly parents to Kashi Vishwanath and Ayodhya Ram Mandir. TirthYatraTrails managed everything with utmost devotion — wheelchair assistance was waiting right at the ghats, our hotel was 4 minutes from the sanctum gate, and the kitchen prepared pure Jain meals daily. Having a dedicated 24x7 travel desk gave our entire family complete peace of mind.",
       "destinationImage": "https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=1200&q=80",
       "isVerified": true,
       "googleReviewUrl": "https://maps.google.com/?q=Kashi+Vishwanath",
