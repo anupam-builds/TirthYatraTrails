@@ -108,11 +108,11 @@ export const HomePage: React.FC = () => {
 
           {/* Prominently Centered TirthYatraTrails.in Circular Brand Emblem */}
           <div className="flex justify-center pt-1 pb-2">
-            <div className="w-36 h-36 sm:w-40 sm:h-40 md:w-44 md:h-44 rounded-full bg-white shadow-2xl shadow-black/30 border border-white/40 p-4 sm:p-6 flex items-center justify-center shrink-0 transition-transform duration-300 hover:scale-105 aspect-square">
+            <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-white shadow-2xl shadow-black/30 border border-white/40 p-2 sm:p-3 flex items-center justify-center shrink-0 transition-transform duration-300 hover:scale-105 aspect-square">
               <img
                 src="/logo.svg"
                 alt="TirthYatraTrails.in - Divine Journeys, Memorable Experiences"
-                className="w-full h-full aspect-square object-contain"
+                className="w-full h-full aspect-square object-contain scale-110"
               />
             </div>
           </div>
