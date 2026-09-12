@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { City, Hotel, Package, Review } from '../types.js';
-import { HeroSearchBar } from '../components/common/HeroSearchBar.js';
 import {
   MapPin,
   Calendar,
@@ -131,31 +130,23 @@ export const HomePage: React.FC = () => {
             Devoted retreats offering temple tours, spiritual consultations, prayer group access, and wellness rituals
           </p>
 
-          {/* Multi-Field Search Bar */}
-          <div className="pt-2 max-w-5xl mx-auto w-full text-left relative z-30">
-            <HeroSearchBar
-              cities={cities}
-              showPopularChips={true}
-            />
-          </div>
-
           {/* Action CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6">
             <button
               id="hero-explore-hotels-btn"
               onClick={() => navigate('/hotels')}
-              className="w-full sm:w-auto bg-[#ea580c] hover:bg-[#d44e0a] text-white px-8 py-3.5 rounded-full font-bold text-sm shadow-xl shadow-orange-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"
+              className="w-full sm:w-auto bg-[#ea580c] hover:bg-[#d44e0a] text-white px-8 py-4 rounded-full font-bold text-base shadow-xl shadow-orange-600/30 flex items-center justify-center gap-2.5 transition-all active:scale-95 cursor-pointer"
             >
-              <Building2 className="w-4 h-4" />
+              <Building2 className="w-5 h-5" />
               <span>Search &amp; Book Hotels</span>
               <ArrowRight className="w-4 h-4 ml-1" />
             </button>
             <button
               id="hero-explore-packages-btn"
               onClick={() => navigate('/packages')}
-              className="w-full sm:w-auto bg-white/10 hover:bg-white/15 text-white border border-white/20 px-8 py-3.5 rounded-full font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
+              className="w-full sm:w-auto bg-white/10 hover:bg-white/15 text-white border border-white/20 px-8 py-4 rounded-full font-bold text-base flex items-center justify-center gap-2.5 transition-all active:scale-95 cursor-pointer"
             >
-              <Compass className="w-4 h-4 text-orange-400" />
+              <Compass className="w-5 h-5 text-orange-400" />
               <span>Explore Yatra Packages</span>
             </button>
           </div>

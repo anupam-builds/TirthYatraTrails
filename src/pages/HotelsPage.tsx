@@ -221,7 +221,7 @@ export const HotelsPage: React.FC = () => {
               initialAdults={adults}
               initialChildAges={childAges}
               initialRooms={rooms}
-              showPopularChips={false}
+              showPopularChips={true}
               onSearch={({ cityId, cityName, checkIn: inDate, checkOut: outDate, adults: ad, childAges: ca, rooms: rm }) => {
                 setSelectedCityId(cityId);
                 setCheckIn(inDate);
