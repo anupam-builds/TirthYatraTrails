@@ -117,6 +117,19 @@ export const CustomerNavbar: React.FC = () => {
               <Plane className="w-4 h-4" />
               <span>Flights</span>
             </button>
+
+            <button
+              id="nav-link-enquire"
+              onClick={() => navigate('/enquire')}
+              className={`transition-colors flex items-center gap-1.5 ${
+                isActive('/enquire')
+                  ? 'text-[#ea580c] font-bold'
+                  : 'text-[#0f294a] hover:text-[#ea580c]'
+              }`}
+            >
+              <CalendarCheck className="w-4 h-4 text-orange-500" />
+              <span>Enquire Now</span>
+            </button>
           </nav>
 
           {/* Right Action / Direct Inquiry & Yatra Planning */}
@@ -134,8 +147,8 @@ export const CustomerNavbar: React.FC = () => {
 
             <button
               id="nav-plan-yatra-btn"
-              onClick={() => navigate('/packages')}
-              className="px-4 py-2 bg-[#ea580c] hover:bg-[#d44e0a] text-white rounded-xl shadow-xs text-xs font-bold transition-all flex items-center gap-1.5"
+              onClick={() => navigate('/enquire')}
+              className="px-4 py-2 bg-[#ea580c] hover:bg-[#d44e0a] text-white rounded-xl shadow-xs text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Compass className="w-3.5 h-3.5" />
               <span>Plan My Yatra</span>
@@ -195,6 +208,19 @@ export const CustomerNavbar: React.FC = () => {
           >
             <Compass className="w-5 h-5 text-orange-500" />
             <span>Pilgrimage Packages</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              navigate('/enquire');
+            }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold ${
+              isActive('/enquire') ? 'bg-orange-50 text-[#ea580c]' : 'text-[#0f294a]'
+            }`}
+          >
+            <CalendarCheck className="w-5 h-5 text-orange-500" />
+            <span>Enquire Now / Custom Yatra</span>
           </button>
 
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">

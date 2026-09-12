@@ -13,6 +13,7 @@ import { PackagesPage } from './pages/PackagesPage.js';
 import { PackageDetailPage } from './pages/PackageDetailPage.js';
 import { FlightsPage } from './pages/FlightsPage.js';
 import { MyInquiriesPage } from './pages/MyInquiriesPage.js';
+import { EnquiryPage } from './pages/EnquiryPage.js';
 
 // Legal & Policy Pages
 import { PrivacyPolicyPage } from './pages/legal/PrivacyPolicyPage.js';
@@ -118,6 +119,9 @@ const AppContent: React.FC = () => {
     }
     if (cleanPath === '/my-inquiries' || cleanPath.startsWith('/my-inquiries')) {
       return <MyInquiriesPage />;
+    }
+    if (cleanPath === '/enquire' || cleanPath.startsWith('/enquire') || cleanPath === '/enquiry' || cleanPath.startsWith('/enquiry')) {
+      return <EnquiryPage />;
     }
     if (cleanPath === '/privacy' || cleanPath.startsWith('/privacy')) {
       return <PrivacyPolicyPage />;

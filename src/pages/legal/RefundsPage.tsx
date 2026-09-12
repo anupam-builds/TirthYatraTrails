@@ -42,7 +42,7 @@ export const RefundsPage: React.FC = () => {
       <section id="cancellation-request" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">01</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">1. Cancellation Request</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Cancellation Request</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -77,7 +77,7 @@ export const RefundsPage: React.FC = () => {
       <section id="tour-cancellation-charges" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">02</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">2. Tour Package Cancellation Charges</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Tour Package Cancellation Charges</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -144,7 +144,7 @@ export const RefundsPage: React.FC = () => {
       <section id="supplier-cancellation-charges" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">03</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">3. Supplier Cancellation Charges</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Supplier Cancellation Charges</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -160,7 +160,7 @@ export const RefundsPage: React.FC = () => {
       <section id="no-show" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">04</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">4. No-Show</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">No-Show</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -176,7 +176,7 @@ export const RefundsPage: React.FC = () => {
       <section id="partial-use-of-services" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">05</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">5. Partial Use of Services</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Partial Use of Services</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -192,7 +192,7 @@ export const RefundsPage: React.FC = () => {
       <section id="refund-processing" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">06</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">6. Refund Processing</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Refund Processing</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -214,7 +214,7 @@ export const RefundsPage: React.FC = () => {
       <section id="non-refundable-services" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">07</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">7. Non-Refundable Services</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Non-Refundable Services</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -237,7 +237,7 @@ export const RefundsPage: React.FC = () => {
       <section id="changes-to-booking" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">08</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">8. Changes to Booking</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Changes to Booking</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -253,7 +253,7 @@ export const RefundsPage: React.FC = () => {
       <section id="refund-method" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">09</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">9. Refund Method</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Refund Method</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -266,7 +266,7 @@ export const RefundsPage: React.FC = () => {
       <section id="cancellation-by-us" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">10</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">10. Cancellation by TirthYatraTrails</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Cancellation by TirthYatraTrails</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -282,7 +282,7 @@ export const RefundsPage: React.FC = () => {
       <section id="force-majeure" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">11</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">11. Force Majeure</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Force Majeure</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -295,7 +295,7 @@ export const RefundsPage: React.FC = () => {
       <section id="contact-us" className="space-y-4 scroll-mt-28 pt-2">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">12</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">12. Contact Us</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Contact Us</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>

@@ -50,7 +50,7 @@ export const TermsPage: React.FC = () => {
       <section id="about-our-services" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">01</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">1. About Our Services</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">About Our Services</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -66,7 +66,7 @@ export const TermsPage: React.FC = () => {
       <section id="booking-and-confirmation" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">02</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">2. Booking and Confirmation</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Booking and Confirmation</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -85,7 +85,7 @@ export const TermsPage: React.FC = () => {
       <section id="payment" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">03</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">3. Payment</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Payment</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -104,7 +104,7 @@ export const TermsPage: React.FC = () => {
       <section id="travel-documents" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">04</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">4. Travel Documents</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Travel Documents</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -120,7 +120,7 @@ export const TermsPage: React.FC = () => {
       <section id="hotels-and-accommodation" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">05</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">5. Hotels and Accommodation</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Hotels and Accommodation</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -139,7 +139,7 @@ export const TermsPage: React.FC = () => {
       <section id="transportation" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">06</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">6. Transportation</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Transportation</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -155,7 +155,7 @@ export const TermsPage: React.FC = () => {
       <section id="itinerary-changes" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">07</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">7. Itinerary Changes</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Itinerary Changes</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -171,7 +171,7 @@ export const TermsPage: React.FC = () => {
       <section id="third-party-suppliers" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">08</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">8. Third-Party Suppliers</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Third-Party Suppliers</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -187,7 +187,7 @@ export const TermsPage: React.FC = () => {
       <section id="delays-and-cancellations" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">09</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">9. Delays and Cancellations by Airlines or Suppliers</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Delays and Cancellations by Airlines or Suppliers</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -203,7 +203,7 @@ export const TermsPage: React.FC = () => {
       <section id="customer-responsibilities" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">10</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">10. Customer Responsibilities</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Customer Responsibilities</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>Customers must:</p>
@@ -222,7 +222,7 @@ export const TermsPage: React.FC = () => {
       <section id="personal-belongings" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">11</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">11. Personal Belongings</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Personal Belongings</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -238,7 +238,7 @@ export const TermsPage: React.FC = () => {
       <section id="limitation-of-liability" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">12</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">12. Limitation of Liability</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Limitation of Liability</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -254,7 +254,7 @@ export const TermsPage: React.FC = () => {
       <section id="force-majeure" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">13</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">13. Force Majeure</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Force Majeure</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -270,7 +270,7 @@ export const TermsPage: React.FC = () => {
       <section id="website-information" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">14</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">14. Website Information</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Website Information</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -283,7 +283,7 @@ export const TermsPage: React.FC = () => {
       <section id="intellectual-property" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">15</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">15. Intellectual Property</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Intellectual Property</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -296,7 +296,7 @@ export const TermsPage: React.FC = () => {
       <section id="amendments" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">16</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">16. Amendments</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Amendments</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -309,7 +309,7 @@ export const TermsPage: React.FC = () => {
       <section id="contact-us" className="space-y-4 scroll-mt-28 pt-2">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">17</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">17. Contact Us</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Contact Us</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>

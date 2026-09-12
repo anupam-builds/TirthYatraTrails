@@ -44,7 +44,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="information-we-collect" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">01</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">1. Information We Collect</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Information We Collect</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -72,7 +72,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="how-we-use-information" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">02</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">2. How We Use Your Information</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">How We Use Your Information</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>The information collected may be used to:</p>
@@ -94,7 +94,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="sharing-of-information" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">03</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">3. Sharing of Information</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Sharing of Information</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -113,7 +113,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="payment-information" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">04</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">4. Payment Information</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Payment Information</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 flex items-start gap-3 text-xs sm:text-sm text-slate-700">
@@ -132,7 +132,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="cookies" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">05</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">5. Cookies</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Cookies</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -148,7 +148,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="data-security" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">06</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">6. Data Security</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Data Security</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -164,7 +164,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="third-party-websites" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">07</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">7. Third-Party Websites</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Third-Party Websites</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -180,7 +180,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="childrens-privacy" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">08</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">8. Children&apos;s Privacy</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Children&apos;s Privacy</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -193,7 +193,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="your-choices" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">09</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">9. Your Choices</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Your Choices</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -209,7 +209,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="changes-to-policy" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">10</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">10. Changes to This Privacy Policy</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Changes to This Privacy Policy</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
@@ -222,7 +222,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       <section id="contact-us" className="space-y-4 scroll-mt-28 pt-2">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">11</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">11. Contact Us</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Contact Us</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>

@@ -242,7 +242,7 @@ export const PackagesPage: React.FC = () => {
                 </div>
 
                 {/* Card Footer: Starting Price & Orange View Button */}
-                <div className="p-6 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between">
+                <div className="p-6 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       Starting Price
@@ -253,18 +253,48 @@ export const PackagesPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <button
-                    onClick={() => navigate(`/package/${pkg.id}`)}
-                    className="px-5 py-2.5 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold shadow-md hover:shadow-orange-500/30 transition-all flex items-center gap-1.5"
-                  >
-                    <span>View Details</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigate(`/enquire?packageId=${pkg.id}`)}
+                      className="px-3.5 py-2.5 rounded-full border border-orange-500 text-orange-600 hover:bg-orange-50 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Enquire
+                    </button>
+                    <button
+                      onClick={() => navigate(`/package/${pkg.id}`)}
+                      className="px-4 py-2.5 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold shadow-md hover:shadow-orange-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>View</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
+
+        {/* Custom Yatra Inquiry Callout Banner */}
+        <div className="mt-14 bg-gradient-to-r from-[#0f294a] to-[#163860] rounded-3xl p-8 sm:p-10 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-6 border border-white/10">
+          <div className="space-y-2 text-center sm:text-left">
+            <span className="text-xs font-bold uppercase tracking-wider text-orange-400">
+              CUSTOM SPIRITUAL CIRCUITS
+            </span>
+            <h3 className="text-2xl font-extrabold font-serif">
+              Looking for a custom pilgrimage or group darshan?
+            </h3>
+            <p className="text-slate-300 text-xs sm:text-sm max-w-xl">
+              We design tailor-made yatras for families, seniors, and spiritual sanghams with private vehicles, VIP darshan passes, and verified pure-veg stays.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/enquire')}
+            className="shrink-0 px-8 py-4 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-sm shadow-xl shadow-orange-600/30 transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+          >
+            <span>Plan Custom Yatra</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

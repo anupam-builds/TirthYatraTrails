@@ -507,16 +507,27 @@ export const HomePage: React.FC = () => {
               </p>
             </div>
 
-            <a
-              id="cta-whatsapp-message-btn"
-              href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%2C%20I%20am%20ready%20to%20plan%20our%20sacred%20pilgrimage"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-[#ea580c] hover:bg-[#d44e0a] text-white px-8 py-4 rounded-2xl font-extrabold text-sm shadow-xl hover:shadow-orange-500/30 transition-all flex items-center gap-2.5 shrink-0 active:scale-95"
-            >
-              <MessageCircle className="w-5 h-5 fill-current" />
-              <span>Message us</span>
-            </a>
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+              <button
+                id="cta-enquire-online-btn"
+                onClick={() => navigate('/enquire')}
+                className="w-full sm:w-auto bg-[#ea580c] hover:bg-[#d44e0a] text-white px-7 py-4 rounded-2xl font-extrabold text-sm shadow-xl hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2.5 active:scale-95 cursor-pointer"
+              >
+                <span>Enquire Now</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <a
+                id="cta-whatsapp-message-btn"
+                href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%2C%20I%20am%20ready%20to%20plan%20our%20sacred%20pilgrimage"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 px-6 py-4 rounded-2xl font-extrabold text-sm transition-all flex items-center justify-center gap-2.5 active:scale-95"
+              >
+                <MessageCircle className="w-5 h-5 fill-emerald-400 text-emerald-400" />
+                <span>WhatsApp Desk</span>
+              </a>
+            </div>
           </div>
 
         </div>

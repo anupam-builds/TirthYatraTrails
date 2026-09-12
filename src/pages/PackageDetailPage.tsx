@@ -346,10 +346,19 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
               <button
                 id="get-instant-quote-btn"
                 onClick={() => setInquiryModalOpen(true)}
-                className="w-full py-4 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-sm shadow-xl shadow-orange-500/30 transition-all flex items-center justify-center gap-2"
+                className="w-full py-4 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-sm shadow-xl shadow-orange-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <MessageCircle className="w-5 h-5" />
                 <span>Get Instant Quote &amp; Custom Plan</span>
+              </button>
+
+              <button
+                id="full-enquiry-page-btn"
+                onClick={() => navigate(`/enquire?packageId=${pkg.id}`)}
+                className="w-full py-3 rounded-full border-2 border-orange-500 text-[#ea580c] hover:bg-orange-50 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Enquire Now (Detailed Form)</span>
               </button>
 
               <div className="space-y-2 pt-2 border-t border-slate-100 text-xs text-slate-600">

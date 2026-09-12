@@ -146,8 +146,8 @@ export const CustomerFooter: React.FC = () => {
                 </li>
                 <li>
                   <button
-                    onClick={() => navigate('/hotels')}
-                    className="text-orange-400 hover:underline font-bold transition-colors text-left flex items-center gap-1"
+                    onClick={() => navigate('/enquire')}
+                    className="text-orange-400 hover:underline font-bold transition-colors text-left flex items-center gap-1 cursor-pointer"
                   >
                     <span>Enquire Now</span>
                     <span>→</span>
