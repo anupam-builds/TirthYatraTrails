@@ -17,6 +17,7 @@ import {
   Plus,
   Check,
   Building,
+  X,
 } from 'lucide-react';
 
 export const HotelsPage: React.FC = () => {
@@ -26,32 +27,81 @@ export const HotelsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Parse URL query params
-  const searchParams = new URLSearchParams(window.location.search);
-  const initialCityId = searchParams.get('cityId') || '';
-  const initialQuery = searchParams.get('query') || '';
-  const initialChildAges = searchParams.get('childAges')
-    ? searchParams
+  const getSearchParams = () => {
+    const queryIndex = path.indexOf('?');
+    const searchString = queryIndex !== -1 ? path.substring(queryIndex) : (typeof window !== 'undefined' ? window.location.search : '');
+    return new URLSearchParams(searchString);
+  };
+
+  const initialParams = getSearchParams();
+  const initialCityParam = initialParams.get('city') || initialParams.get('cityId') || '';
+  const initialQuery = initialParams.get('query') || '';
+  const initialChildAges = initialParams.get('childAges')
+    ? initialParams
         .get('childAges')!
         .split(',')
         .map((val) => Number(val))
         .filter((n) => !isNaN(n))
     : [];
 
-  const [selectedCityId, setSelectedCityId] = useState<string>(initialCityId);
+  const [selectedCityId, setSelectedCityId] = useState<string>(initialCityParam);
   const [searchQuery, setSearchQuery] = useState<string>(initialQuery);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [priceMax, setPriceMax] = useState<number>(30000);
   const [onlyTopRated, setOnlyTopRated] = useState<boolean>(false);
 
   // Dates & Guests
-  const [checkIn, setCheckIn] = useState<string>(searchParams.get('checkIn') || '2026-09-15');
-  const [checkOut, setCheckOut] = useState<string>(searchParams.get('checkOut') || '2026-09-18');
-  const [adults, setAdults] = useState<number>(Number(searchParams.get('adults')) || 2);
+  const [checkIn, setCheckIn] = useState<string>(initialParams.get('checkIn') || '2026-09-15');
+  const [checkOut, setCheckOut] = useState<string>(initialParams.get('checkOut') || '2026-09-18');
+  const [adults, setAdults] = useState<number>(Number(initialParams.get('adults')) || 2);
   const [childAges, setChildAges] = useState<number[]>(initialChildAges);
-  const [rooms, setRooms] = useState<number>(Number(searchParams.get('rooms')) || 1);
+  const [rooms, setRooms] = useState<number>(Number(initialParams.get('rooms')) || 1);
 
   const [showGuestsPopover, setShowGuestsPopover] = useState(false);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+
+  // Sync state whenever URL path changes
+  useEffect(() => {
+    const params = getSearchParams();
+    const cityParam = params.get('city') || params.get('cityId');
+    if (cityParam !== null) {
+      if (!cityParam.trim()) {
+        setSelectedCityId('');
+      } else {
+        const cLower = cityParam.toLowerCase().trim();
+        const matched = cities.find(
+          (c) =>
+            c.id.toLowerCase() === cLower ||
+            c.name.toLowerCase() === cLower ||
+            c.name.toLowerCase().includes(cLower) ||
+            cLower.includes(c.name.toLowerCase())
+        );
+        if (matched) {
+          setSelectedCityId(matched.id);
+        } else {
+          setSelectedCityId(cityParam);
+        }
+      }
+    }
+
+    const q = params.get('query');
+    if (q !== null && q !== searchQuery) {
+      setSearchQuery(q);
+    }
+    const inDate = params.get('checkIn');
+    if (inDate) setCheckIn(inDate);
+    const outDate = params.get('checkOut');
+    if (outDate) setCheckOut(outDate);
+    const ad = params.get('adults');
+    if (ad && !isNaN(Number(ad))) setAdults(Number(ad));
+    const rm = params.get('rooms');
+    if (rm && !isNaN(Number(rm))) setRooms(Number(rm));
+    const ca = params.get('childAges');
+    if (ca) {
+      const parsed = ca.split(',').map((n) => Number(n)).filter((n) => !isNaN(n));
+      setChildAges(parsed);
+    }
+  }, [path, cities]);
 
   useEffect(() => {
     async function loadData() {
@@ -83,14 +133,67 @@ export const HotelsPage: React.FC = () => {
     };
   }, [selectedCityId, searchQuery]);
 
+  const currentCityObj = cities.find(
+    (c) =>
+      c.id === selectedCityId ||
+      c.name.toLowerCase() === selectedCityId.toLowerCase() ||
+      c.id.toLowerCase() === selectedCityId.toLowerCase()
+  );
+  const selectedCityName = currentCityObj ? currentCityObj.name : (selectedCityId || 'Select City or Temple');
+
   const filteredHotels = hotels.filter((hotel) => {
+    if (selectedCityId) {
+      const cLower = selectedCityId.toLowerCase().trim();
+      const targetCityName = (currentCityObj?.name || selectedCityId).toLowerCase().trim();
+
+      const hCityId = (hotel.cityId || '').toLowerCase().trim();
+      const hCityName = (hotel.cityName || '').toLowerCase().trim();
+      const hAddress = (hotel.address || '').toLowerCase();
+
+      const matches =
+        hCityId === cLower ||
+        hCityName === cLower ||
+        hCityName === targetCityName ||
+        (targetCityName && (hCityName.includes(targetCityName) || targetCityName.includes(hCityName))) ||
+        (targetCityName && hAddress.includes(targetCityName)) ||
+        hAddress.includes(cLower);
+
+      if (!matches) return false;
+    }
     if (selectedRating && hotel.starRating < selectedRating) return false;
     if (hotel.basePrice > priceMax) return false;
     if (onlyTopRated && !hotel.isTopRated) return false;
     return true;
   });
 
-  const selectedCityName = cities.find((c) => c.id === selectedCityId)?.name || 'Select City or Temple';
+  const handleSelectCity = (cityId: string, cityName?: string) => {
+    setSelectedCityId(cityId);
+    setShowCityDropdown(false);
+    const params = new URLSearchParams();
+    if (cityId) {
+      params.set('cityId', cityId);
+      if (cityName) params.set('city', cityName);
+    }
+    if (searchQuery) params.set('query', searchQuery);
+    if (checkIn) params.set('checkIn', checkIn);
+    if (checkOut) params.set('checkOut', checkOut);
+    params.set('adults', String(adults));
+    if (childAges.length > 0) params.set('childAges', childAges.join(','));
+    params.set('rooms', String(rooms));
+    navigate(`/hotels?${params.toString()}`);
+  };
+
+  const handleClearCityFilter = () => {
+    setSelectedCityId('');
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('query', searchQuery);
+    if (checkIn) params.set('checkIn', checkIn);
+    if (checkOut) params.set('checkOut', checkOut);
+    params.set('adults', String(adults));
+    if (childAges.length > 0) params.set('childAges', childAges.join(','));
+    params.set('rooms', String(rooms));
+    navigate(`/hotels${params.toString() ? '?' + params.toString() : ''}`);
+  };
 
   return (
     <div id="hotels-directory-page" className="min-h-screen bg-[#faf8f5]">
@@ -135,11 +238,8 @@ export const HotelsPage: React.FC = () => {
                 {showCityDropdown && (
                   <div className="absolute top-full left-0 mt-2 z-50 bg-white shadow-xl border border-slate-100 w-72 sm:w-80 rounded-2xl p-2 max-h-72 overflow-y-auto animate-in fade-in duration-150">
                     <div
-                      onClick={() => {
-                        setSelectedCityId('');
-                        setShowCityDropdown(false);
-                      }}
-                      className="p-2.5 rounded-xl hover:bg-orange-50 cursor-pointer text-xs font-bold text-slate-700 flex items-center justify-between"
+                      onClick={() => handleClearCityFilter()}
+                      className={`p-2.5 rounded-xl hover:bg-orange-50 cursor-pointer text-xs font-bold text-slate-700 flex items-center justify-between ${!selectedCityId ? 'bg-orange-50 text-orange-600' : ''}`}
                     >
                       <span>All Sacred Cities</span>
                       <span className="text-[10px] text-slate-400">All India</span>
@@ -147,11 +247,8 @@ export const HotelsPage: React.FC = () => {
                     {cities.map((c) => (
                       <div
                         key={c.id}
-                        onClick={() => {
-                          setSelectedCityId(c.id);
-                          setShowCityDropdown(false);
-                        }}
-                        className="p-2.5 rounded-xl hover:bg-orange-50 cursor-pointer flex items-center justify-between border-t border-slate-50"
+                        onClick={() => handleSelectCity(c.id, c.name)}
+                        className={`p-2.5 rounded-xl hover:bg-orange-50 cursor-pointer flex items-center justify-between border-t border-slate-50 ${selectedCityId === c.id ? 'bg-orange-50 font-bold text-orange-600' : ''}`}
                       >
                         <div>
                           <p className="text-xs font-bold text-[#0f294a]">{c.name}</p>
@@ -214,18 +311,22 @@ export const HotelsPage: React.FC = () => {
                 id="hotels-search-btn"
                 onClick={() => {
                   const params = new URLSearchParams();
-                  if (selectedCityId) params.append('cityId', selectedCityId);
-                  params.append('adults', adults.toString());
-                  params.append('children', childAges.length.toString());
-                  if (childAges.length > 0) {
-                    params.append('childAges', childAges.join(','));
+                  if (selectedCityId) {
+                    params.set('cityId', selectedCityId);
+                    if (currentCityObj) params.set('city', currentCityObj.name);
                   }
-                  params.append('rooms', rooms.toString());
-                  if (checkIn) params.append('checkIn', checkIn);
-                  if (checkOut) params.append('checkOut', checkOut);
+                  if (searchQuery) params.set('query', searchQuery);
+                  params.set('adults', adults.toString());
+                  params.set('children', childAges.length.toString());
+                  if (childAges.length > 0) {
+                    params.set('childAges', childAges.join(','));
+                  }
+                  params.set('rooms', rooms.toString());
+                  if (checkIn) params.set('checkIn', checkIn);
+                  if (checkOut) params.set('checkOut', checkOut);
                   navigate(`/hotels?${params.toString()}`);
                 }}
-                className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold flex items-center justify-center gap-2 shadow-md transition-all text-sm shrink-0"
+                className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold flex items-center justify-center gap-2 shadow-md transition-all text-sm shrink-0 active:scale-95"
               >
                 <Search className="w-4 h-4" />
                 <span>Search</span>
@@ -241,8 +342,8 @@ export const HotelsPage: React.FC = () => {
           <h2 className="text-xl font-bold text-[#0f294a]">Cities we know inside out</h2>
           {selectedCityId && (
             <button
-              onClick={() => setSelectedCityId('')}
-              className="text-xs font-bold text-[#ea580c] hover:underline"
+              onClick={handleClearCityFilter}
+              className="text-xs font-bold text-[#ea580c] hover:underline cursor-pointer"
             >
               Clear City Filter
             </button>
@@ -253,9 +354,15 @@ export const HotelsPage: React.FC = () => {
           {cities.map((city) => (
             <div
               key={city.id}
-              onClick={() => setSelectedCityId(selectedCityId === city.id ? '' : city.id)}
+              onClick={() => {
+                if (selectedCityId === city.id) {
+                  handleClearCityFilter();
+                } else {
+                  handleSelectCity(city.id, city.name);
+                }
+              }}
               className={`flex-none w-48 sm:w-56 rounded-2xl overflow-hidden cursor-pointer snap-start transition-all duration-200 border relative group ${
-                selectedCityId === city.id
+                selectedCityId === city.id || (currentCityObj && currentCityObj.id === city.id)
                   ? 'ring-3 ring-orange-500 border-transparent shadow-lg scale-[1.02]'
                   : 'border-slate-200 hover:shadow-md'
               }`}
@@ -284,6 +391,31 @@ export const HotelsPage: React.FC = () => {
 
       {/* 3. FILTER BAR & HAND-PICKED STAYS GRID */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-16">
+        {/* Active Destination Filter Banner */}
+        {selectedCityId && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-2 bg-orange-50 border border-orange-200/80 px-4 py-3 rounded-2xl">
+            <div className="flex items-center gap-2.5">
+              <span className="p-1.5 bg-orange-500 text-white rounded-lg">
+                <MapPin className="w-4 h-4" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-slate-800">
+                  Showing stays in <span className="text-[#ea580c]">{selectedCityName}</span>
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {filteredHotels.length} sacred {filteredHotels.length === 1 ? 'hotel' : 'hotels'} and ashram accommodations available
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleClearCityFilter}
+              className="text-xs font-bold text-[#ea580c] hover:text-[#c2410c] px-3 py-1.5 rounded-full bg-white border border-orange-200 hover:bg-orange-100 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+            >
+              <span>View All Sacred Destinations</span>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         {/* Quick Filter Bar */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs mb-8 flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">

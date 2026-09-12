@@ -353,8 +353,9 @@ async function startServer() {
 
   // Hotels
   app.get('/api/hotels', (req, res) => {
-    const { cityId, query } = req.query;
-    res.json(db.getHotels(cityId as string, query as string));
+    const { cityId, city, query } = req.query;
+    const targetCity = (cityId || city) as string;
+    res.json(db.getHotels(targetCity, query as string));
   });
 
   app.get('/api/hotels/:id', (req, res) => {

@@ -151,7 +151,13 @@ export const localStore = {
       }
     }
     if (cityId) {
-      list = list.filter((h) => h.cityId === cityId);
+      const cLower = cityId.toLowerCase().trim();
+      list = list.filter((h) =>
+        (h.cityId && h.cityId.toLowerCase() === cLower) ||
+        (h.cityName && h.cityName.toLowerCase() === cLower) ||
+        (h.cityName && h.cityName.toLowerCase().includes(cLower)) ||
+        (cLower.includes(h.cityName?.toLowerCase() || ''))
+      );
     }
     if (query && query.trim()) {
       const q = query.toLowerCase().trim();
