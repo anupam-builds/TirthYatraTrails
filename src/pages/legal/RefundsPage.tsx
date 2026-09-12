@@ -1,189 +1,329 @@
 import React from 'react';
 import { LegalPageLayout } from '../../components/legal/LegalPageLayout.js';
-import { RotateCcw, Clock, AlertTriangle, ShieldCheck, Mail, Phone, CheckCircle2 } from 'lucide-react';
+import { RotateCcw, Clock, AlertTriangle, ShieldCheck, Mail, Phone, Calendar, CheckCircle2, FileText } from 'lucide-react';
 
 const sections = [
-  { id: 'refund-processing', title: 'Refund Processing' },
-  { id: 'refund-timeline', title: 'Refund Timeline' },
-  { id: 'user-responsibility', title: 'User Responsibility' },
-  { id: 'accommodation-changes', title: 'Accommodation Changes' },
-  { id: 'refund-delay', title: 'Refund Delay' },
-  { id: 'liability-limitation', title: 'Liability Limitation' },
-  { id: 'contact-information', title: 'Contact Information' },
+  { id: 'cancellation-request', title: '1. Cancellation Request' },
+  { id: 'tour-cancellation-charges', title: '2. Tour Package Cancellation Charges' },
+  { id: 'supplier-cancellation-charges', title: '3. Supplier Cancellation Charges' },
+  { id: 'no-show', title: '4. No-Show' },
+  { id: 'partial-use-of-services', title: '5. Partial Use of Services' },
+  { id: 'refund-processing', title: '6. Refund Processing' },
+  { id: 'non-refundable-services', title: '7. Non-Refundable Services' },
+  { id: 'changes-to-booking', title: '8. Changes to Booking' },
+  { id: 'refund-method', title: '9. Refund Method' },
+  { id: 'cancellation-by-us', title: '10. Cancellation by TirthYatraTrails' },
+  { id: 'force-majeure', title: '11. Force Majeure' },
+  { id: 'contact-us', title: '12. Contact Us' },
 ];
 
 export const RefundsPage: React.FC = () => {
   return (
     <LegalPageLayout
       badge="CANCELLATION & REFUNDS"
-      title="Refund and Returns Policy"
+      title="Cancellation & Refund Policy"
       lastUpdated="September 11, 2026"
-      description="Clear, transparent refund procedures, supplier-contingent processing criteria, and realistic settlement timelines for pilgrimage bookings."
+      description="At TirthYatraTrails, we understand that travel plans may change. Our cancellation and refund rules are designed to clearly explain the process applicable to tour bookings and travel services."
       sections={sections}
       activePath="/refunds"
     >
-      {/* Policy Highlight Banner */}
-      <div className="p-5 rounded-2xl bg-orange-50/70 border border-orange-200 text-slate-800 text-sm leading-relaxed flex items-start gap-3.5">
-        <RotateCcw className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
-        <div>
-          <p className="font-bold text-[#0f294a]">Transparent &amp; Fair Refund Policy</p>
-          <p className="text-xs text-slate-600 mt-1">
-            We understand unforeseen emergencies, health fluctuations, or adverse weather may impact spiritual travel plans. This policy details how cancellations and refund claims are managed.
-          </p>
+      {/* Policy Introduction Card */}
+      <div className="p-6 rounded-2xl bg-orange-50/70 border border-orange-200 text-slate-800 text-sm leading-relaxed space-y-3">
+        <div className="flex items-center gap-2 text-orange-700 font-bold text-xs uppercase tracking-wider">
+          <RotateCcw className="w-4 h-4 text-orange-600" />
+          <span>Cancellation &amp; Refund Policy</span>
         </div>
+        <p className="text-slate-700 text-sm leading-relaxed">
+          At <strong>TirthYatraTrails</strong>, we understand that travel plans may change. Our cancellation and refund rules are designed to clearly explain the process applicable to tour bookings and travel services.
+        </p>
       </div>
 
-      {/* 1. Refund Processing */}
-      <section id="refund-processing" className="space-y-4 scroll-mt-28">
+      {/* 1. Cancellation Request */}
+      <section id="cancellation-request" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">01</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Refund Processing</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">1. Cancellation Request</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
-            TirthYatraTrails facilitates pilgrimage bookings through direct inventory partnerships with verified hotels, ashrams, dharamshalas, vehicle fleet owners, and authorized shrine facilitators.
+            Customers wishing to cancel a booking should contact TirthYatraTrails as soon as possible.
           </p>
           <p>
-            <strong>All refund claims are supplier-contingent:</strong> Refunds are processed and approved strictly in accordance with the specific cancellation guidelines enforced by the underlying accommodation property or transport operator.
+            Cancellation requests should be submitted through our official contact details:
           </p>
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-            <p className="font-bold text-[#0f294a]">General Cancellation Tier Reference:</p>
-            <ul className="space-y-1 text-slate-600 list-disc list-inside">
-              <li><strong>Cancellation 15+ days prior to travel:</strong> Eligible for refund minus bank transaction charges and a nominal administrative processing fee (typically ₹500 - ₹1,000 per booking).</li>
-              <li><strong>Cancellation 7 to 14 days prior to travel:</strong> Up to 50% refund subject to hotel supplier retention charges.</li>
-              <li><strong>Cancellation under 7 days or No-Show:</strong> Non-refundable as properties hold inventory exclusively for pilgrim arrivals during auspicious muhurats.</li>
-              <li><strong>Peak Festival Dates (e.g. Kumbh Mela, Diwali in Ayodhya, Navratri, Shivratri):</strong> Strict 100% non-refundable retention applies across prime temple belt accommodations.</li>
-            </ul>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <a
+              href="mailto:tirthyatratrails@gmail.com"
+              className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 hover:text-orange-600 hover:border-orange-300 transition-colors text-xs"
+            >
+              <Mail className="w-4 h-4 text-orange-600 shrink-0" />
+              <span className="font-medium">Email: tirthyatratrails@gmail.com</span>
+            </a>
+            <a
+              href="tel:9068126203"
+              className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 hover:text-orange-600 hover:border-orange-300 transition-colors text-xs"
+            >
+              <Phone className="w-4 h-4 text-orange-600 shrink-0" />
+              <span className="font-medium">Phone: 9068126203</span>
+            </a>
           </div>
+          <p className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-700">
+            The applicable cancellation date will generally be considered the date on which TirthYatraTrails receives the cancellation request.
+          </p>
         </div>
       </section>
 
-      {/* 2. Refund Timeline */}
-      <section id="refund-timeline" className="space-y-4 scroll-mt-28">
+      {/* 2. Tour Package Cancellation Charges */}
+      <section id="tour-cancellation-charges" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">02</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Refund Timeline</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">2. Tour Package Cancellation Charges</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
-          <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 flex items-start gap-3 text-xs text-slate-700">
-            <Clock className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-blue-900">Standard Timeline: 7 to 15 Working Days</p>
-              <p className="mt-0.5 text-slate-600">
-                Once a cancellation request is formally approved by the supplier and our audit desk, the eligible refund amount is credited back to the original source method within <strong>7 to 15 working days</strong>.
-              </p>
-            </div>
-          </div>
           <p>
-            Refunds are credited directly to the original bank account, debit/credit card, or UPI VPA from which the advance payment originated.
+            Unless a specific tour package states different cancellation terms, the following cancellation structure may apply:
+          </p>
+
+          {/* Structured Cancellation Tier Table */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
+            <table className="w-full text-left text-xs sm:text-sm">
+              <thead className="bg-[#0f294a] text-white">
+                <tr>
+                  <th className="py-3.5 px-4 sm:px-6 font-bold uppercase tracking-wider text-[11px]">
+                    Cancellation Period
+                  </th>
+                  <th className="py-3.5 px-4 sm:px-6 font-bold uppercase tracking-wider text-[11px] text-right sm:text-left">
+                    Cancellation Charge
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                <tr className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3.5 px-4 sm:px-6 font-medium text-slate-800">
+                    30 days or more before departure
+                  </td>
+                  <td className="py-3.5 px-4 sm:px-6 font-bold text-slate-700 text-right sm:text-left">
+                    10% of booking amount
+                  </td>
+                </tr>
+                <tr className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3.5 px-4 sm:px-6 font-medium text-slate-800">
+                    15–29 days before departure
+                  </td>
+                  <td className="py-3.5 px-4 sm:px-6 font-bold text-slate-700 text-right sm:text-left">
+                    25% of booking amount
+                  </td>
+                </tr>
+                <tr className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3.5 px-4 sm:px-6 font-medium text-slate-800">
+                    7–14 days before departure
+                  </td>
+                  <td className="py-3.5 px-4 sm:px-6 font-bold text-orange-700 text-right sm:text-left">
+                    50% of booking amount
+                  </td>
+                </tr>
+                <tr className="bg-red-50/30 hover:bg-red-50/50 transition-colors">
+                  <td className="py-3.5 px-4 sm:px-6 font-medium text-slate-900">
+                    Less than 7 days before departure
+                  </td>
+                  <td className="py-3.5 px-4 sm:px-6 font-bold text-red-600 text-right sm:text-left">
+                    No refund
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-xs sm:text-sm text-slate-500 pt-1">
+            Specific tour packages may have different cancellation rules because hotels, transport providers, airlines or other suppliers may impose their own charges. The cancellation conditions communicated with the particular booking will prevail.
           </p>
         </div>
       </section>
 
-      {/* 3. User Responsibility */}
-      <section id="user-responsibility" className="space-y-4 scroll-mt-28">
+      {/* 3. Supplier Cancellation Charges */}
+      <section id="supplier-cancellation-charges" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">03</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">User Responsibility</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">3. Supplier Cancellation Charges</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
-            To initiate an authorized cancellation and request refund consideration, the booking holder must:
+            Where a booking includes hotels, flights, transportation, activities or other third-party services, the refund will be subject to the cancellation and refund rules of the respective supplier.
           </p>
-          <ul className="space-y-1.5 list-disc list-inside text-xs sm:text-sm text-slate-700">
-            <li>Submit a formal written cancellation request via email to <strong>tirthyatratrails@gmail.com</strong> or via registered WhatsApp message to <strong>+91 9068126203</strong>.</li>
-            <li>Provide the original Booking ID, registered devotee name, and clear reason for cancellation.</li>
-            <li>In cases of medical emergencies, provide valid medical documentation or doctor&apos;s certification for supplier compassionate waiver requests.</li>
-            <li>Verbal or telephonic requests without written confirmation are not considered valid timestamps for calculating cancellation tiers.</li>
-          </ul>
+          <p>
+            Any non-refundable amount charged by a supplier may be deducted from the customer&apos;s refund.
+          </p>
         </div>
       </section>
 
-      {/* 4. Accommodation Changes */}
-      <section id="accommodation-changes" className="space-y-4 scroll-mt-28">
+      {/* 4. No-Show */}
+      <section id="no-show" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">04</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Accommodation Changes</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">4. No-Show</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
-            If a devotee wishes to modify travel dates or change hotel room categories rather than cancel:
+            If a customer does not arrive for a confirmed service without providing an approved cancellation request, the booking may be treated as a No-Show.
           </p>
-          <ul className="space-y-1.5 list-disc list-inside text-xs sm:text-sm text-slate-700">
-            <li><strong>Date Rescheduling:</strong> Permitted subject to room availability at the destination hotel and tariff variance between seasonal slots.</li>
-            <li><strong>Property Relocation:</strong> If a selected property encounters unexpected operational disruption, TirthYatraTrails will provide comparable or upgraded sanctum-proximity accommodation at zero additional fee.</li>
-          </ul>
+          <p>
+            No-show bookings may be non-refundable depending on the applicable supplier or package terms.
+          </p>
         </div>
       </section>
 
-      {/* 5. Refund Delay */}
-      <section id="refund-delay" className="space-y-4 scroll-mt-28">
+      {/* 5. Partial Use of Services */}
+      <section id="partial-use-of-services" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">05</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Refund Delay</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">5. Partial Use of Services</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
-            If you have not received your approved refund after 15 business days:
+            If a customer voluntarily chooses not to use part of a confirmed tour, hotel stay, transportation service, sightseeing activity or other travel service, a refund will not automatically be available.
           </p>
-          <ol className="space-y-1.5 list-decimal list-inside text-xs sm:text-sm text-slate-700">
-            <li>First inspect your bank account statement or UPI transaction history thoroughly.</li>
-            <li>Contact your card issuer or banking branch, as processing and settlement clearance times between intermediary payment switches can take an additional 3 to 5 business days.</li>
-            <li>If you have confirmed with your financial institution and the credit has not appeared, contact our dedicated accounts team at <strong>tirthyatratrails@gmail.com</strong> with your refund ARN (Acquirer Reference Number).</li>
-          </ol>
+          <p>
+            Any refund will depend on the terms of the relevant supplier and the particular booking.
+          </p>
         </div>
       </section>
 
-      {/* 6. Liability Limitation */}
-      <section id="liability-limitation" className="space-y-4 scroll-mt-28">
+      {/* 6. Refund Processing */}
+      <section id="refund-processing" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">06</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Liability Limitation</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">6. Refund Processing</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
-            TirthYatraTrails shall not be held financially responsible for missed flights, unused trains, personal expenses, or darshan ticket non-usage resulting from:
+            Once a refund has been approved, TirthYatraTrails will initiate the refund according to the applicable payment and supplier process.
           </p>
-          <ul className="space-y-1.5 list-disc list-inside text-xs sm:text-sm text-slate-700">
-            <li>Inclement weather conditions (fog, snow, landslides, cloudbursts) common to Himalayan or coastal pilgrimage shrines.</li>
-            <li>Administrative closures, security lockdowns, or VIP movement mandated by District Magistrates or Temple Trust Boards.</li>
-            <li>Personal health complications, flight cancellations, or transport strikes initiated by outside unions.</li>
+          <p>
+            Where the amount has to be received from a third-party supplier first, the refund timeline may depend on that supplier.
+          </p>
+          <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 flex items-start gap-3 text-xs sm:text-sm text-slate-700">
+            <Clock className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+            <p>
+              After the refundable amount is received and processed by TirthYatraTrails, the amount may generally take <strong>7–15 working days</strong> to reach the customer&apos;s original payment method, depending on the payment provider or bank.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. Non-Refundable Services */}
+      <section id="non-refundable-services" className="space-y-4 scroll-mt-28">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+          <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">07</span>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">7. Non-Refundable Services</h2>
+        </div>
+        <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
+          <p>
+            Certain bookings may be completely or partially non-refundable. Customers will be informed of applicable terms wherever reasonably possible before confirmation.
+          </p>
+          <p>Examples may include:</p>
+          <ul className="space-y-1.5 list-disc list-inside pl-1 text-xs sm:text-sm text-slate-700">
+            <li>Non-refundable hotel bookings</li>
+            <li>Special promotional fares</li>
+            <li>Certain transportation tickets</li>
+            <li>Activity or attraction tickets</li>
+            <li>Peak-season bookings</li>
+            <li>Last-minute bookings</li>
+            <li>Services specifically marked as non-refundable</li>
           </ul>
         </div>
       </section>
 
-      {/* 7. Contact Information */}
-      <section id="contact-information" className="space-y-4 scroll-mt-28 pt-2">
+      {/* 8. Changes to Booking */}
+      <section id="changes-to-booking" className="space-y-4 scroll-mt-28">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-          <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">07</span>
-          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">Contact Information</h2>
+          <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">08</span>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">8. Changes to Booking</h2>
         </div>
         <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
           <p>
-            For all inquiries regarding cancellations, refunds, or payment reconciliation, our travel desk is ready to support you:
+            Changes to travel dates, passenger details, hotels, transportation or other services may be subject to availability and additional charges.
+          </p>
+          <p>
+            Any supplier change fee or fare difference may be payable by the customer.
+          </p>
+        </div>
+      </section>
+
+      {/* 9. Refund Method */}
+      <section id="refund-method" className="space-y-4 scroll-mt-28">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+          <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">09</span>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">9. Refund Method</h2>
+        </div>
+        <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
+          <p>
+            Approved refunds will normally be returned through the original payment method used for the booking, where technically and operationally possible.
+          </p>
+        </div>
+      </section>
+
+      {/* 10. Cancellation by TirthYatraTrails */}
+      <section id="cancellation-by-us" className="space-y-4 scroll-mt-28">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+          <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">10</span>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">10. Cancellation by TirthYatraTrails</h2>
+        </div>
+        <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
+          <p>
+            In exceptional circumstances, TirthYatraTrails may need to cancel or modify a booking due to operational, safety, supplier, governmental or force majeure circumstances.
+          </p>
+          <p>
+            Where applicable, customers will be informed about available alternatives or refunds according to the relevant booking and supplier terms.
+          </p>
+        </div>
+      </section>
+
+      {/* 11. Force Majeure */}
+      <section id="force-majeure" className="space-y-4 scroll-mt-28">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+          <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">11</span>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">11. Force Majeure</h2>
+        </div>
+        <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
+          <p>
+            No refund or compensation shall be assumed solely because a journey is affected by circumstances beyond reasonable control. Any refund will depend on amounts recovered from suppliers and applicable booking conditions, subject to applicable law.
+          </p>
+        </div>
+      </section>
+
+      {/* 12. Contact Us */}
+      <section id="contact-us" className="space-y-4 scroll-mt-28 pt-2">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+          <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">12</span>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0f294a] font-serif">12. Contact Us</h2>
+        </div>
+        <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
+          <p>
+            For cancellation or refund-related assistance, please contact:
           </p>
 
-          <div className="mt-4 p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3">
-            <p className="font-extrabold text-[#0f294a] text-sm">TirthYatraTrails Accounts &amp; Refunds Desk</p>
+          <div className="mt-4 p-5 sm:p-6 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-4">
+            <div>
+              <p className="font-extrabold text-[#0f294a] text-base font-serif">TirthYatraTrails</p>
+              <p className="text-xs text-slate-500 mt-0.5">Cancellation &amp; Refund Assistance Desk</p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <a
                 href="mailto:tirthyatratrails@gmail.com"
                 className="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:text-orange-600 hover:border-orange-300 transition-colors"
               >
-                <Mail className="w-4 h-4 text-orange-600" />
-                <span className="font-medium">tirthyatratrails@gmail.com</span>
+                <Mail className="w-4 h-4 text-orange-600 shrink-0" />
+                <span className="font-medium">Email: tirthyatratrails@gmail.com</span>
               </a>
               <a
                 href="tel:9068126203"
                 className="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:text-orange-600 hover:border-orange-300 transition-colors"
               >
-                <Phone className="w-4 h-4 text-orange-600" />
-                <span className="font-medium">+91 9068126203</span>
+                <Phone className="w-4 h-4 text-orange-600 shrink-0" />
+                <span className="font-medium">Phone: 9068126203</span>
               </a>
             </div>
-            <p className="text-[11px] text-slate-500 pt-1">
-              Response Time: Refund requests received during business hours are reviewed within 24 hours.
-            </p>
           </div>
         </div>
       </section>

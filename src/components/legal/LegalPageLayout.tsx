@@ -269,7 +269,7 @@ export const LegalPageLayout: React.FC<LegalPageLayoutProps> = ({
                       className="text-slate-600 hover:text-orange-600 font-medium flex items-center gap-1"
                     >
                       <ChevronRight className="w-3 h-3 text-orange-500" />
-                      <span>Refund and Returns Policy</span>
+                      <span>Cancellation &amp; Refund Policy</span>
                     </button>
                   </li>
                 )}

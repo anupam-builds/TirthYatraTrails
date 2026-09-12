@@ -236,7 +236,7 @@ export const CustomerFooter: React.FC = () => {
                     onClick={() => navigate('/refunds')}
                     className="hover:text-orange-400 cursor-pointer transition-colors text-left block w-full"
                   >
-                    Refunds &amp; Cancellations
+                    Cancellation &amp; Refund Policy
                   </button>
                 </li>
                 <li>
