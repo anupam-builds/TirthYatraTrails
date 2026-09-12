@@ -181,9 +181,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
       <aside className="w-full md:w-64 bg-white dark:bg-[#0a192f] border-r border-slate-200 dark:border-slate-800/80 flex flex-col justify-between shrink-0 shadow-xs transition-colors duration-150">
         <div>
           {/* Brand header */}
-          <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-500 dark:text-orange-400">
-              <ShieldCheck className="w-5 h-5" />
+          <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white shadow-xs border border-slate-200 dark:border-slate-700 p-0.5 flex items-center justify-center shrink-0">
+              <img
+                src="/logo.svg"
+                alt="TirthYatraTrails.in Logo"
+                className="w-10 h-10 object-contain"
+              />
             </div>
             <div>
               <h1 className="font-extrabold text-sm text-slate-900 dark:text-white tracking-wide">

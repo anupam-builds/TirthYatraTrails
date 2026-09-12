@@ -49,11 +49,18 @@ export const MyInquiriesPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#faf8f5] py-20 px-4 text-center">
         <div className="max-w-md mx-auto bg-white p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+          <div className="w-20 h-20 rounded-full bg-white shadow-md p-1.5 aspect-square flex items-center justify-center mx-auto border border-orange-100">
+            <img
+              src="/logo.svg"
+              alt="TirthYatraTrails.in Logo"
+              className="w-full h-full aspect-square object-contain"
+            />
+          </div>
           <h2 className="text-xl font-bold text-[#0f294a]">Please Sign In</h2>
           <p className="text-xs text-slate-500">Sign in to view your yatra requests and live status.</p>
           <button
             onClick={() => navigate('/login')}
-            className="px-5 py-2.5 bg-[#ea580c] text-white text-xs font-bold rounded-full"
+            className="px-5 py-2.5 bg-[#ea580c] text-white text-xs font-bold rounded-full hover:bg-[#c2410c] transition-all"
           >
             Go to Sign In
           </button>

@@ -56,9 +56,13 @@ export const StaffLoginPage: React.FC = () => {
 
       {/* Top Bar */}
       <header className="max-w-6xl w-full mx-auto flex items-center justify-between z-10">
-        <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate('/')}>
-          <div className="p-2 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400">
-            <ShieldCheck className="w-5 h-5" />
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
+          <div className="w-10 h-10 rounded-full bg-white shadow-md p-0.5 flex items-center justify-center shrink-0 border border-white/30 aspect-square">
+            <img
+              src="/logo.svg"
+              alt="TirthYatraTrails.in Logo"
+              className="w-10 h-10 object-contain"
+            />
           </div>
           <div>
             <span className="font-extrabold text-sm tracking-wide text-white font-serif">
@@ -91,9 +95,13 @@ export const StaffLoginPage: React.FC = () => {
       {/* Main Login Card */}
       <main className="max-w-md w-full mx-auto z-10 my-8">
         <div className="bg-[#0b1d36]/90 border border-slate-700/80 backdrop-blur-xl rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-          <div className="text-center space-y-2">
-            <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-500/30 text-orange-400 mb-1">
-              <Users className="w-7 h-7" />
+          <div className="text-center space-y-3">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-white shadow-2xl p-2.5 flex items-center justify-center mx-auto border border-white/20 aspect-square">
+              <img
+                src="/logo.svg"
+                alt="TirthYatraTrails.in Logo"
+                className="w-full h-full aspect-square object-contain"
+              />
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white font-serif tracking-tight">
               Staff Desk Login

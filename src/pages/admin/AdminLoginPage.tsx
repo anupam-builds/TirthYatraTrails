@@ -33,9 +33,13 @@ export const AdminLoginPage: React.FC = () => {
       <div className="max-w-md w-full bg-[#0d1d33] border border-slate-700/60 rounded-3xl p-8 shadow-2xl relative z-10 space-y-6">
         
         {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-orange-400 mb-2">
-            <ShieldCheck className="w-8 h-8" />
+        <div className="text-center space-y-3">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-white shadow-2xl p-2.5 flex items-center justify-center mx-auto border border-white/20 aspect-square">
+            <img
+              src="/logo.svg"
+              alt="TirthYatraTrails.in Logo"
+              className="w-full h-full aspect-square object-contain"
+            />
           </div>
           <h2 className="text-2xl font-extrabold text-white tracking-tight font-serif">
             Enterprise Admin Portal

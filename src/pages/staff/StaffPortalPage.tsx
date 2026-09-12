@@ -369,8 +369,12 @@ export const StaffPortalPage: React.FC = () => {
       <header className="h-16 bg-white/90 dark:bg-[#0a192f]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 shadow-xs">
         {/* Left branding */}
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white font-serif font-extrabold shadow-xs">
-            <ShieldCheck className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-full bg-white shadow-xs border border-slate-200 dark:border-slate-700 p-0.5 aspect-square flex items-center justify-center shrink-0">
+            <img
+              src="/logo.svg"
+              alt="TirthYatraTrails.in Logo"
+              className="w-10 h-10 object-contain"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">

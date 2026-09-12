@@ -197,9 +197,18 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-orange-400 mb-1">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Instant Travel Desk Coordination</span>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-8 h-8 rounded-full bg-white shadow-xs p-0.5 aspect-square flex items-center justify-center shrink-0">
+              <img
+                src="/logo.svg"
+                alt="TirthYatraTrails.in Logo"
+                className="w-8 h-8 object-contain"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-orange-400">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Instant Travel Desk Coordination</span>
+            </div>
           </div>
 
           <h3 className="text-xl font-extrabold text-white leading-snug">{title}</h3>

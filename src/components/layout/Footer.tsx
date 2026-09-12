@@ -27,13 +27,23 @@ export const CustomerFooter: React.FC = () => {
               <div
                 id="footer-brand-logo"
                 onClick={() => navigate('/')}
-                className="inline-flex items-center cursor-pointer group max-w-[200px]"
+                className="inline-flex items-center gap-3 cursor-pointer group"
               >
-                <img
-                  src="/logo.svg"
-                  alt="TirthYatraTrails.in - Divine Journeys, Memorable Experiences"
-                  className="w-full h-auto object-contain transition-transform group-hover:scale-105"
-                />
+                <div className="w-14 h-14 rounded-full bg-white shadow-md p-1 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 border border-white/20 aspect-square">
+                  <img
+                    src="/logo.svg"
+                    alt="TirthYatraTrails.in Logo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-serif font-extrabold text-base tracking-tight text-white">
+                    Tirth<span className="text-[#ea580c]">Yatra</span>Trails<span className="text-[#ea580c] text-xs font-sans font-bold">.in</span>
+                  </span>
+                  <span className="text-[8px] font-bold tracking-widest text-slate-400 uppercase">
+                    DIVINE JOURNEYS, MEMORABLE EXPERIENCES
+                  </span>
+                </div>
               </div>
               
               <p className="text-gray-300 text-xs leading-relaxed">

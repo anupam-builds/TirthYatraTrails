@@ -58,18 +58,20 @@ export const CustomerNavbar: React.FC = () => {
           <div
             id="nav-brand-logo"
             onClick={() => navigate('/')}
-            className="flex items-center gap-2.5 cursor-pointer group"
+            className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group py-1"
           >
-            <img
-              src="/logo-navy.svg"
-              alt="TirthYatraTrails.in"
-              className="h-10 sm:h-11 w-auto object-contain transition-transform group-hover:scale-105"
-            />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xs border border-slate-200/80 p-0.5 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
+              <img
+                src="/logo.svg"
+                alt="TirthYatraTrails.in Logo"
+                className="w-10 h-10 object-contain"
+              />
+            </div>
             <div className="flex flex-col">
               <span className="font-serif font-extrabold text-base sm:text-lg tracking-tight leading-none text-[#0f294a]">
-                Tirth<span className="text-[#ea580c]">Yatra</span>Trails<span className="text-[#ea580c] text-xs font-sans">.in</span>
+                Tirth<span className="text-[#ea580c]">Yatra</span>Trails<span className="text-[#ea580c] text-xs font-sans font-bold">.in</span>
               </span>
-              <span className="text-[8px] font-bold tracking-widest text-[#0f294a]/75 uppercase hidden sm:block">
+              <span className="text-[8px] font-bold tracking-widest text-[#0f294a]/75 uppercase hidden sm:block mt-0.5">
                 DIVINE JOURNEYS, MEMORABLE EXPERIENCES
               </span>
             </div>
