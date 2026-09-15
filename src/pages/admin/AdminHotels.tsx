@@ -358,10 +358,10 @@ export const AdminHotels: React.FC = () => {
                 <tr>
                   <th className="py-3 px-4">Hotel</th>
                   <th className="py-3 px-4">City</th>
-                  <th className="py-3 px-4">Ratings</th>
-                  <th className="py-3 px-4">Starting Price</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Ratings</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Starting Price</th>
                   <th className="py-3 px-4">Proximity</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -414,13 +414,22 @@ export const AdminHotels: React.FC = () => {
                       <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-slate-300">
                         {hotel.cityName}
                       </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1 text-amber-500 font-bold">
-                          <span>G {hotel.googleRating.toFixed(1)}</span>
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span className="text-slate-400 text-[10px]">({hotel.reviewCount})</span>
+                      <td className="py-3.5 px-4 whitespace-nowrap min-w-[150px]">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap text-slate-900 dark:text-white font-bold">
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-800 text-[#ea580c] dark:text-orange-400 font-black text-[10px] shrink-0 border border-slate-200 dark:border-slate-700 leading-none">
+                              G
+                            </span>
+                            <span className="text-xs font-extrabold">{hotel.googleRating.toFixed(1)}</span>
+                            <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                            <span className="text-slate-400 dark:text-slate-500 text-[11px] font-normal">
+                              ({hotel.reviewCount})
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
+                            {hotel.starRating} Star Stay
+                          </div>
                         </div>
-                        <div className="text-[10px] text-slate-500">{hotel.starRating} Star Stay</div>
                       </td>
                       <td className="py-3.5 px-4 font-extrabold text-slate-900 dark:text-white">
                         ₹{hotel.basePrice.toLocaleString('en-IN')}{' '}
