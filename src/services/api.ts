@@ -355,6 +355,27 @@ export const api = {
     }
   },
 
+  async updateInquiry(id: string, updates: Partial<Inquiry>, asStaff = false): Promise<Inquiry> {
+    try {
+      const endpoint = asStaff ? `${API_BASE}/staff/inquiries/${id}` : `${API_BASE}/admin/inquiries/${id}`;
+      const header = asStaff ? getStaffAuthHeader() : getAdminAuthHeader();
+      return await safeFetch<Inquiry>(
+        endpoint,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...header,
+          },
+          body: JSON.stringify(updates),
+        },
+        'Failed to update inquiry record'
+      );
+    } catch {
+      return localStore.updateInquiry(id, updates);
+    }
+  },
+
   async toggleInquiryStatus(id: string): Promise<Inquiry> {
     try {
       return await safeFetch<Inquiry>(
@@ -383,6 +404,69 @@ export const api = {
       return true;
     } catch {
       return localStore.deleteInquiry(id);
+    }
+  },
+
+  async getDeletedInquiries(): Promise<Inquiry[]> {
+    try {
+      return await safeFetch<Inquiry[]>(
+        `${API_BASE}/admin/inquiries/trash`,
+        { headers: getAdminAuthHeader() },
+        'Failed to fetch deleted inquiries'
+      );
+    } catch {
+      return localStore.getDeletedInquiries();
+    }
+  },
+
+  async restoreInquiry(id: string, staffId?: string, staffName?: string): Promise<Inquiry> {
+    try {
+      return await safeFetch<Inquiry>(
+        `${API_BASE}/admin/inquiries/${id}/restore`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify({ staffId, staffName }),
+        },
+        'Failed to restore inquiry'
+      );
+    } catch {
+      return localStore.restoreInquiry(id, staffId, staffName);
+    }
+  },
+
+  async permanentlyDeleteInquiry(id: string): Promise<boolean> {
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/inquiries/${id}/permanent`,
+        {
+          method: 'DELETE',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to permanently delete inquiry'
+      );
+      return true;
+    } catch {
+      return localStore.permanentlyDeleteInquiry(id);
+    }
+  },
+
+  async emptyTrash(): Promise<boolean> {
+    try {
+      await safeFetch(
+        `${API_BASE}/admin/inquiries/trash/empty`,
+        {
+          method: 'POST',
+          headers: getAdminAuthHeader(),
+        },
+        'Failed to empty trash'
+      );
+      return true;
+    } catch {
+      return localStore.emptyTrash();
     }
   },
 

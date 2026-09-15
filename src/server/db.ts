@@ -586,11 +586,62 @@ class DatabaseStore {
     return true;
   }
 
-  // Inquiries
-  public getInquiries(userId?: string) {
-    let list = [...this.data.inquiries].sort(
+  // Inquiries & CRM Leads
+  public generateLeadId(): string {
+    const existingNumbers = (this.data.inquiries || [])
+      .map((i) => {
+        if (i.leadId) {
+          const cleaned = i.leadId.replace(/^(TTT|TTX)/, '');
+          const num = parseInt(cleaned, 10);
+          return isNaN(num) ? 0 : num;
+        }
+        return 0;
+      })
+      .filter((n) => n > 0);
+
+    const maxNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    const nextNum = maxNum + 1;
+    return `TTT${nextNum.toString().padStart(8, '0')}`;
+  }
+
+  public getInquiries(userId?: string, includeDeleted = false) {
+    let list = [...(this.data.inquiries || [])];
+
+    if (!includeDeleted) {
+      list = list.filter((inq) => !inq.isDeleted);
+    }
+
+    // Ensure all inquiries have a leadId populated with TTT prefix & default assigned staff
+    let modified = false;
+    const defaultStaff = (this.data.staff && this.data.staff.length > 0) ? this.data.staff[0] : null;
+
+    list.forEach((inq, idx) => {
+      // Migrate legacy TTX to TTT
+      if (inq.leadId && inq.leadId.startsWith('TTX')) {
+        inq.leadId = inq.leadId.replace(/^TTX/, 'TTT');
+        modified = true;
+      } else if (!inq.leadId) {
+        const fallbackNum = (idx + 1).toString().padStart(8, '0');
+        inq.leadId = `TTT${fallbackNum}`;
+        modified = true;
+      }
+
+      // Ensure every lead defaults to having an assigned staff member
+      if (!inq.assignedStaffId && defaultStaff) {
+        inq.assignedStaffId = defaultStaff.id;
+        inq.assignedStaffName = defaultStaff.name;
+        modified = true;
+      }
+    });
+
+    if (modified) {
+      this.save();
+    }
+
+    list.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+
     if (userId) {
       list = list.filter((inq) => inq.userId === userId);
     }
@@ -627,9 +678,15 @@ class DatabaseStore {
 
     const adultsCount = Number(inquiryData.adults || inquiryData.guests || 2);
     const totalGuests = adultsCount + childrenCount;
+    const generatedLeadId = inquiryData.leadId || this.generateLeadId();
+
+    const defaultStaff = (this.data.staff && this.data.staff.length > 0) ? this.data.staff[0] : null;
+    const finalStaffId = inquiryData.assignedStaffId || defaultStaff?.id || 'stf-1';
+    const finalStaffName = inquiryData.assignedStaffName || defaultStaff?.name || 'Priya Sharma';
 
     const newInquiry: Inquiry = {
       id: `inq-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      leadId: generatedLeadId,
       userId: inquiryData.userId,
       type: inquiryData.type || 'HOTEL',
       referenceId: inquiryData.referenceId || '',
@@ -641,7 +698,7 @@ class DatabaseStore {
       customerEmail: email,
       whatsappNumber: phone,
       customerPhone: phone,
-      userCity: inquiryData.userCity || '',
+      userCity: inquiryData.userCity || 'New Delhi',
       checkInDate: inquiryData.checkInDate || '',
       guests: totalGuests,
       adults: adultsCount,
@@ -649,11 +706,17 @@ class DatabaseStore {
       childAges: childAgesStr || undefined,
       planChosen: inquiryData.planChosen || inquiryData.selectedPlan || '',
       selectedPlan: inquiryData.selectedPlan || inquiryData.planChosen || '',
+      accommodationTier: inquiryData.accommodationTier || '3 Star Hotel',
       pickupLocation: inquiryData.pickupLocation || '',
       dropoffLocation: inquiryData.dropoffLocation || '',
       specialRequests: inquiryData.specialRequests || '',
-      status: 'NEW',
+      status: inquiryData.status || 'NEW',
       isResolved: false,
+      assignedStaffId: finalStaffId,
+      assignedStaffName: finalStaffName,
+      tags: inquiryData.tags || (inquiryData.type === 'PACKAGE' ? ['Package Yatra'] : ['Hotel Stay']),
+      tourDuration: inquiryData.tourDuration,
+      customerRating: inquiryData.customerRating || 5,
       createdAt: new Date().toISOString(),
     };
     this.data.inquiries.unshift(newInquiry);
@@ -661,40 +724,79 @@ class DatabaseStore {
     return newInquiry;
   }
 
+  public updateInquiry(id: string, updates: Partial<Inquiry>) {
+    const index = this.data.inquiries.findIndex((i) => i.id === id);
+    if (index === -1) throw new Error('Inquiry not found');
+
+    const current = this.data.inquiries[index];
+    const newStatus = updates.status || current.status;
+    const isResolved = newStatus === 'CONFIRMED' || newStatus === 'WON' || newStatus === 'CLOSED';
+
+    const merged: Inquiry = {
+      ...current,
+      ...updates,
+      id: current.id,
+      leadId: current.leadId || updates.leadId || this.generateLeadId(),
+      status: newStatus,
+      isResolved,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (newStatus === 'CLOSED') {
+      merged.isLockedForStaff = true;
+      if (!merged.closedAt) merged.closedAt = new Date().toISOString();
+    } else if (updates.isLockedForStaff === false) {
+      merged.isLockedForStaff = false;
+    }
+
+    this.data.inquiries[index] = merged;
+    this.save();
+    return merged;
+  }
+
   public updateInquiryStatus(id: string, status: Inquiry['status']) {
     const index = this.data.inquiries.findIndex((i) => i.id === id);
     if (index === -1) throw new Error('Inquiry not found');
     this.data.inquiries[index].status = status;
-    this.data.inquiries[index].isResolved = status === 'CONFIRMED' || status === 'CLOSED';
+    this.data.inquiries[index].isResolved = status === 'CONFIRMED' || status === 'WON' || status === 'CLOSED';
     if (status !== 'CLOSED') {
       this.data.inquiries[index].isLockedForStaff = false;
+    } else {
+      this.data.inquiries[index].isLockedForStaff = true;
+      this.data.inquiries[index].closedAt = new Date().toISOString();
     }
+    this.data.inquiries[index].updatedAt = new Date().toISOString();
     this.save();
     return this.data.inquiries[index];
   }
 
   public updateInquiryStatusByStaff(
     id: string,
-    status: 'CONTACTED' | 'CLOSED',
+    status: Inquiry['status'],
     staff: { id: string; name: string }
   ) {
     const index = this.data.inquiries.findIndex((i) => i.id === id);
     if (index === -1) throw new Error('Inquiry not found');
 
     const inq = this.data.inquiries[index];
-    if (inq.isLockedForStaff || inq.status === 'CLOSED') {
+    if (inq.isLockedForStaff && inq.status === 'CLOSED') {
       throw new Error('This inquiry is permanently locked. Only an Administrator can reopen closed leads.');
     }
 
+    inq.status = status;
+    inq.updatedAt = new Date().toISOString();
+
     if (status === 'CLOSED') {
-      inq.status = 'CLOSED';
       inq.isResolved = true;
       inq.isLockedForStaff = true;
       inq.closedAt = new Date().toISOString();
       inq.closedBy = `${staff.name} (Staff)`;
+    } else if (status === 'WON' || status === 'CONFIRMED') {
+      inq.isResolved = true;
+      inq.isLockedForStaff = false;
     } else {
-      inq.status = 'CONTACTED';
       inq.isResolved = false;
+      inq.isLockedForStaff = false;
     }
 
     if (!inq.assignedStaffId) {
@@ -707,7 +809,7 @@ class DatabaseStore {
     if (staffIndex !== -1 && this.data.staff) {
       this.data.staff[staffIndex].lastActiveAt = new Date().toISOString();
       this.data.staff[staffIndex].isCurrentlyLoggedIn = true;
-      if (status === 'CLOSED') {
+      if (status === 'CLOSED' || status === 'WON') {
         this.data.staff[staffIndex].closedCount = (this.data.staff[staffIndex].closedCount || 0) + 1;
       } else {
         this.data.staff[staffIndex].contactedCount = (this.data.staff[staffIndex].contactedCount || 0) + 1;
@@ -719,7 +821,7 @@ class DatabaseStore {
       staffName: staff.name,
       staffEmail: staffIndex !== -1 && this.data.staff ? this.data.staff[staffIndex].email : '',
       action: 'STATUS_UPDATE',
-      description: `Marked inquiry #${inq.id.slice(-4)} (${inq.title}) as ${status}`,
+      description: `Marked lead ${inq.leadId || inq.id.slice(-4)} (${inq.title}) as ${status}`,
       inquiryId: inq.id,
       details: `Devotee: ${inq.fullName || inq.customerName}, Contact: ${inq.whatsappNumber || inq.customerPhone}`,
     });
@@ -1107,10 +1209,54 @@ class DatabaseStore {
     return this.data.inquiries[index];
   }
 
+  public getDeletedInquiries() {
+    return (this.data.inquiries || [])
+      .filter((i) => i.isDeleted === true)
+      .sort(
+        (a, b) =>
+          new Date(b.deletedAt || b.createdAt).getTime() -
+          new Date(a.deletedAt || a.createdAt).getTime()
+      );
+  }
+
   public deleteInquiry(id: string) {
     const index = this.data.inquiries.findIndex((i) => i.id === id);
     if (index === -1) throw new Error('Inquiry not found');
-    this.data.inquiries.splice(index, 1);
+    this.data.inquiries[index].isDeleted = true;
+    this.data.inquiries[index].deletedAt = new Date().toISOString();
+    this.data.inquiries[index].deletedBy = 'Administrator';
+    this.save();
+    return this.data.inquiries[index];
+  }
+
+  public restoreInquiry(id: string, staffId?: string, staffName?: string) {
+    const index = this.data.inquiries.findIndex((i) => i.id === id);
+    if (index === -1) throw new Error('Inquiry not found');
+    const inq = this.data.inquiries[index];
+    inq.isDeleted = false;
+    inq.deletedAt = undefined;
+    inq.deletedBy = undefined;
+    if (staffId) {
+      inq.assignedStaffId = staffId;
+      inq.assignedStaffName =
+        staffName ||
+        (this.data.staff?.find((s) => s.id === staffId)?.name || 'Staff Member');
+    }
+    this.save();
+    return inq;
+  }
+
+  public permanentlyDeleteInquiry(id: string) {
+    const index = this.data.inquiries.findIndex((i) => i.id === id);
+    if (index !== -1) {
+      this.data.inquiries.splice(index, 1);
+      this.save();
+    }
+    return true;
+  }
+
+  public emptyTrash() {
+    this.data.inquiries = (this.data.inquiries || []).filter((i) => !i.isDeleted);
     this.save();
     return true;
   }

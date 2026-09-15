@@ -171,8 +171,20 @@ export interface Package {
   itinerary?: PackageItineraryItem[];
 }
 
+export type InquiryStatus =
+  | 'NEW'
+  | 'IN_PROGRESS'
+  | 'QUOTATION_SENT'
+  | 'ONLY_QUERY'
+  | 'CONTACTED'
+  | 'CONFIRMED'
+  | 'WON'
+  | 'LOST'
+  | 'CLOSED';
+
 export interface Inquiry {
   id: string;
+  leadId?: string; // Unique alphanumeric Lead ID (e.g. "TTT00000001")
   userId?: string;
   type: 'HOTEL' | 'PACKAGE';
   referenceId: string;
@@ -192,19 +204,27 @@ export interface Inquiry {
   childAges?: string | number[];
   planChosen?: string;
   selectedPlan?: string;
+  accommodationTier?: string; // e.g. "3 Star Hotel", "4 Star Deluxe", "5 Star Luxury"
   pickupLocation?: string;
   dropoffLocation?: string;
   specialRequests?: string;
-  status: 'NEW' | 'CONTACTED' | 'CONFIRMED' | 'CLOSED';
+  status: InquiryStatus;
   isResolved: boolean;
   assignedStaffId?: string;
   assignedStaffName?: string;
   isLockedForStaff?: boolean;
   closedAt?: string;
   closedBy?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
   notes?: string;
   followUpNotes?: InquiryNote[];
+  customerRating?: number;
+  tags?: string[];
+  tourDuration?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface AuthResponse {

@@ -3,7 +3,9 @@ import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
 import { api, generateWhatsAppLink } from '../../services/api.js';
-import { Inquiry, StaffMember } from '../../types.js';
+import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
+import { LeadTableView } from '../../components/crm/LeadTableView.js';
+import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
 import {
   getNotificationSettings,
   saveNotificationSettings,
@@ -61,6 +63,8 @@ export const StaffPortalPage: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [selectedInquiryForEdit, setSelectedInquiryForEdit] = useState<Inquiry | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [assignedFilter, setAssignedFilter] = useState<'MY' | 'UNASSIGNED' | 'ALL'>('MY');
@@ -155,6 +159,7 @@ export const StaffPortalPage: React.FC = () => {
   // Subscribe to real-time leads
   useEffect(() => {
     loadInquiries();
+    loadStaff();
 
     const unsub = subscribeToNewInquiries((newInquiry) => {
       setInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)]);
@@ -170,6 +175,15 @@ export const StaffPortalPage: React.FC = () => {
       unsub();
     };
   }, []);
+
+  async function loadStaff() {
+    try {
+      const list = await api.getStaffMembers();
+      setStaffList(list);
+    } catch (err) {
+      console.error('Failed loading staff members:', err);
+    }
+  }
 
   async function loadInquiries() {
     setLoading(true);
@@ -192,11 +206,11 @@ export const StaffPortalPage: React.FC = () => {
     }
   }
 
-  // Handle staff status update (Restricted to CONTACTED or CLOSED)
-  const handleStaffStatusChange = async (inquiry: Inquiry, newStatus: 'CONTACTED' | 'CLOSED') => {
+  // Handle staff status update
+  const handleUpdateStatus = async (id: string, newStatus: InquiryStatus) => {
     if (!staffUser) return;
-
-    if (inquiry.isLockedForStaff || inquiry.status === 'CLOSED') {
+    const inquiry = inquiries.find((i) => i.id === id);
+    if (inquiry && (inquiry.isLockedForStaff || inquiry.status === 'CLOSED')) {
       alert('This inquiry is CLOSED and locked for staff. Only an Administrator can reopen it.');
       return;
     }
@@ -209,12 +223,11 @@ export const StaffPortalPage: React.FC = () => {
     }
 
     try {
-      const updated = await api.updateInquiryStatusByStaff(inquiry.id, newStatus, {
-        id: staffUser.id,
-        name: staffUser.name,
-      });
-
-      setInquiries((prev) => prev.map((i) => (i.id === inquiry.id ? updated : i)));
+      const updated = await api.updateInquiry(id, { status: newStatus }, true);
+      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      if (selectedInquiryForEdit && selectedInquiryForEdit.id === id) {
+        setSelectedInquiryForEdit(updated);
+      }
     } catch (err: any) {
       if (err.message && (err.message.includes('Blocked') || err.message.includes('revoked'))) {
         setBlockedAlertMessage(err.message);
@@ -226,6 +239,35 @@ export const StaffPortalPage: React.FC = () => {
       }
       alert(err.message || 'Failed to update status');
     }
+  };
+
+  const handleAssignStaff = async (inquiryId: string, staffId: string) => {
+    try {
+      const selected = staffList.find((s) => s.id === staffId);
+      const staffName = selected ? selected.name : '';
+      const updated = await api.assignInquiryStaff(inquiryId, staffId, staffName);
+      setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
+      if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
+        setSelectedInquiryForEdit(updated);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed assigning staff');
+    }
+  };
+
+  const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
+    try {
+      const updated = await api.updateInquiry(id, updates, true);
+      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      setSelectedInquiryForEdit(null);
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to update lead');
+    }
+  };
+
+  // Handle staff status update (Restricted to CONTACTED or CLOSED)
+  const handleStaffStatusChange = async (inquiry: Inquiry, newStatus: 'CONTACTED' | 'CLOSED') => {
+    await handleUpdateStatus(inquiry.id, newStatus);
   };
 
   // Handle adding follow-up note
@@ -894,417 +936,34 @@ export const StaffPortalPage: React.FC = () => {
               </div>
             </div>
 
-        {/* Stats Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 p-4 rounded-2xl shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Assigned To Me
-            </p>
-            <p className="text-2xl font-black text-orange-600 dark:text-orange-400 mt-1">
-              {myAssignedCount}
-            </p>
-          </div>
+            {/* Comprehensive Lead Table & CRM Dashboard */}
+            <LeadTableView
+              inquiries={inquiries}
+              staffList={staffList}
+              loading={loading}
+              isAdmin={false}
+              isStaffMode={true}
+              currentStaffId={staffUser.id}
+              onUpdateStatus={handleUpdateStatus}
+              onAssignStaff={handleAssignStaff}
+              onEditInquiry={(inq) => setSelectedInquiryForEdit(inq)}
+              onAddNote={handleAddNote}
+            />
 
-          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 p-4 rounded-2xl shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Unassigned Leads
-            </p>
-            <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
-              {unassignedCount}
-            </p>
-          </div>
+            {/* Detailed Lead Edit Modal */}
+            <LeadEditModal
+              inquiry={selectedInquiryForEdit}
+              isOpen={Boolean(selectedInquiryForEdit)}
+              onClose={() => setSelectedInquiryForEdit(null)}
+              onSave={handleSaveInquiryUpdates}
+              staffList={staffList}
+              isStaffMode={true}
+              currentStaffName={staffUser.name}
+              onAddNote={handleAddNote}
+            />
 
-          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 p-4 rounded-2xl shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              My Contacted Leads
-            </p>
-            <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
-              {myContactedCount}
-            </p>
-          </div>
 
-          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 p-4 rounded-2xl shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              My Closed Leads
-            </p>
-            <p className="text-2xl font-black text-slate-700 dark:text-slate-300 mt-1">
-              {myClosedCount}
-            </p>
-          </div>
-        </div>
 
-        {/* Lead Assignment Tabs & Filters */}
-        <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
-          {/* Assignment Tabs */}
-          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-[#081220] p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setAssignedFilter('MY')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                assignedFilter === 'MY'
-                  ? 'bg-orange-600 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              My Assigned Leads ({myAssignedCount})
-            </button>
-
-            <button
-              onClick={() => setAssignedFilter('UNASSIGNED')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                assignedFilter === 'UNASSIGNED'
-                  ? 'bg-orange-600 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              Unassigned / New ({unassignedCount})
-            </button>
-
-            <button
-              onClick={() => setAssignedFilter('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                assignedFilter === 'ALL'
-                  ? 'bg-orange-600 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              All Travel Leads ({inquiries.length})
-            </button>
-          </div>
-
-          {/* Status filter chips & Search */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1">
-              {['ALL', 'NEW', 'CONTACTED', 'CLOSED'].map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
-                    statusFilter === st
-                      ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
-                      : 'bg-transparent text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search pilgrim name, phone, email..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 w-56 sm:w-64"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Inquiries Feed (matching admin lead card format) */}
-        {loading ? (
-          <div className="space-y-4 animate-pulse">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-40 bg-slate-200 dark:bg-slate-800/50 rounded-3xl" />
-            ))}
-          </div>
-        ) : filteredInquiries.length === 0 ? (
-          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 p-12 rounded-3xl text-center space-y-3 shadow-xs">
-            <MessageSquare className="w-10 h-10 text-slate-400 dark:text-slate-600 mx-auto" />
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">No inquiries found</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {searchQuery
-                ? 'Try clearing your search query.'
-                : assignedFilter === 'MY'
-                ? 'You do not have any inquiries assigned yet. Switch to "Unassigned / New" or "All Travel Leads".'
-                : 'All pilgrim inquiries have been addressed.'}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredInquiries.map((inq) => {
-              const waLink = generateWhatsAppLink({
-                title: inq.title,
-                type: inq.type,
-                name: inq.customerName,
-                checkIn: inq.checkInDate,
-                adults: inq.adults,
-                children: inq.children,
-                plan: inq.selectedPlan,
-                notes: inq.specialRequests,
-              });
-
-              const isLocked = inq.isLockedForStaff || inq.status === 'CLOSED';
-              const isNotesOpen = expandedNotes[inq.id] || false;
-              const notesCount = inq.followUpNotes?.length || 0;
-
-              return (
-                <div
-                  key={inq.id}
-                  className={`bg-white dark:bg-[#0d1d33] border rounded-3xl p-5 transition-all shadow-xs space-y-4 ${
-                    isLocked
-                      ? 'border-slate-300 dark:border-slate-700/80 bg-slate-50/50 dark:bg-[#0a172a]'
-                      : 'border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
-                  }`}
-                >
-                  {/* Top row: Date, Status Badges & Assigned Staff */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Status badge */}
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                          inq.status === 'NEW'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800'
-                            : inq.status === 'CONTACTED'
-                            ? 'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800'
-                            : inq.status === 'CONFIRMED'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800'
-                            : 'bg-slate-200 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                        }`}
-                      >
-                        {inq.status}
-                      </span>
-
-                      {/* Locked for staff indicator */}
-                      {isLocked && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-800 border border-red-300 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800">
-                          <Lock className="w-3 h-3 text-red-600 dark:text-red-400" />
-                          <span>Closed &amp; Locked for Staff</span>
-                        </span>
-                      )}
-
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Received: {new Date(inq.createdAt).toLocaleString('en-IN')}
-                      </span>
-                    </div>
-
-                    {/* Assigned staff tag */}
-                    <div className="text-[11px] flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                      <span>Assigned Staff:</span>
-                      {inq.assignedStaffName ? (
-                        <span className="font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/60 border border-orange-200 dark:border-orange-800 px-2 py-0.5 rounded-md">
-                          {inq.assignedStaffName}
-                        </span>
-                      ) : (
-                        <span className="font-semibold text-slate-400 dark:text-slate-500 italic">
-                          Unassigned
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Middle row: Pilgrim Details & Inquiry Details */}
-                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-                    {/* Left: Pilgrim and travel details */}
-                    <div className="space-y-2 flex-1">
-                      <div className="flex flex-col sm:flex-row sm:items-baseline gap-2">
-                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                          {inq.customerName}
-                        </h3>
-                        <span className="text-xs text-orange-600 dark:text-orange-400 font-semibold">
-                          Inquiry For: {inq.title} ({inq.type})
-                        </span>
-                      </div>
-
-                      {/* Contacts & Dates */}
-                      <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-300 pt-1">
-                        <div className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" />
-                          <a
-                            href={`tel:${inq.customerPhone}`}
-                            className="font-mono text-slate-900 dark:text-white font-bold hover:underline"
-                          >
-                            {inq.customerPhone}
-                          </a>
-                        </div>
-
-                        {inq.customerEmail && (
-                          <div className="flex items-center gap-1.5">
-                            <Mail className="w-3.5 h-3.5 text-slate-400" />
-                            <a
-                              href={`mailto:${inq.customerEmail}`}
-                              className="text-slate-600 dark:text-slate-300 hover:underline"
-                            >
-                              {inq.customerEmail}
-                            </a>
-                          </div>
-                        )}
-
-                        {inq.checkInDate && (
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
-                            <span>Yatra Date: {inq.checkInDate}</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-slate-400" />
-                          <span>
-                            {inq.adults || inq.guests || 2} Adults
-                            {inq.children ? `, ${inq.children} Children` : ''}
-                          </span>
-                        </div>
-                      </div>
-
-                      {inq.selectedPlan && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          <span className="text-slate-600 dark:text-slate-400 font-bold">Selected Plan:</span>{' '}
-                          {inq.selectedPlan}
-                        </div>
-                      )}
-
-                      {(inq.pickupLocation || inq.dropoffLocation) && (
-                        <div className="flex flex-wrap items-center gap-3 py-1 px-3 bg-slate-50 dark:bg-[#081220] rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
-                          {inq.pickupLocation && (
-                            <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                              <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                              <span className="text-slate-500 dark:text-slate-400 font-medium">Pickup:</span>
-                              <span className="font-semibold text-slate-900 dark:text-white">{inq.pickupLocation}</span>
-                            </div>
-                          )}
-                          {inq.pickupLocation && inq.dropoffLocation && (
-                            <span className="text-slate-400 dark:text-slate-600">→</span>
-                          )}
-                          {inq.dropoffLocation && (
-                            <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                              <MapPin className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
-                              <span className="text-slate-500 dark:text-slate-400 font-medium">Drop-off:</span>
-                              <span className="font-semibold text-slate-900 dark:text-white">{inq.dropoffLocation}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {inq.specialRequests && (
-                        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
-                          <span className="font-bold text-orange-600 dark:text-orange-400">Special Notes:</span>{' '}
-                          {inq.specialRequests}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right: Staff Status Dropdown & WhatsApp Action */}
-                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                      {/* RESTRICTED STATUS WORKFLOW RULES */}
-                      {isLocked ? (
-                        <div
-                          className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 cursor-not-allowed"
-                          title="Closed & Locked for Staff. Only an Admin can reopen this inquiry."
-                        >
-                          <Lock className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-bold">Status: CLOSED (Locked)</span>
-                        </div>
-                      ) : (
-                        <select
-                          value={inq.status === 'CLOSED' ? 'CLOSED' : 'CONTACTED'}
-                          onChange={(e) => handleStaffStatusChange(inq, e.target.value as 'CONTACTED' | 'CLOSED')}
-                          className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white rounded-xl px-3 py-2 font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-                        >
-                          <option value="CONTACTED">Mark as: CONTACTED</option>
-                          <option value="CLOSED">Mark as: CLOSED (Lock Lead)</option>
-                        </select>
-                      )}
-
-                      {/* QUICK WHATSAPP BUTTON with pre-filled greeting */}
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
-                        title="Chat with devotee on WhatsApp"
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                        <span>WhatsApp Devotee</span>
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Follow-up Notes Toggle & Thread */}
-                  <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3">
-                    <button
-                      onClick={() =>
-                        setExpandedNotes((prev) => ({ ...prev, [inq.id]: !prev[inq.id] }))
-                      }
-                      className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5 text-orange-500" />
-                      <span>Follow-up Notes &amp; Action History ({notesCount})</span>
-                      {isNotesOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </button>
-
-                    {isNotesOpen && (
-                      <div className="mt-3 space-y-3 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl animate-in fade-in duration-150">
-                        {/* Note history */}
-                        {inq.followUpNotes && inq.followUpNotes.length > 0 ? (
-                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                            {inq.followUpNotes.map((note) => (
-                              <div
-                                key={note.id}
-                                className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/60 p-2.5 rounded-xl text-xs space-y-1"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-bold text-slate-900 dark:text-white">
-                                      {note.authorName}
-                                    </span>
-                                    <span
-                                      className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
-                                        note.authorRole === 'ADMIN'
-                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                                      }`}
-                                    >
-                                      {note.authorRole}
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] text-slate-400">
-                                    {new Date(note.createdAt).toLocaleString('en-IN')}
-                                  </span>
-                                </div>
-                                <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-                                  {note.text}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-400 italic">No notes recorded yet. Add the first follow-up note below.</p>
-                        )}
-
-                        {/* Add Note Input */}
-                        <div className="flex items-center gap-2 pt-1">
-                          <input
-                            type="text"
-                            placeholder="Add follow-up update (e.g., 'Called customer, sending package itinerary on WhatsApp')..."
-                            value={noteInputs[inq.id] || ''}
-                            onChange={(e) =>
-                              setNoteInputs((prev) => ({ ...prev, [inq.id]: e.target.value }))
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddNote(inq.id);
-                              }
-                            }}
-                            className="flex-1 px-3 py-2 bg-white dark:bg-[#0d1d33] border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          />
-                          <button
-                            onClick={() => handleAddNote(inq.id)}
-                            disabled={submittingNote[inq.id] || !(noteInputs[inq.id] || '').trim()}
-                            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>Post</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
           </>
         )}
       </main>

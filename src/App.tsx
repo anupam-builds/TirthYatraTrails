@@ -59,7 +59,7 @@ const AppContent: React.FC = () => {
     if (cleanPath === '/admin/packages') {
       return <AdminPackages />;
     }
-    if (cleanPath === '/admin/inquiries') {
+    if (cleanPath === '/admin/inquiries' || cleanPath === '/admin/leads') {
       return <AdminInquiries />;
     }
     if (cleanPath === '/admin/staff') {

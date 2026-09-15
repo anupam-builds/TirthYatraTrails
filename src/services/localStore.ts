@@ -346,12 +346,41 @@ export const localStore = {
   },
 
   // Inquiries
-  getInquiries(userId?: string): Inquiry[] {
+  getInquiries(userId?: string, includeDeleted = false): Inquiry[] {
     let list = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
     if (list.length === 0) {
       list = [...INITIAL_INQUIRIES];
       setStored(STORAGE_KEYS.INQUIRIES, list);
     }
+
+    const defaultStaff = this.getStaffMembers()[0];
+
+    // Ensure all inquiries have a TTT leadId and assigned staff
+    let modified = false;
+    list.forEach((inq, idx) => {
+      if (inq.leadId && inq.leadId.startsWith('TTX')) {
+        inq.leadId = inq.leadId.replace(/^TTX/, 'TTT');
+        modified = true;
+      } else if (!inq.leadId) {
+        const num = (idx + 1).toString().padStart(8, '0');
+        inq.leadId = `TTT${num}`;
+        modified = true;
+      }
+
+      if (!inq.assignedStaffId && defaultStaff) {
+        inq.assignedStaffId = defaultStaff.id;
+        inq.assignedStaffName = defaultStaff.name;
+        modified = true;
+      }
+    });
+    if (modified) {
+      setStored(STORAGE_KEYS.INQUIRIES, list);
+    }
+
+    if (!includeDeleted) {
+      list = list.filter((i) => !i.isDeleted);
+    }
+
     list = [...list].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -361,15 +390,44 @@ export const localStore = {
     return list;
   },
 
+  getDeletedInquiries(): Inquiry[] {
+    const list = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
+    return list
+      .filter((i) => i.isDeleted === true)
+      .sort(
+        (a, b) =>
+          new Date(b.deletedAt || b.createdAt).getTime() -
+          new Date(a.deletedAt || a.createdAt).getTime()
+      );
+  },
+
   submitInquiry(inquiryData: Partial<Inquiry>): Inquiry {
-    const inquiries = this.getInquiries();
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
     const fullName = inquiryData.fullName || inquiryData.customerName || 'Devotee';
     const email = inquiryData.email || inquiryData.customerEmail || '';
     const phone = inquiryData.whatsappNumber || inquiryData.customerPhone || '';
     const title = inquiryData.referenceName || inquiryData.title || 'Divine Yatra Stay';
 
+    const existingNums = inquiries
+      .map((i) => {
+        if (i.leadId) {
+          const cleaned = i.leadId.replace(/^(TTT|TTX)/, '');
+          const num = parseInt(cleaned, 10);
+          return isNaN(num) ? 0 : num;
+        }
+        return 0;
+      })
+      .filter((n) => n > 0);
+    const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : 0;
+    const nextLeadId = inquiryData.leadId || `TTT${(maxNum + 1).toString().padStart(8, '0')}`;
+
+    const defaultStaff = this.getStaffMembers()[0];
+    const assignedStaffId = inquiryData.assignedStaffId || defaultStaff?.id || 'stf-1';
+    const assignedStaffName = inquiryData.assignedStaffName || defaultStaff?.name || 'Priya Sharma';
+
     const newInquiry: Inquiry = {
       id: `inq-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      leadId: nextLeadId,
       userId: inquiryData.userId,
       type: inquiryData.type || 'HOTEL',
       referenceId: inquiryData.referenceId || '',
@@ -381,7 +439,7 @@ export const localStore = {
       customerEmail: email,
       whatsappNumber: phone,
       customerPhone: phone,
-      userCity: inquiryData.userCity || '',
+      userCity: inquiryData.userCity || 'New Delhi',
       checkInDate: inquiryData.checkInDate || '',
       guests: Number(inquiryData.guests) || 2,
       adults: Number(inquiryData.adults) || 2,
@@ -389,11 +447,17 @@ export const localStore = {
       childAges: inquiryData.childAges ? String(inquiryData.childAges) : undefined,
       planChosen: inquiryData.planChosen || inquiryData.selectedPlan || '',
       selectedPlan: inquiryData.selectedPlan || inquiryData.planChosen || '',
+      accommodationTier: inquiryData.accommodationTier || '3 Star Hotel',
       pickupLocation: inquiryData.pickupLocation || '',
       dropoffLocation: inquiryData.dropoffLocation || '',
       specialRequests: inquiryData.specialRequests || '',
-      status: 'NEW',
+      status: inquiryData.status || 'NEW',
       isResolved: false,
+      assignedStaffId,
+      assignedStaffName,
+      tags: inquiryData.tags || (inquiryData.type === 'PACKAGE' ? ['Package Tour'] : ['Hotel Stay']),
+      tourDuration: inquiryData.tourDuration,
+      customerRating: inquiryData.customerRating || 5,
       createdAt: new Date().toISOString(),
     };
     inquiries.unshift(newInquiry);
@@ -401,22 +465,60 @@ export const localStore = {
     return newInquiry;
   },
 
+  updateInquiry(id: string, updates: Partial<Inquiry>): Inquiry {
+    const inquiries = this.getInquiries();
+    const idx = inquiries.findIndex((i) => i.id === id);
+    if (idx === -1) throw new Error('Inquiry not found');
+
+    const current = inquiries[idx];
+    const newStatus = updates.status || current.status;
+    const isResolved = newStatus === 'CONFIRMED' || newStatus === 'WON' || newStatus === 'CLOSED';
+
+    const rawLeadId = current.leadId || updates.leadId || `TTT${(idx + 1).toString().padStart(8, '0')}`;
+    const cleanLeadId = rawLeadId.startsWith('TTX') ? rawLeadId.replace(/^TTX/, 'TTT') : rawLeadId;
+
+    const merged: Inquiry = {
+      ...current,
+      ...updates,
+      id: current.id,
+      leadId: cleanLeadId,
+      status: newStatus,
+      isResolved,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (newStatus === 'CLOSED') {
+      merged.isLockedForStaff = true;
+      if (!merged.closedAt) merged.closedAt = new Date().toISOString();
+    } else if (updates.isLockedForStaff === false) {
+      merged.isLockedForStaff = false;
+    }
+
+    inquiries[idx] = merged;
+    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    return merged;
+  },
+
   updateInquiryStatus(id: string, status: Inquiry['status']): Inquiry {
     const inquiries = this.getInquiries();
     const idx = inquiries.findIndex((i) => i.id === id);
     if (idx === -1) throw new Error('Inquiry not found');
     inquiries[idx].status = status;
-    inquiries[idx].isResolved = status === 'CONFIRMED' || status === 'CLOSED';
+    inquiries[idx].isResolved = status === 'CONFIRMED' || status === 'WON' || status === 'CLOSED';
     if (status !== 'CLOSED') {
       inquiries[idx].isLockedForStaff = false;
+    } else {
+      inquiries[idx].isLockedForStaff = true;
+      inquiries[idx].closedAt = new Date().toISOString();
     }
+    inquiries[idx].updatedAt = new Date().toISOString();
     setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     return inquiries[idx];
   },
 
   updateInquiryStatusByStaff(
     id: string,
-    status: 'CONTACTED' | 'CLOSED',
+    status: Inquiry['status'],
     staff: { id: string; name: string }
   ): Inquiry {
     const inquiries = this.getInquiries();
@@ -424,19 +526,24 @@ export const localStore = {
     if (idx === -1) throw new Error('Inquiry not found');
 
     const inq = inquiries[idx];
-    if (inq.isLockedForStaff || inq.status === 'CLOSED') {
+    if (inq.isLockedForStaff && inq.status === 'CLOSED') {
       throw new Error('This inquiry is permanently locked. Only an Administrator can reopen closed leads.');
     }
 
+    inquiries[idx].status = status;
+    inquiries[idx].updatedAt = new Date().toISOString();
+
     if (status === 'CLOSED') {
-      inquiries[idx].status = 'CLOSED';
       inquiries[idx].isResolved = true;
       inquiries[idx].isLockedForStaff = true;
       inquiries[idx].closedAt = new Date().toISOString();
       inquiries[idx].closedBy = `${staff.name} (Staff)`;
+    } else if (status === 'WON' || status === 'CONFIRMED') {
+      inquiries[idx].isResolved = true;
+      inquiries[idx].isLockedForStaff = false;
     } else {
-      inquiries[idx].status = 'CONTACTED';
       inquiries[idx].isResolved = false;
+      inquiries[idx].isLockedForStaff = false;
     }
 
     if (!inquiries[idx].assignedStaffId) {
@@ -513,7 +620,42 @@ export const localStore = {
   },
 
   deleteInquiry(id: string): boolean {
-    const inquiries = this.getInquiries().filter((i) => i.id !== id);
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
+    const idx = inquiries.findIndex((i) => i.id === id);
+    if (idx !== -1) {
+      inquiries[idx].isDeleted = true;
+      inquiries[idx].deletedAt = new Date().toISOString();
+      inquiries[idx].deletedBy = 'Administrator';
+      setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    }
+    return true;
+  },
+
+  restoreInquiry(id: string, staffId?: string, staffName?: string): Inquiry {
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
+    const idx = inquiries.findIndex((i) => i.id === id);
+    if (idx === -1) throw new Error('Inquiry not found');
+
+    const inq = inquiries[idx];
+    inq.isDeleted = false;
+    inq.deletedAt = undefined;
+    inq.deletedBy = undefined;
+    if (staffId) {
+      inq.assignedStaffId = staffId;
+      inq.assignedStaffName = staffName || (this.getStaffMembers().find((s) => s.id === staffId)?.name || 'Staff');
+    }
+    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    return inq;
+  },
+
+  permanentlyDeleteInquiry(id: string): boolean {
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []).filter((i) => i.id !== id);
+    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    return true;
+  },
+
+  emptyTrash(): boolean {
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []).filter((i) => !i.isDeleted);
     setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     return true;
   },

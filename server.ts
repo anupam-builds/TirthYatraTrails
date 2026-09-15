@@ -595,6 +595,26 @@ async function startServer() {
     }
   });
 
+  // Comprehensive update for inquiry/lead fields (Admin)
+  app.put('/api/admin/inquiries/:id', verifyAdminToken, (req, res) => {
+    try {
+      const updated = db.updateInquiry(req.params.id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Comprehensive update for inquiry/lead fields (Staff)
+  app.put('/api/staff/inquiries/:id', verifyStaffToken, (req, res) => {
+    try {
+      const updated = db.updateInquiry(req.params.id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.patch('/api/admin/inquiries/:id/status', verifyAdminToken, (req, res) => {
     try {
       const updated = db.toggleInquiryStatus(req.params.id);
@@ -607,6 +627,46 @@ async function startServer() {
   app.delete('/api/admin/inquiries/:id', verifyAdminToken, (req, res) => {
     try {
       db.deleteInquiry(req.params.id);
+      res.json({ success: true, message: 'Inquiry moved to Recently Deleted / Trash Bin' });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Admin Trash / Recently Deleted Leads
+  app.get('/api/admin/inquiries/trash', verifyAdminToken, (req, res) => {
+    try {
+      res.json(db.getDeletedInquiries());
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Restore deleted inquiry (with optional staff reassignment)
+  app.post('/api/admin/inquiries/:id/restore', verifyAdminToken, (req, res) => {
+    try {
+      const { staffId, staffName } = req.body || {};
+      const restored = db.restoreInquiry(req.params.id, staffId, staffName);
+      res.json(restored);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Permanently delete inquiry from trash
+  app.delete('/api/admin/inquiries/:id/permanent', verifyAdminToken, (req, res) => {
+    try {
+      db.permanentlyDeleteInquiry(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Empty all inquiries in trash
+  app.post('/api/admin/inquiries/trash/empty', verifyAdminToken, (req, res) => {
+    try {
+      db.emptyTrash();
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });

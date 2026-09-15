@@ -1,46 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api, generateWhatsAppLink } from '../../services/api.js';
-import { Inquiry, StaffMember } from '../../types.js';
+import { api } from '../../services/api.js';
+import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { LeadTableView } from '../../components/crm/LeadTableView.js';
+import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
+import { getLeadId, formatCrmTimestamp } from '../../utils/crmUtils.js';
 import {
   MessageSquare,
+  RefreshCw,
+  Trash2,
+  RotateCcw,
+  UserCheck,
   Search,
+  Check,
+  Copy,
   Phone,
   Mail,
-  Calendar,
-  Users,
-  MessageCircle,
-  Trash2,
-  CheckCircle2,
-  Clock,
-  Filter,
   MapPin,
-  Lock,
-  Unlock,
-  UserCheck,
-  ChevronDown,
-  ChevronUp,
-  Send,
+  AlertCircle,
+  Clock,
+  Archive,
 } from 'lucide-react';
 
 export const AdminInquiries: React.FC = () => {
   const { adminUser } = useAuth();
+  const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [deletedInquiries, setDeletedInquiries] = useState<Inquiry[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedInquiryForEdit, setSelectedInquiryForEdit] = useState<Inquiry | null>(null);
 
-  // Follow-up notes state
-  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
-  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
-  const [submittingNote, setSubmittingNote] = useState<Record<string, boolean>>({});
+  // Trash UI states
+  const [trashSearchQuery, setTrashSearchQuery] = useState('');
+  const [selectedRestoreStaff, setSelectedRestoreStaff] = useState<Record<string, string>>({});
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'info'; text: string } | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadInquiries();
     loadStaff();
+    loadDeletedInquiries();
 
     // Auto prepend new incoming leads live without manual refresh
     const unsub = subscribeToNewInquiries((newInquiry) => {
@@ -67,18 +72,49 @@ export const AdminInquiries: React.FC = () => {
       const list = await api.getInquiries();
       setInquiries(list);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load inquiries:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  const handleUpdateStatus = async (id: string, status: Inquiry['status']) => {
+  async function loadDeletedInquiries() {
+    setTrashLoading(true);
     try {
-      const updated = await api.updateInquiryStatus(id, status);
-      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      const list = await api.getDeletedInquiries();
+      setDeletedInquiries(list);
     } catch (err) {
-      alert('Failed updating status');
+      console.error('Failed to load deleted inquiries:', err);
+    } finally {
+      setTrashLoading(false);
+    }
+  }
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const [activeList, trashList] = await Promise.all([
+        api.getInquiries(),
+        api.getDeletedInquiries(),
+      ]);
+      setInquiries(activeList);
+      setDeletedInquiries(trashList);
+    } catch (err) {
+      console.error('Refresh error:', err);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
+  const handleUpdateStatus = async (id: string, status: InquiryStatus) => {
+    try {
+      const updated = await api.updateInquiry(id, { status }, false);
+      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      if (selectedInquiryForEdit && selectedInquiryForEdit.id === id) {
+        setSelectedInquiryForEdit(updated);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed updating inquiry status');
     }
   };
 
@@ -88,8 +124,21 @@ export const AdminInquiries: React.FC = () => {
       const staffName = staffMember ? staffMember.name : '';
       const updated = await api.assignInquiryStaff(inquiryId, staffId, staffName);
       setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
+      if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
+        setSelectedInquiryForEdit(updated);
+      }
     } catch (err: any) {
       alert(err.message || 'Failed assigning staff');
+    }
+  };
+
+  const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
+    try {
+      const updated = await api.updateInquiry(id, updates, false);
+      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      setSelectedInquiryForEdit(null);
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to save lead updates');
     }
   };
 
@@ -98,17 +147,16 @@ export const AdminInquiries: React.FC = () => {
       try {
         const updated = await api.adminUnlockInquiry(inquiryId, 'CONTACTED');
         setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
+        if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
+          setSelectedInquiryForEdit(updated);
+        }
       } catch (err: any) {
         alert(err.message || 'Failed to unlock inquiry');
       }
     }
   };
 
-  const handleAddNote = async (inquiryId: string) => {
-    const text = (noteInputs[inquiryId] || '').trim();
-    if (!text) return;
-
-    setSubmittingNote((prev) => ({ ...prev, [inquiryId]: true }));
+  const handleAddNote = async (inquiryId: string, text: string) => {
     try {
       const updated = await api.addInquiryNote(inquiryId, {
         authorName: adminUser?.name || 'Administrator',
@@ -118,385 +166,481 @@ export const AdminInquiries: React.FC = () => {
       });
 
       setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
-      setNoteInputs((prev) => ({ ...prev, [inquiryId]: '' }));
+      if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
+        setSelectedInquiryForEdit(updated);
+      }
     } catch (err: any) {
-      alert(err.message || 'Failed to post note');
-    } finally {
-      setSubmittingNote((prev) => ({ ...prev, [inquiryId]: false }));
+      throw new Error(err.message || 'Failed to post note');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Delete this inquiry record from travel desk?')) {
+    const inq = inquiries.find((i) => i.id === id);
+    const leadId = inq ? getLeadId(inq) : id;
+    if (window.confirm(`Move Lead ${leadId} to Recently Deleted / Trash Bin? You can review and restore it anytime.`)) {
       try {
         await api.deleteInquiry(id);
         setInquiries((prev) => prev.filter((i) => i.id !== id));
+        loadDeletedInquiries();
+        setActionMessage({
+          type: 'info',
+          text: `Lead ${leadId} moved to Recently Deleted / Trash Bin.`,
+        });
+        setTimeout(() => setActionMessage(null), 4500);
       } catch (err) {
         alert('Failed to delete inquiry');
       }
     }
   };
 
-  const filteredInquiries = inquiries.filter((inq) => {
-    if (statusFilter !== 'ALL' && inq.status !== statusFilter) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchName = inq.customerName.toLowerCase().includes(q);
-      const matchPhone = inq.customerPhone.toLowerCase().includes(q);
-      const matchTitle = inq.title.toLowerCase().includes(q);
-      if (!matchName && !matchPhone && !matchTitle) return false;
+  const handleRestore = async (id: string) => {
+    try {
+      setRestoringId(id);
+      const inq = deletedInquiries.find((i) => i.id === id);
+      const chosenStaffId = selectedRestoreStaff[id] || inq?.assignedStaffId || staffList[0]?.id;
+      const chosenStaff = staffList.find((s) => s.id === chosenStaffId);
+      const staffName = chosenStaff ? chosenStaff.name : (staffList[0]?.name || 'Staff Member');
+
+      const restored = await api.restoreInquiry(id, chosenStaffId, staffName);
+      setDeletedInquiries((prev) => prev.filter((i) => i.id !== id));
+      setInquiries((prev) => [restored, ...prev.filter((i) => i.id !== id)]);
+
+      setActionMessage({
+        type: 'success',
+        text: `Lead ${getLeadId(restored)} successfully restored and assigned to ${restored.assignedStaffName || staffName}!`,
+      });
+      setTimeout(() => setActionMessage(null), 4500);
+    } catch (err: any) {
+      alert(err.message || 'Failed to restore inquiry');
+    } finally {
+      setRestoringId(null);
     }
-    return true;
+  };
+
+  const handlePermanentDelete = async (id: string) => {
+    const inq = deletedInquiries.find((i) => i.id === id);
+    const leadId = inq ? getLeadId(inq) : id;
+    if (window.confirm(`Permanently erase Lead ${leadId} from the database? This action is irreversible.`)) {
+      try {
+        await api.permanentlyDeleteInquiry(id);
+        setDeletedInquiries((prev) => prev.filter((i) => i.id !== id));
+        setActionMessage({
+          type: 'info',
+          text: `Lead ${leadId} permanently erased.`,
+        });
+        setTimeout(() => setActionMessage(null), 4000);
+      } catch (err) {
+        alert('Failed to permanently delete inquiry');
+      }
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    if (deletedInquiries.length === 0) return;
+    if (
+      window.confirm(
+        `Permanently erase all ${deletedInquiries.length} inquiries in the Trash Bin? This action cannot be undone.`
+      )
+    ) {
+      try {
+        await api.emptyTrash();
+        setDeletedInquiries([]);
+        setActionMessage({
+          type: 'info',
+          text: 'Trash Bin emptied successfully.',
+        });
+        setTimeout(() => setActionMessage(null), 4000);
+      } catch (err) {
+        alert('Failed to empty trash');
+      }
+    }
+  };
+
+  const handleCopyLeadId = (leadId: string) => {
+    navigator.clipboard.writeText(leadId);
+    setCopiedId(leadId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const filteredDeletedInquiries = deletedInquiries.filter((inq) => {
+    if (!trashSearchQuery.trim()) return true;
+    const q = trashSearchQuery.toLowerCase();
+    const leadId = getLeadId(inq).toLowerCase();
+    const name = (inq.customerName || inq.fullName || '').toLowerCase();
+    const phone = (inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
+    const email = (inq.customerEmail || inq.email || '').toLowerCase();
+    const city = (inq.userCity || '').toLowerCase();
+    const title = (inq.title || '').toLowerCase();
+    return (
+      leadId.includes(q) ||
+      name.includes(q) ||
+      phone.includes(q) ||
+      email.includes(q) ||
+      city.includes(q) ||
+      title.includes(q)
+    );
   });
 
   return (
     <AdminLayout activeTab="inquiries">
       <div className="space-y-6 max-w-7xl mx-auto">
-        
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Action feedback toast */}
+        {actionMessage && (
+          <div
+            className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between shadow-sm transition-all ${
+              actionMessage.type === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                : 'bg-orange-50 dark:bg-orange-950/50 border-orange-300 dark:border-orange-800 text-orange-900 dark:text-orange-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{actionMessage.text}</span>
+            </div>
+            <button
+              onClick={() => setActionMessage(null)}
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[11px]"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* CRM Header & View Mode Switcher */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border border-orange-200 dark:border-orange-800">
+                CRM Travel Desk
+              </span>
+              <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Live Sync Active
+              </span>
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif mt-1">
               <MessageSquare className="w-6 h-6 text-orange-500 dark:text-orange-400" />
-              <span>Travel Desk Leads &amp; Direct WhatsApp Inquiries</span>
+              <span>Lead &amp; Enquiry Management CRM</span>
             </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Real-time feed of pilgrim requests, staff assignments, status workflow &amp; dev notes.
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Comprehensive pilgrim tracking with unique TTT Lead IDs, automated sequential numbering, and staff assignment.
             </p>
           </div>
 
-          <div className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-xl shadow-xs">
-            Total Leads: <span className="text-orange-600 dark:text-orange-400 font-extrabold">{inquiries.length}</span>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-center gap-2 overflow-x-auto">
-            {['ALL', 'NEW', 'CONTACTED', 'CONFIRMED', 'CLOSED'].map((st) => (
+          <div className="flex items-center gap-3">
+            {/* View Switcher: Active vs Trash */}
+            <div className="bg-slate-100 dark:bg-[#081220] p-1 rounded-2xl flex items-center gap-1 border border-slate-200 dark:border-slate-800 shadow-inner">
               <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                  statusFilter === st
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#081220] text-slate-600 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                onClick={() => setActiveTab('active')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'active'
+                    ? 'bg-white dark:bg-[#0d1d33] text-orange-600 dark:text-orange-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {st} {st === 'NEW' && inquiries.filter((i) => i.status === 'NEW').length > 0 && `(${inquiries.filter((i) => i.status === 'NEW').length})`}
+                <Archive className="w-3.5 h-3.5" />
+                <span>Active Leads</span>
+                <span className="px-1.5 py-0.2 rounded-md text-[10px] font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono">
+                  {inquiries.length}
+                </span>
               </button>
-            ))}
-          </div>
+              <button
+                onClick={() => setActiveTab('trash')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'trash'
+                    ? 'bg-white dark:bg-[#0d1d33] text-rose-600 dark:text-rose-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Trash Bin</span>
+                {deletedInquiries.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-md text-[10px] font-black bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-mono">
+                    {deletedInquiries.length}
+                  </span>
+                )}
+              </button>
+            </div>
 
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search pilgrim name / phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 w-60"
-            />
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0d1d33] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Refresh database"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-orange-500' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           </div>
         </div>
 
-        {/* Inquiries List */}
-        {loading ? (
-          <div className="space-y-4 animate-pulse">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-slate-200 dark:bg-slate-800/50 rounded-2xl"></div>
-            ))}
-          </div>
-        ) : filteredInquiries.length === 0 ? (
-          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 p-12 rounded-3xl text-center space-y-2 shadow-xs">
-            <MessageSquare className="w-10 h-10 text-slate-400 dark:text-slate-600 mx-auto" />
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">No inquiries found</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">All pilgrim leads have been resolved or filtered out.</p>
-          </div>
-        ) : (
+        {/* TAB 1: ACTIVE CRM LEADS */}
+        {activeTab === 'active' && (
+          <>
+            <LeadTableView
+              inquiries={inquiries}
+              staffList={staffList}
+              loading={loading}
+              isAdmin={true}
+              onUpdateStatus={handleUpdateStatus}
+              onAssignStaff={handleAssignStaff}
+              onDeleteInquiry={handleDelete}
+              onUnlockInquiry={handleUnlockInquiry}
+              onEditInquiry={(inq) => setSelectedInquiryForEdit(inq)}
+              onAddNote={handleAddNote}
+            />
+
+            {/* Detailed Modal Editor */}
+            <LeadEditModal
+              inquiry={selectedInquiryForEdit}
+              isOpen={Boolean(selectedInquiryForEdit)}
+              onClose={() => setSelectedInquiryForEdit(null)}
+              onSave={handleSaveInquiryUpdates}
+              staffList={staffList}
+              onAddNote={handleAddNote}
+            />
+          </>
+        )}
+
+        {/* TAB 2: RECENTLY DELETED / TRASH BIN */}
+        {activeTab === 'trash' && (
           <div className="space-y-4">
-            {filteredInquiries.map((inq) => {
-              const waLink = generateWhatsAppLink({
-                title: inq.title,
-                type: inq.type,
-                name: inq.customerName,
-                checkIn: inq.checkInDate,
-                adults: inq.adults,
-                children: inq.children,
-                plan: inq.selectedPlan,
-                notes: inq.specialRequests,
-              });
-
-              const isLocked = inq.isLockedForStaff || inq.status === 'CLOSED';
-              const isNotesOpen = expandedNotes[inq.id] || false;
-              const notesCount = inq.followUpNotes?.length || 0;
-
-              return (
-                <div
-                  key={inq.id}
-                  className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 rounded-3xl p-5 hover:border-slate-300 dark:hover:border-slate-600 transition-all space-y-4 shadow-xs"
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-                    {/* Left info */}
-                    <div className="space-y-2 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                          inq.status === 'NEW'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800'
-                            : inq.status === 'CONTACTED'
-                            ? 'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800'
-                            : inq.status === 'CONFIRMED'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800'
-                            : 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                        }`}>
-                          {inq.status}
-                        </span>
-
-                        {isLocked && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-800 border border-red-300 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800">
-                            <Lock className="w-3 h-3 text-red-600 dark:text-red-400" />
-                            <span>Locked for Staff</span>
-                          </span>
-                        )}
-
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Received: {new Date(inq.createdAt).toLocaleString('en-IN')}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row sm:items-baseline gap-2">
-                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                          {inq.customerName}
-                        </h3>
-                        <span className="text-xs text-orange-600 dark:text-orange-400 font-semibold">
-                          Interested in: {inq.title} ({inq.type})
-                        </span>
-                      </div>
-
-                      {/* Contacts & Dates */}
-                      <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-300 pt-1">
-                        <div className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-mono text-slate-900 dark:text-white font-bold">{inq.customerPhone}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="text-slate-600 dark:text-slate-300">{inq.customerEmail}</span>
-                        </div>
-                        {inq.checkInDate && (
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
-                            <span>Yatra Date: {inq.checkInDate}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-slate-400" />
-                          <span>
-                            {inq.adults || inq.guests || 2} Adults
-                            {inq.children ? `, ${inq.children} Children` : ''}
-                            {inq.childAges && (
-                              <span className="text-orange-600 dark:text-orange-400 text-[11px] ml-1">
-                                (Ages:{' '}
-                                {(Array.isArray(inq.childAges)
-                                  ? inq.childAges
-                                  : (() => {
-                                      try {
-                                         return JSON.parse(inq.childAges);
-                                      } catch {
-                                         return inq.childAges;
-                                      }
-                                    })()
-                                )
-                                  .map((a: any) => (a === 0 ? 'Under 1' : a))
-                                  .join(', ')}
-                                )
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-
-                      {inq.selectedPlan && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          <span className="text-slate-600 dark:text-slate-500 font-bold">Selected Plan:</span> {inq.selectedPlan}
-                        </div>
-                      )}
-
-                      {(inq.pickupLocation || inq.dropoffLocation) && (
-                        <div className="flex flex-wrap items-center gap-3 py-1.5 px-3 bg-slate-50 dark:bg-[#081220] rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
-                          {inq.pickupLocation && (
-                            <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                              <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                              <span className="text-slate-500 dark:text-slate-400 font-medium">Pickup:</span>
-                              <span className="font-semibold text-slate-900 dark:text-white">{inq.pickupLocation}</span>
-                            </div>
-                          )}
-                          {inq.pickupLocation && inq.dropoffLocation && (
-                            <span className="text-slate-400 dark:text-slate-600">→</span>
-                          )}
-                          {inq.dropoffLocation && (
-                            <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                              <MapPin className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
-                              <span className="text-slate-500 dark:text-slate-400 font-medium">Drop-off:</span>
-                              <span className="font-semibold text-slate-900 dark:text-white">{inq.dropoffLocation}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {inq.specialRequests && (
-                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
-                          <span className="font-bold text-orange-600 dark:text-orange-400">Special Notes:</span> {inq.specialRequests}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right actions: Staff Assign, Status, Unlock, WhatsApp, Delete */}
-                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                      {/* Staff Assignment Dropdown */}
-                      <div className="flex items-center gap-1 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1">
-                        <UserCheck className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                        <select
-                          value={inq.assignedStaffId || ''}
-                          onChange={(e) => handleAssignStaff(inq.id, e.target.value)}
-                          className="bg-transparent text-xs text-slate-900 dark:text-white font-medium focus:outline-none cursor-pointer"
-                        >
-                          <option value="">Assign: Unassigned</option>
-                          {staffList.map((staff) => (
-                            <option key={staff.id} value={staff.id}>
-                              Assign: {staff.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Status Dropdown */}
-                      <select
-                        value={inq.status}
-                        onChange={(e) => handleUpdateStatus(inq.id, e.target.value as any)}
-                        className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white rounded-xl px-3 py-2 font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-                      >
-                        <option value="NEW">Status: NEW</option>
-                        <option value="CONTACTED">Status: CONTACTED</option>
-                        <option value="CONFIRMED">Status: CONFIRMED</option>
-                        <option value="CLOSED">Status: CLOSED</option>
-                      </select>
-
-                      {/* Admin Unlock Lead Button (shown when closed or locked) */}
-                      {isLocked && (
-                        <button
-                          onClick={() => handleUnlockInquiry(inq.id)}
-                          className="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                          title="Reopen and unlock lead for staff operations"
-                        >
-                          <Unlock className="w-3.5 h-3.5" />
-                          <span>Unlock Lead</span>
-                        </button>
-                      )}
-
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                        <span>WhatsApp</span>
-                      </a>
-
-                      <button
-                        onClick={() => handleDelete(inq.id)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950/60 dark:hover:bg-red-900 dark:text-red-300 rounded-xl transition-colors cursor-pointer"
-                        title="Delete lead"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+            {/* Trash Controls Bar */}
+            <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 p-4 rounded-3xl space-y-3 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                      Recently Deleted / Recycle Bin
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {deletedInquiries.length} item{deletedInquiries.length === 1 ? '' : 's'}
+                    </span>
                   </div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+                    Deleted Pilgrim Inquiries
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Review removed inquiries, restore them back to the active pool with staff reassignment, or purge permanently.
+                  </p>
+                </div>
 
-                  {/* Follow-up Notes & Staff Activity Thread */}
-                  <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3">
+                <div className="flex items-center gap-2.5 shrink-0">
+                  {deletedInquiries.length > 0 && (
                     <button
-                      onClick={() =>
-                        setExpandedNotes((prev) => ({ ...prev, [inq.id]: !prev[inq.id] }))
-                      }
-                      className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1.5 transition-colors cursor-pointer"
+                      onClick={handleEmptyTrash}
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
-                      <MessageSquare className="w-3.5 h-3.5 text-orange-500" />
-                      <span>Follow-up Notes &amp; Staff History ({notesCount})</span>
-                      {isNotesOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Empty Trash</span>
                     </button>
+                  )}
+                  <button
+                    onClick={() => setActiveTab('active')}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Back to Active Leads</span>
+                  </button>
+                </div>
+              </div>
 
-                    {isNotesOpen && (
-                      <div className="mt-3 space-y-3 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl animate-in fade-in duration-150">
-                        {/* Notes list */}
-                        {inq.followUpNotes && inq.followUpNotes.length > 0 ? (
-                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                            {inq.followUpNotes.map((note) => (
-                              <div
-                                key={note.id}
-                                className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/60 p-2.5 rounded-xl text-xs space-y-1"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-bold text-slate-900 dark:text-white">
-                                      {note.authorName}
-                                    </span>
-                                    <span
-                                      className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
-                                        note.authorRole === 'ADMIN'
-                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                                      }`}
-                                    >
-                                      {note.authorRole}
-                                    </span>
+              {/* Search Bar for Trashed Leads */}
+              <div className="relative max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Filter deleted leads by Lead ID, Customer Name, Phone..."
+                  value={trashSearchQuery}
+                  onChange={(e) => setTrashSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                />
+                {trashSearchQuery && (
+                  <button
+                    onClick={() => setTrashSearchQuery('')}
+                    className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Trashed Leads Table */}
+            <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[980px]">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#081220] text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <th className="py-3.5 px-4">Lead ID &amp; Created</th>
+                      <th className="py-3.5 px-4">Customer Details</th>
+                      <th className="py-3.5 px-4">Package / Destination</th>
+                      <th className="py-3.5 px-4">Deleted Info</th>
+                      <th className="py-3.5 px-4">Staff Reassignment</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+                    {trashLoading ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-slate-400 animate-pulse">
+                          Loading deleted records...
+                        </td>
+                      </tr>
+                    ) : filteredDeletedInquiries.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-16 text-center space-y-2">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mx-auto">
+                            <Trash2 className="w-6 h-6" />
+                          </div>
+                          <p className="font-bold text-slate-700 dark:text-slate-300">
+                            Trash Bin is Empty
+                          </p>
+                          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                            Any inquiries deleted from the CRM lead list will be preserved here, allowing administrators to restore and reassign them at any time.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredDeletedInquiries.map((inq) => {
+                        const leadId = getLeadId(inq);
+                        const assignedStaffId =
+                          selectedRestoreStaff[inq.id] ||
+                          inq.assignedStaffId ||
+                          (staffList[0]?.id || '');
+
+                        return (
+                          <tr
+                            key={inq.id}
+                            className="hover:bg-slate-50/80 dark:hover:bg-[#0a192f]/50 transition-colors"
+                          >
+                            {/* 1. Lead ID */}
+                            <td className="py-4 px-4 align-top">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-black text-rose-600 dark:text-rose-400 text-xs tracking-tight bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800">
+                                    {leadId}
+                                  </span>
+                                  <button
+                                    onClick={() => handleCopyLeadId(leadId)}
+                                    title="Copy Lead ID"
+                                    className="text-slate-400 hover:text-rose-600 transition-colors"
+                                  >
+                                    {copiedId === leadId ? (
+                                      <Check className="w-3 h-3 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                                <div className="text-[11px] text-slate-400 font-medium">
+                                  {formatCrmTimestamp(inq.createdAt)}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 2. Customer Details */}
+                            <td className="py-4 px-4 align-top">
+                              <div className="space-y-1">
+                                <div className="font-extrabold text-slate-900 dark:text-white text-xs">
+                                  {inq.customerName || inq.fullName}
+                                </div>
+                                <div className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
+                                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{inq.customerPhone || inq.whatsappNumber}</span>
+                                </div>
+                                {inq.customerEmail && (
+                                  <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[170px]">
+                                    <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span className="truncate">{inq.customerEmail}</span>
                                   </div>
-                                  <span className="text-[10px] text-slate-400">
-                                    {new Date(note.createdAt).toLocaleString('en-IN')}
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 3. Package & Destination */}
+                            <td className="py-4 px-4 align-top max-w-[220px]">
+                              <div className="space-y-1">
+                                <p className="font-bold text-slate-900 dark:text-white text-xs line-clamp-1" title={inq.title}>
+                                  {inq.title}
+                                </p>
+                                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300 text-[11px]">
+                                  <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
+                                  <span>{inq.userCity || 'City TBD'}</span>
+                                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                                  <span className="text-[10px] text-slate-500 font-semibold">
+                                    {inq.accommodationTier || '3 Star Hotel'}
                                   </span>
                                 </div>
-                                <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-                                  {note.text}
-                                </p>
                               </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-400 italic">No notes recorded yet.</p>
-                        )}
+                            </td>
 
-                        {/* Add Note Input */}
-                        <div className="flex items-center gap-2 pt-1">
-                          <input
-                            type="text"
-                            placeholder="Add admin follow-up instruction or devotee update..."
-                            value={noteInputs[inq.id] || ''}
-                            onChange={(e) =>
-                              setNoteInputs((prev) => ({ ...prev, [inq.id]: e.target.value }))
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddNote(inq.id);
-                              }
-                            }}
-                            className="flex-1 px-3 py-2 bg-white dark:bg-[#0d1d33] border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          />
-                          <button
-                            onClick={() => handleAddNote(inq.id)}
-                            disabled={submittingNote[inq.id] || !(noteInputs[inq.id] || '').trim()}
-                            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>Post Note</span>
-                          </button>
-                        </div>
-                      </div>
+                            {/* 4. Deleted Timestamp & Actor */}
+                            <td className="py-4 px-4 align-top">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                                  <Clock className="w-3 h-3 text-rose-500 shrink-0" />
+                                  <span>{formatCrmTimestamp(inq.deletedAt || inq.createdAt)}</span>
+                                </div>
+                                <span className="inline-block text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                  Deleted by {inq.deletedBy || 'Administrator'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* 5. Staff Reassignment Dropdown */}
+                            <td className="py-4 px-4 align-top">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                                  Assign on Restore:
+                                </label>
+                                <select
+                                  value={assignedStaffId}
+                                  onChange={(e) =>
+                                    setSelectedRestoreStaff({
+                                      ...selectedRestoreStaff,
+                                      [inq.id]: e.target.value,
+                                    })
+                                  }
+                                  className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
+                                >
+                                  {staffList.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name} ({s.role.replace('_', ' ')})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </td>
+
+                            {/* 6. Actions: Restore & Permanent Delete */}
+                            <td className="py-4 px-4 align-top text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleRestore(inq.id)}
+                                  disabled={restoringId === inq.id}
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                                  title="Restore this lead and return it to active CRM list"
+                                >
+                                  <RotateCcw className={`w-3.5 h-3.5 ${restoringId === inq.id ? 'animate-spin' : ''}`} />
+                                  <span>Restore Lead</span>
+                                </button>
+                                <button
+                                  onClick={() => handlePermanentDelete(inq.id)}
+                                  className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                                  title="Permanently erase from database"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
-                  </div>
-                </div>
-              );
-            })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
       </div>
