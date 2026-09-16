@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
+import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Lock,
   Mail,
@@ -9,17 +11,26 @@ import {
   EyeOff,
   AlertCircle,
   ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const StaffLoginPage: React.FC = () => {
   const { loginStaff } = useAuth();
   const { navigate } = useRouter();
+  const lampRef = useRef<CuteLampRef>(null);
+
+  // Requirement: Lamp starts sleeping / OFF on initial page load
+  const [isLampOn, setIsLampOn] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const handleToggleLamp = () => {
+    setIsLampOn((prev) => !prev);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,27 +51,48 @@ export const StaffLoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#071526] via-[#0d223f] to-[#08182b] flex flex-col justify-between text-slate-100 px-4 py-8 relative overflow-hidden font-sans">
-      {/* Subtle background glow */}
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div
+      id="staff-login-page"
+      className={`min-h-screen flex flex-col justify-between p-4 sm:p-6 transition-colors duration-500 relative overflow-hidden font-sans ${
+        isLampOn
+          ? 'bg-gradient-to-br from-[#fbf8f2] via-[#fefbf6] to-[#faeedb] text-slate-800'
+          : 'bg-gradient-to-br from-[#040a14] via-[#071424] to-[#050c18] text-slate-100'
+      }`}
+    >
+      {/* Ambient background glow (strictly visible when lamp is ON) */}
+      <div
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
+          isLampOn ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{
+          background:
+            'radial-gradient(circle at 35% 45%, rgba(251, 191, 36, 0.28) 0%, rgba(245, 158, 11, 0.1) 45%, transparent 72%)',
+        }}
+      />
 
       {/* Top Bar */}
-      <header className="max-w-6xl w-full mx-auto flex items-center justify-between z-10">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-          <div className="w-10 h-10 rounded-full bg-white shadow-md p-0.5 flex items-center justify-center shrink-0 border border-white/30 aspect-square">
+      <header className="max-w-6xl w-full mx-auto flex items-center justify-between z-10 py-2">
+        <div
+          className="flex items-center gap-3 cursor-pointer group"
+          onClick={() => navigate('/')}
+        >
+          <div className="w-10 h-10 rounded-full bg-white shadow-md p-1 flex items-center justify-center shrink-0 border border-amber-300/40 aspect-square group-hover:scale-105 transition-transform">
             <img
               src="/logo.svg"
               alt="TirthYatraTrails.in Logo"
-              className="w-10 h-10 object-contain"
+              className="w-8 h-8 object-contain"
             />
           </div>
           <div>
-            <span className="font-extrabold text-sm tracking-wide text-white font-serif">
+            <span
+              className={`font-extrabold text-sm tracking-wide font-serif block ${
+                isLampOn ? 'text-slate-900' : 'text-white'
+              }`}
+            >
               TirthYatraTrails
             </span>
-            <span className="block text-[10px] text-orange-400 font-bold uppercase tracking-widest">
-              Operations Portal
+            <span className="block text-[10px] text-orange-600 dark:text-orange-400 font-bold uppercase tracking-widest">
+              Staff Desk Operations
             </span>
           </div>
         </div>
@@ -68,127 +100,155 @@ export const StaffLoginPage: React.FC = () => {
         <div className="flex items-center gap-3 text-xs">
           <button
             onClick={() => navigate('/')}
-            className="text-slate-300 hover:text-white flex items-center gap-1 transition-colors"
+            className={`flex items-center gap-1 transition-colors ${
+              isLampOn
+                ? 'text-slate-600 hover:text-slate-900'
+                : 'text-slate-300 hover:text-white'
+            }`}
           >
             <span>Public Site</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
-          <span className="text-slate-600">|</span>
+          <span className={isLampOn ? 'text-slate-300' : 'text-slate-700'}>|</span>
           <button
             onClick={() => navigate('/admin/login')}
-            className="text-orange-400 hover:text-orange-300 font-bold flex items-center gap-1 transition-colors"
+            className="text-orange-600 dark:text-orange-400 hover:underline font-bold flex items-center gap-1 transition-colors"
           >
-            <span>Admin Login</span>
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Admin Portal</span>
           </button>
         </div>
       </header>
 
-      {/* Main Login Card */}
-      <main className="max-w-md w-full mx-auto z-10 my-8">
-        <div className="bg-[#0b1d36]/90 border border-slate-700/80 backdrop-blur-xl rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-          <div className="text-center space-y-3">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-white shadow-2xl p-2.5 flex items-center justify-center mx-auto border border-white/20 aspect-square">
-              <img
-                src="/logo.svg"
-                alt="TirthYatraTrails.in Logo"
-                className="w-full h-full aspect-square object-contain"
-              />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white font-serif tracking-tight">
-              Staff Desk Login
-            </h1>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Sign in to manage assigned pilgrim leads, update status, and log devotee follow-up actions.
-            </p>
-          </div>
+      {/* Main Interactive Stage: Lamp + Slide-in Login Card */}
+      <motion.main
+        layout
+        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        className="max-w-4xl w-full mx-auto z-10 my-auto py-8 flex flex-col md:flex-row items-center justify-center gap-8 lg:gap-14"
+      >
+        {/* INTERACTIVE CUTE LAMP */}
+        <motion.div layout className="flex flex-col items-center shrink-0">
+          <CuteLamp ref={lampRef} isOn={isLampOn} onToggle={handleToggleLamp} size="lg" />
+        </motion.div>
 
-          {error && (
-            <div className="p-3 bg-red-950/60 border border-red-500/40 rounded-2xl text-xs text-red-200 flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-200 block">
-                Staff Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type="email"
-                  required
-                  placeholder="staff.name@tirthyatra.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-200 block">
-                  Staff Password
-                </label>
-              </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Enter staff password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-slate-400 hover:text-white"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-orange-600/30 transition-all disabled:opacity-50 cursor-pointer"
+        {/* LOGIN FORM (Smoothly reveals when cord is pulled / lamp is on) */}
+        <AnimatePresence mode="wait">
+          {isLampOn && (
+            <motion.div
+              key="active-staff-login-card"
+              initial={{ opacity: 0, x: 45, scale: 0.94, filter: 'blur(8px)' }}
+              animate={{ opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, x: 40, scale: 0.94, filter: 'blur(8px)' }}
+              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+              className="w-full max-w-md rounded-3xl p-6 sm:p-8 bg-white/95 border border-amber-200/90 shadow-[0_25px_60px_-15px_rgba(245,158,11,0.25)] text-slate-800 space-y-6 relative z-10"
             >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <span>Sign In to Staff Desk</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
+              <div className="text-center space-y-2">
+                <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full p-2 flex items-center justify-center mx-auto border border-amber-200 aspect-square shadow-md bg-white">
+                  <img
+                    src="/logo.svg"
+                    alt="TirthYatraTrails.in Logo"
+                    className="w-full h-full aspect-square object-contain"
+                  />
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black font-serif tracking-tight text-slate-900">
+                  Staff Desk Login
+                </h1>
+                <p className="text-xs leading-relaxed text-slate-600">
+                  Sign in to manage assigned pilgrim leads, update status, and log devotee follow-up actions.
+                </p>
+              </div>
 
-          <div className="pt-2 border-t border-slate-800 text-center space-y-1.5">
-            <p className="text-[11px] text-amber-400/90 font-medium">
-              🔒 <strong>Strict Policy:</strong> Self-registration is disabled. Staff access credentials must be issued by an Administrator.
-            </p>
-            <p className="text-[11px] text-slate-400">
-              Need access or credential reset? Contact your{' '}
-              <button
-                onClick={() => navigate('/admin/login')}
-                className="text-orange-400 hover:underline font-bold"
-              >
-                System Administrator
-              </button>
-              .
-            </p>
-          </div>
-        </div>
-      </main>
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-600 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold block text-slate-700">
+                    Staff Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type="email"
+                      required
+                      placeholder="staff.name@tirthyatra.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs font-mono bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold block text-slate-700">
+                    Staff Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Enter staff password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2.5 rounded-xl text-xs font-mono bg-slate-50 border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3 text-slate-400 hover:text-orange-500 transition-colors cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-orange-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {loading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>Sign In to Staff Desk</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="pt-3 border-t border-slate-200 text-center space-y-1.5">
+                <p className="text-[11px] text-amber-700 font-medium">
+                  🔒 <strong>Strict Policy:</strong> Self-registration is disabled. Staff credentials are authenticated directly by the travel desk.
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Need access or credential reset? Contact your{' '}
+                  <button
+                    onClick={() => navigate('/admin/login')}
+                    className="text-orange-600 hover:underline font-bold cursor-pointer"
+                  >
+                    System Administrator
+                  </button>
+                  .
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.main>
 
       {/* Footer */}
-      <footer className="text-center text-xs text-slate-400 z-10">
+      <footer
+        className={`text-center text-xs z-10 py-2 ${
+          isLampOn ? 'text-slate-500' : 'text-slate-400'
+        }`}
+      >
         &copy; {new Date().getFullYear()} TirthYatraTrails • Sacred Pilgrim Travel Operations System
       </footer>
     </div>
