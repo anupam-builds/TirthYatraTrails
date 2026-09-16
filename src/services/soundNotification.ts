@@ -496,3 +496,103 @@ export function subscribeToNewInquiries(
     }
   };
 }
+
+export interface InquiryUpdateEvent {
+  type: 'INQUIRY_UPDATED';
+  inquiry: Inquiry;
+  staffName?: string;
+  statusChanged?: boolean;
+  previousStatus?: string;
+  newStatus?: string;
+  timestamp: number;
+}
+
+const UPDATE_BROADCAST_CHANNEL = 'tirthyatra_inquiries_update_channel';
+const LAST_UPDATE_KEY = 'tirthyatra_last_inquiry_update_event';
+
+/**
+ * Broadcasts an inquiry update (e.g. status change to CONTACTED or CLOSED) to all listening tabs/panels
+ */
+export function broadcastInquiryUpdated(
+  inquiry: Inquiry,
+  meta?: { staffName?: string; previousStatus?: string; newStatus?: string }
+) {
+  if (typeof window === 'undefined') return;
+
+  const payload: InquiryUpdateEvent = {
+    type: 'INQUIRY_UPDATED',
+    inquiry,
+    staffName: meta?.staffName || inquiry.assignedStaffName,
+    previousStatus: meta?.previousStatus,
+    newStatus: meta?.newStatus || inquiry.status,
+    timestamp: Date.now(),
+  };
+
+  // 1. In-window custom event
+  window.dispatchEvent(
+    new CustomEvent('tirthyatra_inquiry_updated', { detail: payload })
+  );
+
+  // 2. BroadcastChannel
+  try {
+    if ('BroadcastChannel' in window) {
+      const channel = new BroadcastChannel(UPDATE_BROADCAST_CHANNEL);
+      channel.postMessage(payload);
+      channel.close();
+    }
+  } catch (e) {}
+
+  // 3. Storage event fallback
+  try {
+    localStorage.setItem(LAST_UPDATE_KEY, JSON.stringify(payload));
+  } catch (e) {}
+}
+
+/**
+ * Subscribes to inquiry updates (status changes, follow-up notes, locks)
+ */
+export function subscribeToInquiryUpdates(
+  callback: (event: InquiryUpdateEvent) => void
+): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const handleCustomEvent = (e: Event) => {
+    const custom = e as CustomEvent<InquiryUpdateEvent>;
+    if (custom.detail && custom.detail.inquiry) {
+      callback(custom.detail);
+    }
+  };
+  window.addEventListener('tirthyatra_inquiry_updated', handleCustomEvent);
+
+  let channel: BroadcastChannel | null = null;
+  if ('BroadcastChannel' in window) {
+    try {
+      channel = new BroadcastChannel(UPDATE_BROADCAST_CHANNEL);
+      channel.onmessage = (event) => {
+        if (event.data && event.data.type === 'INQUIRY_UPDATED' && event.data.inquiry) {
+          callback(event.data);
+        }
+      };
+    } catch (e) {}
+  }
+
+  const handleStorageEvent = (e: StorageEvent) => {
+    if (e.key === LAST_UPDATE_KEY && e.newValue) {
+      try {
+        const data = JSON.parse(e.newValue);
+        if (data && data.inquiry) {
+          callback(data);
+        }
+      } catch {}
+    }
+  };
+  window.addEventListener('storage', handleStorageEvent);
+
+  return () => {
+    window.removeEventListener('tirthyatra_inquiry_updated', handleCustomEvent);
+    window.removeEventListener('storage', handleStorageEvent);
+    if (channel) {
+      channel.close();
+    }
+  };
+}

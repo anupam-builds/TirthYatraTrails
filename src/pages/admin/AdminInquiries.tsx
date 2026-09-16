@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api } from '../../services/api.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
-import { subscribeToNewInquiries } from '../../services/soundNotification.js';
+import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../services/soundNotification.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
@@ -48,12 +48,21 @@ export const AdminInquiries: React.FC = () => {
     loadDeletedInquiries();
 
     // Auto prepend new incoming leads live without manual refresh
-    const unsub = subscribeToNewInquiries((newInquiry) => {
+    const unsubNew = subscribeToNewInquiries((newInquiry) => {
       setInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)]);
     });
 
+    // Auto sync lead updates live
+    const unsubUpdates = subscribeToInquiryUpdates(({ inquiry: updatedInquiry }) => {
+      if (!updatedInquiry) return;
+      setInquiries((prev) =>
+        prev.map((item) => (item.id === updatedInquiry.id ? { ...item, ...updatedInquiry } : item))
+      );
+    });
+
     return () => {
-      unsub();
+      unsubNew();
+      unsubUpdates();
     };
   }, []);
 

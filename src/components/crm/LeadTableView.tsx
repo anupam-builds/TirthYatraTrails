@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import {
   getLeadId,
   CRM_STATUS_CONFIG,
   CRM_STATUS_LIST,
+  ADMIN_CRM_STATUS_LIST,
+  STAFF_CRM_STATUS_LIST,
   formatPaxCount,
   formatCrmDate,
   formatCrmTimestamp,
@@ -44,6 +46,7 @@ interface LeadTableViewProps {
   isAdmin?: boolean;
   isStaffMode?: boolean;
   currentStaffId?: string;
+  currentStaffName?: string;
   onUpdateStatus: (id: string, status: InquiryStatus) => Promise<void>;
   onAssignStaff?: (id: string, staffId: string) => Promise<void>;
   onDeleteInquiry?: (id: string) => Promise<void>;
@@ -59,6 +62,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   isAdmin = false,
   isStaffMode = false,
   currentStaffId,
+  currentStaffName,
   onUpdateStatus,
   onAssignStaff,
   onDeleteInquiry,
@@ -76,13 +80,30 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
   const [submittingNote, setSubmittingNote] = useState<Record<string, boolean>>({});
 
-  // Summary Metrics calculation
-  const totalCount = inquiries.length;
-  const inProgressCount = inquiries.filter((i) => i.status === 'IN_PROGRESS').length;
-  const unassignedCount = inquiries.filter((i) => !i.assignedStaffId).length;
-  const wonCompletedCount = inquiries.filter(
-    (i) => i.status === 'WON' || i.status === 'CONFIRMED'
-  ).length;
+  // In Staff Mode, staff members can ONLY view inquiries explicitly assigned to them by the administrator
+  const baseInquiries = useMemo(() => {
+    if (!isStaffMode) return inquiries;
+    return inquiries.filter((inq) => {
+      const matchesId = Boolean(currentStaffId && inq.assignedStaffId === currentStaffId);
+      const matchesName = Boolean(
+        currentStaffName &&
+        inq.assignedStaffName &&
+        inq.assignedStaffName.trim().toLowerCase() === currentStaffName.trim().toLowerCase()
+      );
+      return matchesId || matchesName;
+    });
+  }, [inquiries, isStaffMode, currentStaffId, currentStaffName]);
+
+  // Status options: Admin has 4 (New, Contacted, Confirmed, Closed), Staff has 3 (New, Contacted, Closed)
+  const statusOptions = isAdmin ? ADMIN_CRM_STATUS_LIST : STAFF_CRM_STATUS_LIST;
+
+  // Summary Metrics calculation matching workflow
+  const totalCount = baseInquiries.length;
+  const newCount = baseInquiries.filter((i) => !i.status || i.status === 'NEW').length;
+  const contactedCount = baseInquiries.filter((i) => i.status === 'CONTACTED').length;
+  const confirmedCount = baseInquiries.filter((i) => i.status === 'CONFIRMED').length;
+  const closedCount = baseInquiries.filter((i) => i.status === 'CLOSED').length;
+  const unassignedCount = baseInquiries.filter((i) => !i.assignedStaffId).length;
 
   const handleCopyLeadId = (leadId: string) => {
     navigator.clipboard.writeText(leadId);
@@ -110,19 +131,21 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   };
 
   // Filter inquiries
-  const filteredInquiries = inquiries.filter((inq) => {
+  const filteredInquiries = baseInquiries.filter((inq) => {
     // Status Filter
     if (statusFilter !== 'ALL' && inq.status !== statusFilter) {
       return false;
     }
 
-    // Staff filter
-    if (staffFilter === 'UNASSIGNED' && inq.assignedStaffId) {
-      return false;
-    } else if (staffFilter === 'MY' && currentStaffId && inq.assignedStaffId !== currentStaffId) {
-      return false;
-    } else if (staffFilter !== 'ALL' && staffFilter !== 'UNASSIGNED' && staffFilter !== 'MY' && inq.assignedStaffId !== staffFilter) {
-      return false;
+    // Staff filter (Applicable only in Admin mode)
+    if (isAdmin) {
+      if (staffFilter === 'UNASSIGNED' && inq.assignedStaffId) {
+        return false;
+      } else if (staffFilter === 'MY' && currentStaffId && inq.assignedStaffId !== currentStaffId) {
+        return false;
+      } else if (staffFilter !== 'ALL' && staffFilter !== 'UNASSIGNED' && staffFilter !== 'MY' && inq.assignedStaffId !== staffFilter) {
+        return false;
+      }
     }
 
     // Search query matching Lead ID, name, phone, or city
@@ -152,7 +175,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   return (
     <div className="space-y-6">
       {/* 1. SUMMARY METRICS CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
         {/* Total Enquiries */}
         <div
           onClick={() => {
@@ -166,83 +189,112 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Total Enquiries</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              {isStaffMode ? 'My Assigned Leads' : 'Total Leads'}
+            </span>
             <div className="w-8 h-8 rounded-xl bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400">
               <MessageSquare className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{totalCount}</span>
-            <span className="text-[11px] font-semibold text-slate-400">leads registered</span>
+            <span className="text-[11px] font-semibold text-slate-400">
+              {isStaffMode ? 'assigned to your desk' : 'leads registered'}
+            </span>
           </div>
         </div>
 
-        {/* In Progress */}
+        {/* New Leads */}
         <div
-          onClick={() => setStatusFilter('IN_PROGRESS')}
+          onClick={() => setStatusFilter('NEW')}
           className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
-            statusFilter === 'IN_PROGRESS'
+            statusFilter === 'NEW'
+              ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700 ring-2 ring-amber-500/20'
+              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-amber-200'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-700 dark:text-amber-400">New Leads</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-amber-700 dark:text-amber-300 font-mono">
+              {newCount}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400">awaiting contact</span>
+          </div>
+        </div>
+
+        {/* Contacted */}
+        <div
+          onClick={() => setStatusFilter('CONTACTED')}
+          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+            statusFilter === 'CONTACTED'
               ? 'bg-blue-50 border-blue-300 dark:bg-blue-950/40 dark:border-blue-700 ring-2 ring-blue-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-blue-200'
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">In Progress</span>
+            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Contacted</span>
             <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl font-black text-blue-700 dark:text-blue-300 font-mono">
-              {inProgressCount}
+              {contactedCount}
             </span>
             <span className="text-[11px] font-semibold text-slate-400">active consultations</span>
           </div>
         </div>
 
-        {/* Unassigned */}
-        <div
-          onClick={() => setStaffFilter('UNASSIGNED')}
-          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
-            staffFilter === 'UNASSIGNED'
-              ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700 ring-2 ring-amber-500/20'
-              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-amber-200'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Unassigned Leads</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <HelpCircle className="w-4 h-4" />
+        {/* Confirmed Bookings - Admin Dashboard & Travel Desk View */}
+        {isAdmin && (
+          <div
+            onClick={() => setStatusFilter('CONFIRMED')}
+            className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+              statusFilter === 'CONFIRMED'
+                ? 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-700 ring-2 ring-emerald-500/20'
+                : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-emerald-200'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Confirmed</span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                {confirmedCount}
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400">bookings confirmed</span>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-amber-700 dark:text-amber-300 font-mono">
-              {unassignedCount}
-            </span>
-            <span className="text-[11px] font-semibold text-slate-400">open pool</span>
-          </div>
-        </div>
+        )}
 
-        {/* Won / Completed */}
+        {/* Closed */}
         <div
-          onClick={() => setStatusFilter('WON')}
+          onClick={() => setStatusFilter('CLOSED')}
           className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
-            statusFilter === 'WON'
-              ? 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-700 ring-2 ring-emerald-500/20'
-              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-emerald-200'
+            statusFilter === 'CLOSED'
+              ? 'bg-slate-100 border-slate-300 dark:bg-slate-800 dark:border-slate-700 ring-2 ring-slate-400/20'
+              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-slate-300'
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Won / Completed</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <Award className="w-4 h-4" />
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Closed</span>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+              <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
-              {wonCompletedCount}
+            <span className="text-2xl font-black text-slate-700 dark:text-slate-300 font-mono">
+              {closedCount}
             </span>
-            <span className="text-[11px] font-semibold text-slate-400">booked pilgrimages</span>
+            <span className="text-[11px] font-semibold text-slate-400">finalized records</span>
           </div>
         </div>
       </div>
@@ -270,24 +322,30 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
             )}
           </div>
 
-          {/* Assigned Staff Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-500 shrink-0">Staff:</span>
-            <select
-              value={staffFilter}
-              onChange={(e) => setStaffFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
-            >
-              <option value="ALL">All Representatives</option>
-              {isStaffMode && <option value="MY">My Assigned Leads</option>}
-              <option value="UNASSIGNED">Unassigned Only</option>
-              {staffList.map((stf) => (
-                <option key={stf.id} value={stf.id}>
-                  {stf.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Assigned Staff Filter - Admin Only */}
+          {isAdmin ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 shrink-0">Staff:</span>
+              <select
+                value={staffFilter}
+                onChange={(e) => setStaffFilter(e.target.value)}
+                className="px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
+              >
+                <option value="ALL">All Representatives</option>
+                <option value="UNASSIGNED">Unassigned Only</option>
+                {staffList.map((stf) => (
+                  <option key={stf.id} value={stf.id}>
+                    {stf.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Assigned To You ({totalCount})</span>
+            </div>
+          )}
         </div>
 
         {/* Status Pills */}
@@ -302,8 +360,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           >
             All Leads ({totalCount})
           </button>
-          {CRM_STATUS_LIST.map((st) => {
-            const count = inquiries.filter((i) => i.status === st).length;
+          {statusOptions.map((st) => {
+            const count = baseInquiries.filter((i) => i.status === st).length;
             const cfg = CRM_STATUS_CONFIG[st];
             const isActive = statusFilter === st;
             return (
@@ -316,7 +374,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     : 'bg-slate-100 dark:bg-[#081220] text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
-                <span>{cfg.label}</span>
+                <span>{cfg?.label || st}</span>
                 {count > 0 && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
@@ -359,8 +417,16 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                 <tr>
                   <td colSpan={8} className="py-16 text-center text-slate-400 space-y-2">
                     <MessageSquare className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
-                    <p className="font-bold text-slate-700 dark:text-slate-300">No leads match your search criteria</p>
-                    <p className="text-[11px] text-slate-400">Try clearing filters or search terms.</p>
+                    <p className="font-bold text-slate-700 dark:text-slate-300">
+                      {isStaffMode && baseInquiries.length === 0
+                        ? 'No leads currently assigned to your desk'
+                        : 'No leads match your search criteria'}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      {isStaffMode && baseInquiries.length === 0
+                        ? 'When an administrator assigns inquiries to your desk, they will appear here in real-time.'
+                        : 'Try clearing filters or search terms.'}
+                    </p>
                   </td>
                 </tr>
               ) : (
@@ -411,14 +477,15 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           </div>
                         </td>
 
-                        {/* 2. Assigned Staff */}
+                        {/* 2. Assigned Staff - Editable ONLY by Admin */}
                         <td className="py-4 px-4 align-top">
-                          {onAssignStaff && (!isLocked || isAdmin) ? (
+                          {isAdmin && onAssignStaff ? (
                             <select
-                              value={inq.assignedStaffId || (staffList[0]?.id || '')}
+                              value={inq.assignedStaffId || ''}
                               onChange={(e) => onAssignStaff(inq.id, e.target.value)}
                               className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
                             >
+                              <option value="">-- Unassigned --</option>
                               {staffList.map((s) => (
                                 <option key={s.id} value={s.id}>
                                   {s.name}
@@ -432,8 +499,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <span>
                                   {inq.assignedStaffName ||
                                     staffList.find((s) => s.id === inq.assignedStaffId)?.name ||
-                                    staffList[0]?.name ||
-                                    'Priya Sharma'}
+                                    (isStaffMode ? 'Assigned to You' : 'Unassigned')}
                                 </span>
                               </span>
                             </div>
@@ -494,22 +560,41 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           </div>
                         </td>
 
-                        {/* 7. Status Dropdown */}
+                        {/* 7. Status Dropdown (NEW, CONTACTED, CLOSED) */}
                         <td className="py-4 px-4 align-top">
-                          <select
-                            value={inq.status}
-                            disabled={isLocked && isStaffMode}
-                            onChange={(e) => onUpdateStatus(inq.id, e.target.value as InquiryStatus)}
-                            className={`text-xs font-extrabold rounded-xl px-3 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${
-                              statusCfg.badgeClass
-                            } ${isLocked && isStaffMode ? 'opacity-60 cursor-not-allowed' : ''}`}
-                          >
-                            {CRM_STATUS_LIST.map((st) => (
-                              <option key={st} value={st}>
-                                {CRM_STATUS_CONFIG[st]?.label || st}
-                              </option>
-                            ))}
-                          </select>
+                          {isStaffMode && (isLocked || inq.status === 'CLOSED') ? (
+                            <div
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 select-none"
+                              title="This lead is Closed and permanently locked for staff. Contact an Administrator to modify."
+                            >
+                              <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                              <span>Closed (Locked)</span>
+                            </div>
+                          ) : (
+                            <select
+                              value={inq.status || 'NEW'}
+                              disabled={isStaffMode && (isLocked || inq.status === 'CLOSED')}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value as InquiryStatus;
+                                if (isStaffMode && newStatus === 'CLOSED') {
+                                  const proceed = window.confirm(
+                                    'Warning: Changing status to CLOSED will lock this lead permanently for staff. Only an Administrator will be able to reopen it. Proceed?'
+                                  );
+                                  if (!proceed) return;
+                                }
+                                await onUpdateStatus(inq.id, newStatus);
+                              }}
+                              className={`text-xs font-extrabold rounded-xl px-3 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                                statusCfg.badgeClass
+                              }`}
+                            >
+                              {statusOptions.map((st) => (
+                                <option key={st} value={st}>
+                                  {CRM_STATUS_CONFIG[st]?.label || st}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </td>
 
                         {/* 8. Arrival Date */}

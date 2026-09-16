@@ -4,6 +4,8 @@ import {
   getLeadId,
   CRM_STATUS_CONFIG,
   CRM_STATUS_LIST,
+  ADMIN_CRM_STATUS_LIST,
+  STAFF_CRM_STATUS_LIST,
   ACCOMMODATION_TIERS,
   formatPaxCount,
   formatCrmTimestamp,
@@ -85,7 +87,8 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
   if (!isOpen || !inquiry) return null;
 
   const leadId = getLeadId(inquiry);
-  const isLocked = Boolean(inquiry.isLockedForStaff && isStaffMode);
+  const isLocked = Boolean((inquiry.isLockedForStaff || inquiry.status === 'CLOSED') && isStaffMode);
+  const statusOptions = isStaffMode ? STAFF_CRM_STATUS_LIST : ADMIN_CRM_STATUS_LIST;
 
   const handleCopyLeadId = () => {
     navigator.clipboard.writeText(leadId);
@@ -138,12 +141,19 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
       return;
     }
 
+    if (isStaffMode && formData.status === 'CLOSED' && inquiry.status !== 'CLOSED') {
+      const proceed = window.confirm(
+        'Warning: Changing status to CLOSED will lock this lead permanently for staff. Only an Administrator will be able to reopen it. Proceed?'
+      );
+      if (!proceed) return;
+    }
+
     setSaving(true);
     try {
       const adultsCount = Number(formData.adults || 2);
       const childrenCount = Number(formData.children || 0);
 
-      await onSave(inquiry.id, {
+      const updates: Partial<Inquiry> = {
         ...formData,
         fullName: formData.customerName,
         email: formData.customerEmail,
@@ -151,7 +161,15 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
         guests: adultsCount + childrenCount,
         adults: adultsCount,
         children: childrenCount,
-      });
+      };
+
+      // Ensure staff members cannot modify staff assignment fields
+      if (isStaffMode) {
+        delete updates.assignedStaffId;
+        delete updates.assignedStaffName;
+      }
+
+      await onSave(inquiry.id, updates);
       onClose();
     } catch (err: any) {
       alert(err.message || 'Failed to save lead updates');
@@ -308,39 +326,77 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Lead Status */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Lead Status
                 </label>
-                <select
-                  value={formData.status || 'NEW'}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as InquiryStatus })}
-                  className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold"
-                >
-                  {CRM_STATUS_LIST.map((st) => (
-                    <option key={st} value={st}>
-                      {CRM_STATUS_CONFIG[st]?.label || st}
-                    </option>
-                  ))}
-                </select>
+                {isStaffMode && (isLocked || inquiry.status === 'CLOSED') ? (
+                  <div>
+                    <div className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span>Closed (Locked)</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                      Closed inquiries cannot be modified by staff. Only an Administrator can reopen.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <select
+                      value={formData.status || 'NEW'}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as InquiryStatus })}
+                      className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold"
+                    >
+                      {statusOptions.map((st) => (
+                        <option key={st} value={st}>
+                          {CRM_STATUS_CONFIG[st]?.label || st}
+                        </option>
+                      ))}
+                    </select>
+                    {isStaffMode && formData.status === 'CLOSED' && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 font-semibold">
+                        Notice: Setting to CLOSED will permanently lock this lead for staff upon saving.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
+              {/* Assigned Staff Representative */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Assigned Staff Representative
                 </label>
-                <select
-                  value={formData.assignedStaffId || ''}
-                  onChange={(e) => handleStaffChange(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="">-- Unassigned (Available in Pool) --</option>
-                  {staffList.map((stf) => (
-                    <option key={stf.id} value={stf.id}>
-                      {stf.name} ({stf.department || 'Travel Desk'})
-                    </option>
-                  ))}
-                </select>
+                {isStaffMode ? (
+                  <div>
+                    <div className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-emerald-500" />
+                        {formData.assignedStaffName || inquiry.assignedStaffName || currentStaffName || 'Assigned to You'}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">
+                        Admin Only
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                      Staff members cannot reassign leads. Contact an administrator to reassign.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={formData.assignedStaffId || ''}
+                    onChange={(e) => handleStaffChange(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
+                  >
+                    <option value="">-- Unassigned (Available in Pool) --</option>
+                    {staffList.map((stf) => (
+                      <option key={stf.id} value={stf.id}>
+                        {stf.name} ({stf.department || 'Travel Desk'})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
           </div>

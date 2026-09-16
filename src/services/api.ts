@@ -1,6 +1,6 @@
 import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor } from '../types.js';
 import { localStore } from './localStore.js';
-import { broadcastNewInquiry } from './soundNotification.js';
+import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 
 const API_BASE = '/api';
 
@@ -338,7 +338,7 @@ export const api = {
 
   async updateInquiryStatus(id: string, status: Inquiry['status']): Promise<Inquiry> {
     try {
-      return await safeFetch<Inquiry>(
+      const updated = await safeFetch<Inquiry>(
         `${API_BASE}/admin/inquiries/${id}/status`,
         {
           method: 'PUT',
@@ -350,8 +350,13 @@ export const api = {
         },
         'Failed to update inquiry status'
       );
+      localStore.updateInquiryStatus(id, status);
+      broadcastInquiryUpdated(updated, { newStatus: status });
+      return updated;
     } catch {
-      return localStore.updateInquiryStatus(id, status);
+      const updated = localStore.updateInquiryStatus(id, status);
+      broadcastInquiryUpdated(updated, { newStatus: status });
+      return updated;
     }
   },
 
@@ -359,7 +364,7 @@ export const api = {
     try {
       const endpoint = asStaff ? `${API_BASE}/staff/inquiries/${id}` : `${API_BASE}/admin/inquiries/${id}`;
       const header = asStaff ? getStaffAuthHeader() : getAdminAuthHeader();
-      return await safeFetch<Inquiry>(
+      const updated = await safeFetch<Inquiry>(
         endpoint,
         {
           method: 'PUT',
@@ -371,8 +376,19 @@ export const api = {
         },
         'Failed to update inquiry record'
       );
+      localStore.updateInquiry(id, updates);
+      broadcastInquiryUpdated(updated, {
+        newStatus: updated.status,
+        staffName: updated.assignedStaffName,
+      });
+      return updated;
     } catch {
-      return localStore.updateInquiry(id, updates);
+      const updated = localStore.updateInquiry(id, updates);
+      broadcastInquiryUpdated(updated, {
+        newStatus: updated.status,
+        staffName: updated.assignedStaffName,
+      });
+      return updated;
     }
   },
 
@@ -472,11 +488,11 @@ export const api = {
 
   async updateInquiryStatusByStaff(
     id: string,
-    status: 'CONTACTED' | 'CLOSED',
+    status: 'NEW' | 'CONTACTED' | 'CLOSED',
     staff: { id: string; name: string }
   ): Promise<Inquiry> {
     try {
-      return await safeFetch<Inquiry>(
+      const updated = await safeFetch<Inquiry>(
         `${API_BASE}/staff/inquiries/${id}/status`,
         {
           method: 'PUT',
@@ -488,8 +504,19 @@ export const api = {
         },
         'Failed to update inquiry status as staff'
       );
+      localStore.updateInquiryStatusByStaff(id, status, staff);
+      broadcastInquiryUpdated(updated, {
+        newStatus: status,
+        staffName: staff.name,
+      });
+      return updated;
     } catch (err) {
-      return localStore.updateInquiryStatusByStaff(id, status, staff);
+      const updated = localStore.updateInquiryStatusByStaff(id, status, staff);
+      broadcastInquiryUpdated(updated, {
+        newStatus: status,
+        staffName: staff.name,
+      });
+      return updated;
     }
   },
 
@@ -536,7 +563,7 @@ export const api = {
 
   async assignInquiryStaff(id: string, staffId: string, staffName: string): Promise<Inquiry> {
     try {
-      return await safeFetch<Inquiry>(
+      const updated = await safeFetch<Inquiry>(
         `${API_BASE}/admin/inquiries/${id}/assign`,
         {
           method: 'POST',
@@ -548,8 +575,13 @@ export const api = {
         },
         'Failed to assign staff to inquiry'
       );
+      localStore.assignInquiryStaff(id, staffId, staffName);
+      broadcastInquiryUpdated(updated, { staffName, newStatus: updated.status });
+      return updated;
     } catch {
-      return localStore.assignInquiryStaff(id, staffId, staffName);
+      const updated = localStore.assignInquiryStaff(id, staffId, staffName);
+      broadcastInquiryUpdated(updated, { staffName, newStatus: updated.status });
+      return updated;
     }
   },
 

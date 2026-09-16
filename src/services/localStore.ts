@@ -353,7 +353,8 @@ export const localStore = {
       setStored(STORAGE_KEYS.INQUIRIES, list);
     }
 
-    const defaultStaff = this.getStaffMembers()[0];
+    const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
+    const defaultStaff = rawStaff[0] || INITIAL_STAFF[0];
 
     // Ensure all inquiries have a TTT leadId and assigned staff
     let modified = false;
@@ -421,7 +422,8 @@ export const localStore = {
     const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : 0;
     const nextLeadId = inquiryData.leadId || `TTT${(maxNum + 1).toString().padStart(8, '0')}`;
 
-    const defaultStaff = this.getStaffMembers()[0];
+    const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
+    const defaultStaff = rawStaff[0] || INITIAL_STAFF[0];
     const assignedStaffId = inquiryData.assignedStaffId || defaultStaff?.id || 'stf-1';
     const assignedStaffName = inquiryData.assignedStaffName || defaultStaff?.name || 'Priya Sharma';
 
@@ -490,8 +492,10 @@ export const localStore = {
     if (newStatus === 'CLOSED') {
       merged.isLockedForStaff = true;
       if (!merged.closedAt) merged.closedAt = new Date().toISOString();
-    } else if (updates.isLockedForStaff === false) {
+    } else {
       merged.isLockedForStaff = false;
+      merged.closedAt = undefined;
+      merged.closedBy = undefined;
     }
 
     inquiries[idx] = merged;
@@ -507,6 +511,8 @@ export const localStore = {
     inquiries[idx].isResolved = status === 'CONFIRMED' || status === 'WON' || status === 'CLOSED';
     if (status !== 'CLOSED') {
       inquiries[idx].isLockedForStaff = false;
+      inquiries[idx].closedAt = undefined;
+      inquiries[idx].closedBy = undefined;
     } else {
       inquiries[idx].isLockedForStaff = true;
       inquiries[idx].closedAt = new Date().toISOString();
@@ -530,6 +536,10 @@ export const localStore = {
       throw new Error('This inquiry is permanently locked. Only an Administrator can reopen closed leads.');
     }
 
+    if (status !== 'NEW' && status !== 'CONTACTED' && status !== 'CLOSED') {
+      throw new Error('Staff members can only set status to NEW, CONTACTED, or CLOSED.');
+    }
+
     inquiries[idx].status = status;
     inquiries[idx].updatedAt = new Date().toISOString();
 
@@ -538,9 +548,6 @@ export const localStore = {
       inquiries[idx].isLockedForStaff = true;
       inquiries[idx].closedAt = new Date().toISOString();
       inquiries[idx].closedBy = `${staff.name} (Staff)`;
-    } else if (status === 'WON' || status === 'CONFIRMED') {
-      inquiries[idx].isResolved = true;
-      inquiries[idx].isLockedForStaff = false;
     } else {
       inquiries[idx].isResolved = false;
       inquiries[idx].isLockedForStaff = false;
@@ -642,7 +649,8 @@ export const localStore = {
     inq.deletedBy = undefined;
     if (staffId) {
       inq.assignedStaffId = staffId;
-      inq.assignedStaffName = staffName || (this.getStaffMembers().find((s) => s.id === staffId)?.name || 'Staff');
+      const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
+      inq.assignedStaffName = staffName || (rawStaff.find((s) => s.id === staffId)?.name || 'Staff');
     }
     setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     return inq;
@@ -854,8 +862,8 @@ export const localStore = {
       list = [...INITIAL_STAFF];
       setStored(STORAGE_KEYS.STAFF, list);
     }
-    // Compute current assigned leads count dynamically
-    const inquiries = this.getInquiries();
+    // Compute current assigned leads count dynamically without recursive getInquiries()
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, INITIAL_INQUIRIES);
     return list.map((staff) => {
       const assignedCount = inquiries.filter((inq) => inq.assignedStaffId === staff.id).length;
       const contactedCount = inquiries.filter(

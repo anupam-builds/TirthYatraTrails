@@ -745,8 +745,10 @@ class DatabaseStore {
     if (newStatus === 'CLOSED') {
       merged.isLockedForStaff = true;
       if (!merged.closedAt) merged.closedAt = new Date().toISOString();
-    } else if (updates.isLockedForStaff === false) {
+    } else {
       merged.isLockedForStaff = false;
+      merged.closedAt = undefined;
+      merged.closedBy = undefined;
     }
 
     this.data.inquiries[index] = merged;
@@ -761,6 +763,8 @@ class DatabaseStore {
     this.data.inquiries[index].isResolved = status === 'CONFIRMED' || status === 'WON' || status === 'CLOSED';
     if (status !== 'CLOSED') {
       this.data.inquiries[index].isLockedForStaff = false;
+      this.data.inquiries[index].closedAt = undefined;
+      this.data.inquiries[index].closedBy = undefined;
     } else {
       this.data.inquiries[index].isLockedForStaff = true;
       this.data.inquiries[index].closedAt = new Date().toISOString();
@@ -783,6 +787,10 @@ class DatabaseStore {
       throw new Error('This inquiry is permanently locked. Only an Administrator can reopen closed leads.');
     }
 
+    if (status !== 'NEW' && status !== 'CONTACTED' && status !== 'CLOSED') {
+      throw new Error('Staff members can only set status to NEW, CONTACTED, or CLOSED.');
+    }
+
     inq.status = status;
     inq.updatedAt = new Date().toISOString();
 
@@ -791,9 +799,6 @@ class DatabaseStore {
       inq.isLockedForStaff = true;
       inq.closedAt = new Date().toISOString();
       inq.closedBy = `${staff.name} (Staff)`;
-    } else if (status === 'WON' || status === 'CONFIRMED') {
-      inq.isResolved = true;
-      inq.isLockedForStaff = false;
     } else {
       inq.isResolved = false;
       inq.isLockedForStaff = false;
@@ -809,7 +814,7 @@ class DatabaseStore {
     if (staffIndex !== -1 && this.data.staff) {
       this.data.staff[staffIndex].lastActiveAt = new Date().toISOString();
       this.data.staff[staffIndex].isCurrentlyLoggedIn = true;
-      if (status === 'CLOSED' || status === 'WON') {
+      if (status === 'CLOSED') {
         this.data.staff[staffIndex].closedCount = (this.data.staff[staffIndex].closedCount || 0) + 1;
       } else {
         this.data.staff[staffIndex].contactedCount = (this.data.staff[staffIndex].contactedCount || 0) + 1;

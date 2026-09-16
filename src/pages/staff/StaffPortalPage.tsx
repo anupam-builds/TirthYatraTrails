@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
@@ -11,6 +11,7 @@ import {
   saveNotificationSettings,
   playNotificationTone,
   subscribeToNewInquiries,
+  subscribeToInquiryUpdates,
   NotificationSettings,
   NotificationTone,
   DEFAULT_NOTIFICATION_SETTINGS,
@@ -156,12 +157,12 @@ export const StaffPortalPage: React.FC = () => {
     return () => clearInterval(checkInterval);
   }, [isStaffAuthenticated, staffUser, logoutStaff, navigate]);
 
-  // Subscribe to real-time leads
+  // Subscribe to real-time leads and status updates
   useEffect(() => {
     loadInquiries();
     loadStaff();
 
-    const unsub = subscribeToNewInquiries((newInquiry) => {
+    const unsubNew = subscribeToNewInquiries((newInquiry) => {
       setInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)]);
       
       // Trigger sound if active
@@ -171,8 +172,16 @@ export const StaffPortalPage: React.FC = () => {
       }
     });
 
+    const unsubUpdates = subscribeToInquiryUpdates(({ inquiry: updatedInquiry }) => {
+      if (!updatedInquiry) return;
+      setInquiries((prev) =>
+        prev.map((item) => (item.id === updatedInquiry.id ? { ...item, ...updatedInquiry } : item))
+      );
+    });
+
     return () => {
-      unsub();
+      unsubNew();
+      unsubUpdates();
     };
   }, []);
 
@@ -265,14 +274,14 @@ export const StaffPortalPage: React.FC = () => {
     }
   };
 
-  // Handle staff status update (Restricted to CONTACTED or CLOSED)
-  const handleStaffStatusChange = async (inquiry: Inquiry, newStatus: 'CONTACTED' | 'CLOSED') => {
+  // Handle staff status update (Restricted to NEW, CONTACTED, or CLOSED)
+  const handleStaffStatusChange = async (inquiry: Inquiry, newStatus: 'NEW' | 'CONTACTED' | 'CLOSED') => {
     await handleUpdateStatus(inquiry.id, newStatus);
   };
 
   // Handle adding follow-up note
-  const handleAddNote = async (inquiryId: string) => {
-    const text = (noteInputs[inquiryId] || '').trim();
+  const handleAddNote = async (inquiryId: string, noteText?: string) => {
+    const text = (noteText || noteInputs[inquiryId] || '').trim();
     if (!text || !staffUser) return;
 
     setSubmittingNote((prev) => ({ ...prev, [inquiryId]: true }));
@@ -361,49 +370,24 @@ export const StaffPortalPage: React.FC = () => {
     return <StaffLoginPage />;
   }
 
-  // Filter inquiries
-  const filteredInquiries = inquiries.filter((inq) => {
-    // Assigned filter
-    if (assignedFilter === 'MY') {
-      const isMyLead = inq.assignedStaffId === staffUser.id || inq.assignedStaffName === staffUser.name;
-      if (!isMyLead) return false;
-    } else if (assignedFilter === 'UNASSIGNED') {
-      if (inq.assignedStaffId) return false;
-    }
-
-    // Status filter
-    if (statusFilter !== 'ALL' && inq.status !== statusFilter) {
-      return false;
-    }
-
-    // Search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchName = inq.customerName.toLowerCase().includes(q);
-      const matchPhone = inq.customerPhone.toLowerCase().includes(q);
-      const matchTitle = inq.title.toLowerCase().includes(q);
-      const matchEmail = (inq.customerEmail || '').toLowerCase().includes(q);
-      if (!matchName && !matchPhone && !matchTitle && !matchEmail) return false;
-    }
-
-    return true;
-  });
+  // Staff members can ONLY view inquiries explicitly assigned to them by the administrator
+  const staffAssignedInquiries = useMemo(() => {
+    if (!staffUser) return [];
+    return inquiries.filter((inq) => {
+      const matchesId = Boolean(inq.assignedStaffId && inq.assignedStaffId === staffUser.id);
+      const matchesName = Boolean(
+        inq.assignedStaffName &&
+        staffUser.name &&
+        inq.assignedStaffName.trim().toLowerCase() === staffUser.name.trim().toLowerCase()
+      );
+      return matchesId || matchesName;
+    });
+  }, [inquiries, staffUser]);
 
   // Calculate metrics
-  const myAssignedCount = inquiries.filter(
-    (i) => i.assignedStaffId === staffUser.id || i.assignedStaffName === staffUser.name
-  ).length;
-  const unassignedCount = inquiries.filter((i) => !i.assignedStaffId).length;
-  const myContactedCount = inquiries.filter(
-    (i) =>
-      (i.assignedStaffId === staffUser.id || i.assignedStaffName === staffUser.name) &&
-      i.status === 'CONTACTED'
-  ).length;
-  const myClosedCount = inquiries.filter(
-    (i) =>
-      (i.assignedStaffId === staffUser.id || i.assignedStaffName === staffUser.name) &&
-      i.status === 'CLOSED'
-  ).length;
+  const myAssignedCount = staffAssignedInquiries.length;
+  const myContactedCount = staffAssignedInquiries.filter((i) => i.status === 'CONTACTED').length;
+  const myClosedCount = staffAssignedInquiries.filter((i) => i.status === 'CLOSED').length;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#071322] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-150">
@@ -530,7 +514,7 @@ export const StaffPortalPage: React.FC = () => {
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                {inquiries.length}
+                {staffAssignedInquiries.length}
               </span>
             </button>
 
@@ -936,16 +920,17 @@ export const StaffPortalPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Comprehensive Lead Table & CRM Dashboard */}
+            {/* Comprehensive Lead Table & CRM Dashboard (Staff Mode: Explicitly Assigned Leads Only) */}
             <LeadTableView
-              inquiries={inquiries}
+              inquiries={staffAssignedInquiries}
               staffList={staffList}
               loading={loading}
               isAdmin={false}
               isStaffMode={true}
               currentStaffId={staffUser.id}
+              currentStaffName={staffUser.name}
               onUpdateStatus={handleUpdateStatus}
-              onAssignStaff={handleAssignStaff}
+              onAssignStaff={undefined}
               onEditInquiry={(inq) => setSelectedInquiryForEdit(inq)}
               onAddNote={handleAddNote}
             />
