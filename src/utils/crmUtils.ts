@@ -181,3 +181,47 @@ export function formatCrmTimestamp(isoStr?: string): string {
     return isoStr;
   }
 }
+
+/**
+ * Normalizes and cleans phone numbers for direct WhatsApp links
+ * Handles 10-digit Indian numbers, international formats, and stripping extraneous symbols
+ */
+export function cleanPhoneNumberForWhatsApp(phone?: string): string {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+
+  // Remove leading zeros (e.g. 09876543210 -> 9876543210)
+  digits = digits.replace(/^0+/, '');
+
+  // 10 digits (standard Indian mobile format) -> prepend country code 91
+  if (digits.length === 10) {
+    return `91${digits}`;
+  }
+
+  return digits;
+}
+
+/**
+ * Generates a pre-filled direct WhatsApp link for reaching out to a customer from Admin/Staff
+ */
+export function generateCustomerWhatsAppLink(
+  inquiry: Partial<Inquiry>,
+  staffName?: string
+): { url: string; phone: string; message: string } | null {
+  const rawPhone = inquiry.customerPhone || inquiry.whatsappNumber || (inquiry as any).phone || '';
+  const cleanedPhone = cleanPhoneNumberForWhatsApp(rawPhone);
+  if (!cleanedPhone) return null;
+
+  const pilgrimName = inquiry.customerName || inquiry.fullName || 'Pilgrim';
+  const leadId = getLeadId(inquiry);
+  const title = inquiry.title || (inquiry.type === 'HOTEL' ? 'Hotel & Stay Booking' : 'Holy Yatra Pilgrimage Package');
+  const dateStr = inquiry.checkInDate ? ` for travel on ${formatCrmDate(inquiry.checkInDate)}` : '';
+  const sender = staffName ? ` (${staffName})` : '';
+
+  const message = `Namaste ${pilgrimName}, reaching out from TirthYatraTrails${sender} regarding your inquiry for ${title}${dateStr} [Lead ID: ${leadId}]. How may we assist you with your sacred journey?`;
+
+  const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(message)}`;
+  return { url, phone: cleanedPhone, message };
+}
+

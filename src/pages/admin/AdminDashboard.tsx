@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { useRouter } from '../../context/RouterContext.js';
-import { api, generateWhatsAppLink } from '../../services/api.js';
+import { api } from '../../services/api.js';
 import { City, Hotel, Package, Inquiry } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
+import { generateCustomerWhatsAppLink } from '../../utils/crmUtils.js';
 import {
   MessageSquare,
   Building,
@@ -92,6 +93,27 @@ export const AdminDashboard: React.FC = () => {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleOpenWhatsApp = async (inq: Inquiry) => {
+    const waData = generateCustomerWhatsAppLink(inq, 'Travel Desk Admin');
+    if (!waData) {
+      alert(`No valid phone or WhatsApp number is on record for ${inq.customerName || 'this customer'}.`);
+      return;
+    }
+
+    if (inq.status === 'NEW') {
+      const shouldUpdate = window.confirm(
+        `Open WhatsApp chat with ${inq.customerName} (${waData.phone})?\n\n` +
+        `• Click "OK" to update status to CONTACTED and launch WhatsApp.\n` +
+        `• Click "Cancel" to open WhatsApp without changing status.`
+      );
+      if (shouldUpdate) {
+        handleUpdateStatus(inq.id, 'CONTACTED');
+      }
+    }
+
+    window.open(waData.url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -219,19 +241,6 @@ export const AdminDashboard: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {recentInquiries.map((inq) => {
-                  const waLink = generateWhatsAppLink({
-                    title: inq.title,
-                    type: inq.type,
-                    name: inq.customerName,
-                    checkIn: inq.checkInDate,
-                    adults: inq.adults,
-                    children: inq.children,
-                    plan: inq.selectedPlan,
-                    notes: inq.specialRequests,
-                    pickupLocation: inq.pickupLocation,
-                    dropoffLocation: inq.dropoffLocation,
-                  });
-
                   return (
                     <tr key={inq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="py-3.5 px-3 text-slate-500 dark:text-slate-400">
@@ -241,7 +250,19 @@ export const AdminDashboard: React.FC = () => {
                         {inq.customerName}
                       </td>
                       <td className="py-3.5 px-3">
-                        <div className="text-slate-800 dark:text-slate-300 font-mono font-medium">{inq.customerPhone}</div>
+                        <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
+                          <span>{inq.customerPhone}</span>
+                          {Boolean(inq.customerPhone) && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWhatsApp(inq)}
+                              title={`WhatsApp ${inq.customerName}`}
+                              className="p-1 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-colors"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                         <div className="text-slate-400 dark:text-slate-500 text-[10px] truncate max-w-[140px]">{inq.customerEmail}</div>
                       </td>
                       <td className="py-3.5 px-3 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
@@ -279,15 +300,14 @@ export const AdminDashboard: React.FC = () => {
                         </select>
                       </td>
                       <td className="py-3.5 px-3 text-right">
-                        <a
-                          href={waLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs"
+                        <button
+                          type="button"
+                          onClick={() => handleOpenWhatsApp(inq)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs cursor-pointer"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
                           <span>WhatsApp</span>
-                        </a>
+                        </button>
                       </td>
                     </tr>
                   );

@@ -9,8 +9,8 @@ import {
   formatPaxCount,
   formatCrmDate,
   formatCrmTimestamp,
+  generateCustomerWhatsAppLink,
 } from '../../utils/crmUtils.js';
-import { generateWhatsAppLink } from '../../services/api.js';
 import {
   Search,
   Users,
@@ -128,6 +128,34 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     } finally {
       setSubmittingNote((prev) => ({ ...prev, [id]: false }));
     }
+  };
+
+  // Direct WhatsApp chat handler with prompt to mark as CONTACTED if currently NEW
+  const handleOpenWhatsApp = async (inq: Inquiry) => {
+    const waData = generateCustomerWhatsAppLink(inq, currentStaffName);
+    if (!waData) {
+      alert(`No valid phone or WhatsApp number found for ${inq.customerName || inq.fullName || 'this pilgrim'}.`);
+      return;
+    }
+
+    // If status is NEW, prompt to optionally mark as CONTACTED
+    if ((!inq.status || inq.status === 'NEW') && onUpdateStatus) {
+      const shouldUpdate = window.confirm(
+        `Open WhatsApp chat with ${inq.customerName || inq.fullName} (${waData.phone})?\n\n` +
+        `• Click "OK" to update this lead's status to CONTACTED and launch WhatsApp.\n` +
+        `• Click "Cancel" to open WhatsApp without changing the lead status.`
+      );
+      if (shouldUpdate) {
+        try {
+          await onUpdateStatus(inq.id, 'CONTACTED');
+        } catch (err: any) {
+          console.error('Failed to update status to CONTACTED:', err);
+        }
+      }
+    }
+
+    // Open pre-filled WhatsApp chat in a new tab
+    window.open(waData.url, '_blank', 'noopener,noreferrer');
   };
 
   // Filter inquiries
@@ -437,17 +465,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                   const isLocked = Boolean(inq.isLockedForStaff || inq.status === 'CLOSED');
                   const isNotesExpanded = expandedNotes[inq.id] || false;
                   const notesCount = inq.followUpNotes?.length || 0;
-
-                  const waLink = generateWhatsAppLink({
-                    title: inq.title,
-                    type: inq.type,
-                    name: inq.customerName,
-                    checkIn: inq.checkInDate,
-                    adults: inq.adults,
-                    children: inq.children,
-                    plan: inq.selectedPlan,
-                    notes: inq.specialRequests,
-                  });
+                  const hasPhone = Boolean(inq.customerPhone || inq.whatsappNumber);
 
                   return (
                     <React.Fragment key={inq.id}>
@@ -515,9 +533,22 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <Lock className="w-3 h-3 text-rose-500 shrink-0" title="Locked lead" />
                               )}
                             </div>
-                            <div className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
-                              <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span>{inq.customerPhone || inq.whatsappNumber}</span>
+                            <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{inq.customerPhone || inq.whatsappNumber || 'No phone'}</span>
+                              </span>
+                              {hasPhone && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWhatsApp(inq)}
+                                  title={`Chat with ${inq.customerName || inq.fullName} on WhatsApp`}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+                                >
+                                  <MessageCircle className="w-3 h-3" />
+                                  <span>WhatsApp</span>
+                                </button>
+                              )}
                             </div>
                             {inq.customerEmail && (
                               <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px]">
@@ -618,15 +649,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             </button>
 
                             {/* WhatsApp Direct */}
-                            <a
-                              href={waLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open WhatsApp Chat"
-                              className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-colors"
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWhatsApp(inq)}
+                              title={`Direct WhatsApp chat with ${inq.customerName || inq.fullName}`}
+                              className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
                             >
                               <MessageCircle className="w-4 h-4" />
-                            </a>
+                            </button>
 
                             {/* Notes Accordion Toggle */}
                             <button

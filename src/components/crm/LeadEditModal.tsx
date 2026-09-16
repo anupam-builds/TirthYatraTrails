@@ -9,6 +9,7 @@ import {
   ACCOMMODATION_TIERS,
   formatPaxCount,
   formatCrmTimestamp,
+  generateCustomerWhatsAppLink,
 } from '../../utils/crmUtils.js';
 import {
   X,
@@ -23,6 +24,7 @@ import {
   CheckCircle2,
   Clock,
   MessageSquare,
+  MessageCircle,
   Send,
   Copy,
   Check,
@@ -132,6 +134,27 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
       ...prev,
       tags: (prev.tags || []).filter((t) => t !== tagToRemove),
     }));
+  };
+
+  const handleOpenWhatsApp = () => {
+    const waData = generateCustomerWhatsAppLink(formData, currentStaffName);
+    if (!waData) {
+      alert(`No valid phone or WhatsApp number is on record for ${formData.customerName || 'this customer'}.`);
+      return;
+    }
+
+    if (formData.status === 'NEW') {
+      const shouldUpdate = window.confirm(
+        `Open WhatsApp chat with ${formData.customerName || 'Customer'} (${waData.phone})?\n\n` +
+        `• Click "OK" to update this lead's status to CONTACTED and launch WhatsApp.\n` +
+        `• Click "Cancel" to open WhatsApp without changing the lead status.`
+      );
+      if (shouldUpdate) {
+        setFormData((prev) => ({ ...prev, status: 'CONTACTED' }));
+      }
+    }
+
+    window.open(waData.url, '_blank', 'noopener,noreferrer');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -270,9 +293,22 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  WhatsApp / Phone Number
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    WhatsApp / Phone Number
+                  </label>
+                  {Boolean(formData.customerPhone) && (
+                    <button
+                      type="button"
+                      onClick={handleOpenWhatsApp}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 cursor-pointer transition-colors"
+                      title="Open direct WhatsApp chat with customer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Chat on WhatsApp</span>
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                   <input
