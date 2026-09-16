@@ -73,9 +73,10 @@ export const AdminLoginPage: React.FC = () => {
         >
           <div className="w-10 h-10 rounded-full bg-white shadow-md p-1 flex items-center justify-center shrink-0 border border-amber-300/40 aspect-square group-hover:scale-105 transition-transform">
             <img
-              src="/logo.svg"
+              src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
               alt="TirthYatraTrails.in Logo"
               className="w-8 h-8 object-contain"
+              referrerPolicy="no-referrer"
             />
           </div>
           <div>
@@ -141,9 +142,10 @@ export const AdminLoginPage: React.FC = () => {
               <div className="text-center space-y-2">
                 <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full p-2 flex items-center justify-center mx-auto border border-amber-200 aspect-square shadow-md bg-white">
                   <img
-                    src="/logo.svg"
+                    src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
                     alt="TirthYatraTrails.in Logo"
                     className="w-full h-full aspect-square object-contain"
+                    referrerPolicy="no-referrer"
                   />
                 </div>
                 <h1 className="text-2xl font-black font-serif tracking-tight text-slate-900">

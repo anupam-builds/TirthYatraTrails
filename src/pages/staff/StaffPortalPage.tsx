@@ -397,9 +397,10 @@ export const StaffPortalPage: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-white shadow-xs border border-slate-200 dark:border-slate-700 p-0.5 aspect-square flex items-center justify-center shrink-0">
             <img
-              src="/logo.svg"
+              src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
               alt="TirthYatraTrails.in Logo"
               className="w-10 h-10 object-contain"
+              referrerPolicy="no-referrer"
             />
           </div>
           <div>

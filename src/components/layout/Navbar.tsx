@@ -62,9 +62,10 @@ export const CustomerNavbar: React.FC = () => {
           >
             <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xs border border-slate-200/80 p-0.5 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
               <img
-                src="/logo.svg"
+                src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
                 alt="TirthYatraTrails.in Logo"
                 className="w-10 h-10 object-contain"
+                referrerPolicy="no-referrer"
               />
             </div>
             <div className="flex flex-col">

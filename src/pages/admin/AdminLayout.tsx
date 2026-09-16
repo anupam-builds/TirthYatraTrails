@@ -184,9 +184,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
           <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white shadow-xs border border-slate-200 dark:border-slate-700 p-0.5 flex items-center justify-center shrink-0">
               <img
-                src="/logo.svg"
+                src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
                 alt="TirthYatraTrails.in Logo"
                 className="w-10 h-10 object-contain"
+                referrerPolicy="no-referrer"
               />
             </div>
             <div>

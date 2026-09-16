@@ -200,9 +200,10 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
           <div className="flex items-center gap-3 mb-2">
             <div className="w-8 h-8 rounded-full bg-white shadow-xs p-0.5 aspect-square flex items-center justify-center shrink-0">
               <img
-                src="/logo.svg"
+                src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
                 alt="TirthYatraTrails.in Logo"
                 className="w-8 h-8 object-contain"
+                referrerPolicy="no-referrer"
               />
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-orange-400">

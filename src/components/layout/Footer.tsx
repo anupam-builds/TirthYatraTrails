@@ -31,9 +31,10 @@ export const CustomerFooter: React.FC = () => {
               >
                 <div className="w-14 h-14 rounded-full bg-white shadow-md p-1 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 border border-white/20 aspect-square">
                   <img
-                    src="/logo.svg"
+                    src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
                     alt="TirthYatraTrails.in Logo"
                     className="w-full h-full object-contain"
+                    referrerPolicy="no-referrer"
                   />
                 </div>
                 <div className="flex flex-col">

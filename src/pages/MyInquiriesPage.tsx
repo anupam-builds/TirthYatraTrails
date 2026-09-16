@@ -51,9 +51,10 @@ export const MyInquiriesPage: React.FC = () => {
         <div className="max-w-md mx-auto bg-white p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4">
           <div className="w-20 h-20 rounded-full bg-white shadow-md p-1.5 aspect-square flex items-center justify-center mx-auto border border-orange-100">
             <img
-              src="/logo.svg"
+              src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
               alt="TirthYatraTrails.in Logo"
               className="w-full h-full aspect-square object-contain"
+              referrerPolicy="no-referrer"
             />
           </div>
           <h2 className="text-xl font-bold text-[#0f294a]">Please Sign In</h2>
