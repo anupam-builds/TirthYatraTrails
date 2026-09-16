@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import {
-  Users,
-  ShieldCheck,
   Lock,
   Mail,
   ArrowRight,
@@ -11,7 +9,6 @@ import {
   EyeOff,
   AlertCircle,
   ExternalLink,
-  Sparkles,
 } from 'lucide-react';
 
 export const StaffLoginPage: React.FC = () => {
@@ -40,12 +37,6 @@ export const StaffLoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillQuickDemo = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError(null);
   };
 
   return (
@@ -109,44 +100,6 @@ export const StaffLoginPage: React.FC = () => {
             <p className="text-xs text-slate-300 leading-relaxed">
               Sign in to manage assigned pilgrim leads, update status, and log devotee follow-up actions.
             </p>
-          </div>
-
-          {/* Quick Demo Credentials Fillers */}
-          <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-700/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Quick Demo Staff Accounts
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">Password: Staff@123</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={() => fillQuickDemo('priya.sharma@tirthyatra.com', 'Staff@123')}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-orange-600/30 text-slate-200 hover:text-orange-200 border border-slate-700 hover:border-orange-500/50 text-[11px] font-bold text-left transition-all"
-              >
-                Priya Sharma
-                <span className="block text-[9px] text-slate-400 font-normal">Sr. Coordinator</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillQuickDemo('arun.verma@tirthyatra.com', 'Staff@123')}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-orange-600/30 text-slate-200 hover:text-orange-200 border border-slate-700 hover:border-orange-500/50 text-[11px] font-bold text-left transition-all"
-              >
-                Arun Verma
-                <span className="block text-[9px] text-slate-400 font-normal">Yatra Desk</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillQuickDemo('vikram.joshi@tirthyatra.com', 'Staff@123')}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-orange-600/30 text-slate-200 hover:text-orange-200 border border-slate-700 hover:border-orange-500/50 text-[11px] font-bold text-left transition-all"
-              >
-                Vikram Joshi
-                <span className="block text-[9px] text-slate-400 font-normal">Operations</span>
-              </button>
-            </div>
           </div>
 
           {error && (
