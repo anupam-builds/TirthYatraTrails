@@ -83,6 +83,20 @@ export const StaffPortalPage: React.FC = () => {
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(getNotificationSettings());
   const knownInquiryIdsRef = useRef<Set<string>>(new Set());
 
+  // Staff members can ONLY view inquiries explicitly assigned to them by the administrator (Moved above conditional returns for hook stability)
+  const staffAssignedInquiries = useMemo(() => {
+    if (!staffUser) return [];
+    return inquiries.filter((inq) => {
+      const matchesId = Boolean(inq.assignedStaffId && inq.assignedStaffId === staffUser.id);
+      const matchesName = Boolean(
+        inq.assignedStaffName &&
+        staffUser.name &&
+        inq.assignedStaffName.trim().toLowerCase() === staffUser.name.trim().toLowerCase()
+      );
+      return matchesId || matchesName;
+    });
+  }, [inquiries, staffUser]);
+
   const toneOptions: { id: NotificationTone; name: string; desc: string; icon: string }[] = [
     {
       id: 'classic_chime',
@@ -369,20 +383,6 @@ export const StaffPortalPage: React.FC = () => {
   if (!isStaffAuthenticated || !staffUser) {
     return <StaffLoginPage />;
   }
-
-  // Staff members can ONLY view inquiries explicitly assigned to them by the administrator
-  const staffAssignedInquiries = useMemo(() => {
-    if (!staffUser) return [];
-    return inquiries.filter((inq) => {
-      const matchesId = Boolean(inq.assignedStaffId && inq.assignedStaffId === staffUser.id);
-      const matchesName = Boolean(
-        inq.assignedStaffName &&
-        staffUser.name &&
-        inq.assignedStaffName.trim().toLowerCase() === staffUser.name.trim().toLowerCase()
-      );
-      return matchesId || matchesName;
-    });
-  }, [inquiries, staffUser]);
 
   // Calculate metrics
   const myAssignedCount = staffAssignedInquiries.length;
@@ -947,9 +947,6 @@ export const StaffPortalPage: React.FC = () => {
               currentStaffName={staffUser.name}
               onAddNote={handleAddNote}
             />
-
-
-
           </>
         )}
       </main>

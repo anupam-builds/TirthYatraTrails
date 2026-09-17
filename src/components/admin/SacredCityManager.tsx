@@ -57,7 +57,6 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
-  SlidersHorizontal,
 } from 'lucide-react';
 
 // ==========================================
@@ -273,6 +272,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
       setSignificanceInput('');
       setIsModalOpen(false);
       setIsDropdownOpen(false);
+      fetchCities();
     } catch (err: any) {
       console.error('Failed to create city:', err);
       setFormError(err.message || 'Failed to save city. It might already exist.');
@@ -288,6 +288,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
     try {
       const { error } = await supabase.from('sacred_cities').delete().eq('id', id);
       if (error) throw error;
+      fetchCities();
     } catch (err: any) {
       console.error('Failed to delete city:', err);
       alert(`Deletion failed: ${err.message}`);
@@ -338,11 +339,10 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
         {/* Trigger Box */}
         <div
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className={`w-full flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white cursor-pointer transition-all ${
-            isDropdownOpen
-              ? 'ring-2 ring-orange-500 border-orange-500'
-              : 'border-slate-300 dark:border-slate-700 hover:border-slate-400'
-          }`}
+          className={`w-full flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white cursor-pointer transition-all ${isDropdownOpen
+            ? 'ring-2 ring-orange-500 border-orange-500'
+            : 'border-slate-300 dark:border-slate-700 hover:border-slate-400'
+            }`}
         >
           <div className="flex items-center gap-2 truncate">
             <div className="p-1 rounded-lg bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 shrink-0">
@@ -424,18 +424,16 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
                           if (onChange) onChange({ id: c.id, name: c.name, state: c.state });
                           setIsDropdownOpen(false);
                         }}
-                        className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${
-                          isSelected
-                            ? 'bg-orange-500 text-white font-bold'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
-                        }`}
+                        className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${isSelected
+                          ? 'bg-orange-500 text-white font-bold'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
+                          }`}
                       >
                         <div className="truncate">
                           <p className="truncate font-semibold">{c.name}</p>
                           <p
-                            className={`text-[10px] truncate ${
-                              isSelected ? 'text-orange-100' : 'text-slate-400 dark:text-slate-500'
-                            }`}
+                            className={`text-[10px] truncate ${isSelected ? 'text-orange-100' : 'text-slate-400 dark:text-slate-500'
+                              }`}
                           >
                             {c.state} {c.temple_significance && `• ${c.temple_significance}`}
                           </p>
@@ -450,7 +448,6 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
           </div>
         )}
 
-        {/* Reusable Modal Form */}
         {renderAddModal()}
       </div>
     );
@@ -481,11 +478,10 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
           {/* Realtime Live Pulse Indicator */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold">
             <Radio
-              className={`w-3.5 h-3.5 ${
-                channelStatus === 'SUBSCRIBED'
-                  ? 'text-emerald-500 animate-pulse'
-                  : 'text-amber-500'
-              }`}
+              className={`w-3.5 h-3.5 ${channelStatus === 'SUBSCRIBED'
+                ? 'text-emerald-500 animate-pulse'
+                : 'text-amber-500'
+                }`}
             />
             <span className="text-slate-700 dark:text-slate-300">
               {channelStatus === 'SUBSCRIBED' ? 'Realtime Connected' : channelStatus}
@@ -621,20 +617,15 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
     </div>
   );
 
-  // --- Helper: Accessible Add City Modal (Prevents <form> in <form> nesting) ---
+  // --- Helper: Accessible Add City Modal ---
   function renderAddModal() {
     if (!isModalOpen) return null;
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-        <div
+        <form
+          onSubmit={handleAddCity}
           className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleAddCity(e);
-            }
-          }}
         >
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2">
@@ -694,11 +685,10 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
                     key={st}
                     type="button"
                     onClick={() => setStateInput(st)}
-                    className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
-                      stateInput === st
-                        ? 'bg-orange-500 text-white border-orange-500 font-bold'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                    }`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${stateInput === st
+                      ? 'bg-orange-500 text-white border-orange-500 font-bold'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}
                   >
                     {st}
                   </button>
@@ -728,8 +718,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
                 Cancel
               </button>
               <button
-                type="button"
-                onClick={handleAddCity}
+                type="submit"
                 disabled={isSubmitting || !nameInput.trim()}
                 className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               >
@@ -742,7 +731,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </form>
       </div>
     );
   }
