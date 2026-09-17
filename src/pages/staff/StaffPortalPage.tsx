@@ -83,17 +83,18 @@ export const StaffPortalPage: React.FC = () => {
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(getNotificationSettings());
   const knownInquiryIdsRef = useRef<Set<string>>(new Set());
 
-  // Staff members can ONLY view inquiries explicitly assigned to them by the administrator (Moved above conditional returns for hook stability)
+  // Staff members can view inquiries assigned explicitly OR matching name/ID fallback (case-insensitive trim check)
   const staffAssignedInquiries = useMemo(() => {
     if (!staffUser) return [];
     return inquiries.filter((inq) => {
-      const matchesId = Boolean(inq.assignedStaffId && inq.assignedStaffId === staffUser.id);
-      const matchesName = Boolean(
+      const matchId = Boolean(inq.assignedStaffId && inq.assignedStaffId === staffUser.id);
+      const matchName = Boolean(
         inq.assignedStaffName &&
         staffUser.name &&
         inq.assignedStaffName.trim().toLowerCase() === staffUser.name.trim().toLowerCase()
       );
-      return matchesId || matchesName;
+      // Fallback or explicit check: also allow unassigned if testing or map broader if needed, but strictly check assigned id/name
+      return matchId || matchName;
     });
   }, [inquiries, staffUser]);
 
@@ -801,7 +802,7 @@ export const StaffPortalPage: React.FC = () => {
                   id="staff-test-sound-btn"
                   onClick={() => handleTestSound()}
                   disabled={!notificationSettings.soundEnabled || isPlayingTest}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-[#0a192f] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center gap-2 shrink-0 shadow-xs cursor-pointer disabled:opacity-40"
+                  className="px-4 py-2.5 rounded-2xl text-xs font-bold bg-white dark:bg-[#0a192f] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center gap-2 shrink-0 shadow-xs cursor-pointer disabled:opacity-40"
                   title="Synthesize and preview selected tone"
                 >
                   {isPlayingTest ? (
