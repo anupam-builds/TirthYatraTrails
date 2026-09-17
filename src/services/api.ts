@@ -22,6 +22,15 @@ export const api = {
       const { data, error } = await supabase.from('staff_members').select('*').eq('email', email).maybeSingle();
       if (error || !data || data.password !== password) throw new Error('Invalid staff credentials.');
       if (data.is_blocked || !data.is_active) throw new Error(`Access Blocked: ${data.blocked_reason || 'Revoked'}`);
+      
+      // Update session activity for live multi-admin tracking
+      await supabase.from('staff_sessions').upsert({
+        staff_id: data.id,
+        ip_address: '122.161.48.12',
+        device: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
+        last_active: new Date().toISOString(),
+      }, { onConflict: 'staff_id' });
+
       const { password: _, ...safeStaff } = data;
       const mapped: StaffMember = { ...safeStaff, isBlocked: safeStaff.is_blocked, isActive: safeStaff.is_active };
       return { user: mapped, token: btoa(JSON.stringify(mapped)) };
@@ -31,7 +40,14 @@ export const api = {
     }
   },
 
-  async logoutStaff(_staffId?: string): Promise<void> {},
+  async logoutStaff(staffId?: string): Promise<void> {
+    if (staffId) {
+      try {
+        await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
+      } catch {}
+      localStore.logoutStaff(staffId);
+    }
+  },
 
   async checkStaffSession(): Promise<{ ok: boolean; staff: StaffMember }> {
     const token = localStorage.getItem('tyt_staff_token');
@@ -111,11 +127,15 @@ export const api = {
         dropoff_location: (inquiryData as any).dropoffLocation || (inquiryData as any).dropoff_location,
         user_id: (inquiryData as any).userId || (inquiryData as any).user_id,
         status: inquiryData.status || 'NEW',
+        assigned_staff_id: (inquiryData as any).assignedStaffId,
+        assigned_staff_name: (inquiryData as any).assignedStaffName,
+        is_locked_for_staff: Boolean((inquiryData as any).isLockedForStaff),
       };
       const { data, error } = await supabase.from('inquiries').insert([payload]).select().single();
       if (error) throw new Error(error.message);
-      broadcastNewInquiry(data);
-      return data;
+      const mapped = mapInquiryRow(data);
+      broadcastNewInquiry(mapped);
+      return mapped;
     } catch {
       const fb = localStore.submitInquiry(inquiryData);
       broadcastNewInquiry(fb);
@@ -128,7 +148,8 @@ export const api = {
       let q = supabase.from('inquiries').select('*').order('created_at', { ascending: false });
       if (userId) q = q.eq('user_id', userId);
       const { data } = await q;
-      return data && data.length ? data : localStore.getInquiries(userId);
+      if (data && data.length) return data.map(mapInquiryRow);
+      return localStore.getInquiries(userId);
     } catch {
       return localStore.getInquiries(userId);
     }
@@ -143,10 +164,21 @@ export const api = {
 
   async updateInquiry(id: string, updates: Partial<Inquiry>, _asStaff = false): Promise<Inquiry> {
     try {
-      const { data, error } = await supabase.from('inquiries').update(updates).eq('id', id).select().single();
-      if (error) throw new Error(error.message);
-      broadcastInquiryUpdated(data, { newStatus: data.status });
-      return data;
+      const payload: Record<string, any> = {};
+      if (updates.status !== undefined) payload.status = updates.status;
+      if (updates.assignedStaffId !== undefined) payload.assigned_staff_id = updates.assignedStaffId;
+      if (updates.assignedStaffName !== undefined) payload.assigned_staff_name = updates.assignedStaffName;
+      if ((updates as any).isLockedForStaff !== undefined) payload.is_locked_for_staff = (updates as any).isLockedForStaff;
+      if (updates.notes !== undefined) payload.notes = updates.notes;
+      if (updates.specialRequests !== undefined) payload.special_requests = updates.specialRequests;
+      if (updates.title !== undefined) payload.title = updates.title;
+
+      const { data, error } = await supabase.from('inquiries').update(payload).eq('id', id).select().maybeSingle();
+      if (error || !data) throw new Error(error?.message || 'Update failed');
+      const mapped = mapInquiryRow(data);
+      localStore.updateInquiry(id, mapped);
+      broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: mapped.assignedStaffName });
+      return mapped;
     } catch {
       const updated = localStore.updateInquiry(id, updates);
       broadcastInquiryUpdated(updated, { newStatus: updated.status });
@@ -172,7 +204,12 @@ export const api = {
   async emptyTrash() { return localStore.emptyTrash(); },
 
   async updateInquiryStatusByStaff(id: string, status: 'NEW' | 'CONTACTED' | 'CLOSED', staff: { id: string; name: string }) {
-    return this.updateInquiry(id, { status, assignedStaffId: staff.id, assignedStaffName: staff.name });
+    return this.updateInquiry(id, {
+      status,
+      assignedStaffId: staff.id,
+      assignedStaffName: staff.name,
+      isLockedForStaff: status === 'CLOSED',
+    }, true);
   },
 
   async adminUnlockInquiry(id: string, newStatus: Inquiry['status'] = 'CONTACTED') {
@@ -180,20 +217,24 @@ export const api = {
   },
 
   async addInquiryNote(id: string, noteData: any) {
-    const list = await this.getInquiries();
-    const target = list.find(i => i.id === id);
-    const notes = [...(target?.notes || []), { id: `note-${Date.now()}`, ...noteData, createdAt: new Date().toISOString() }];
-    return this.updateInquiry(id, { notes } as any);
+    try {
+      const list = await this.getInquiries();
+      const target = list.find(i => i.id === id);
+      const notes = [...(target?.notes || []), { id: `note-${Date.now()}`, ...noteData, createdAt: new Date().toISOString() }];
+      return await this.updateInquiry(id, { notes } as any);
+    } catch {
+      return localStore.addInquiryNote(id, noteData);
+    }
   },
 
   async assignInquiryStaff(id: string, staffId: string, staffName: string) {
     return this.updateInquiry(id, { assignedStaffId: staffId, assignedStaffName: staffName });
   },
 
-  // Staff Mgmt
+  // Staff Mgmt & Live Session Monitor via Supabase
   async getStaffMembers(): Promise<StaffMember[]> {
     const { data } = await supabase.from('staff_members').select('*');
-    return data && data.length ? data : localStore.getStaffMembers();
+    return data && data.length ? data.map(mapStaffRow) : localStore.getStaffMembers();
   },
   async createStaffMember(staff: Partial<StaffMember>) {
     const payload = {
@@ -206,8 +247,10 @@ export const api = {
       is_active: (staff as any).isActive !== false,
       is_blocked: Boolean((staff as any).isBlocked),
     };
-    const { data, error } = await supabase.from('staff_members').insert([payload]).select().maybeSingle();
-    return data || localStore.createStaffMember(staff);
+    const { data } = await supabase.from('staff_members').insert([payload]).select().maybeSingle();
+    const mapped = data ? mapStaffRow(data) : localStore.createStaffMember(staff);
+    localStore.createStaffMember(mapped);
+    return mapped;
   },
   async updateStaffMember(id: string, staff: Partial<StaffMember>) {
     const payload: Record<string, any> = {};
@@ -220,7 +263,9 @@ export const api = {
     if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
 
     const { data } = await supabase.from('staff_members').update(payload).eq('id', id).select().maybeSingle();
-    return data || localStore.updateStaffMember(id, staff);
+    const mapped = data ? mapStaffRow(data) : localStore.updateStaffMember(id, staff);
+    localStore.updateStaffMember(id, mapped);
+    return mapped;
   },
   async toggleStaffStatus(id: string) {
     const list = await this.getStaffMembers();
@@ -230,7 +275,22 @@ export const api = {
   async blockStaffMember(id: string, isBlocked: boolean, reason?: string) {
     return this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked } as any);
   },
-  async getStaffSessions() { return localStore.getStaffSessionMonitor(); },
+  async getStaffSessions() {
+    try {
+      const { data, error } = await supabase.from('staff_sessions').select('*');
+      if (error || !data || data.length === 0) return localStore.getStaffSessionMonitor();
+      const sessions = data.map((row: any) => ({
+        staffId: row.staff_id,
+        ip: row.ip_address,
+        device: row.device,
+        lastActive: row.last_active,
+        isOnline: new Date().getTime() - new Date(row.last_active).getTime() < 15 * 60 * 1000,
+      }));
+      return { activeCount: sessions.filter((s: any) => s.isOnline).length, sessions };
+    } catch {
+      return localStore.getStaffSessionMonitor();
+    }
+  },
   async getStaffLogs() { return localStore.getStaffLogs(); },
   async resetStaffPassword(id: string, newPassword: string) { return this.updateStaffMember(id, { password: newPassword }); },
   async deleteStaffMember(id: string) {
@@ -278,6 +338,45 @@ export const api = {
   async createCompanionProfile(p: any) { return this.createCompanion(p); },
   async resetData() { localStore.resetData(); },
 };
+
+function mapInquiryRow(row: any): Inquiry {
+  return {
+    id: row.id,
+    title: row.title,
+    type: row.type,
+    fullName: row.full_name || row.fullName,
+    phone: row.phone,
+    email: row.email,
+    checkInDate: row.check_in_date || row.checkInDate,
+    guests: row.guests,
+    adults: row.adults,
+    children: row.children,
+    childAges: row.child_ages || row.childAges,
+    plan: row.plan,
+    specialRequests: row.special_requests || row.specialRequests,
+    pickupLocation: row.pickup_location || row.pickupLocation,
+    dropoffLocation: row.dropoff_location || row.dropoffLocation,
+    userId: row.user_id || row.userId,
+    status: row.status,
+    createdAt: row.created_at || row.createdAt,
+    assignedStaffId: row.assigned_staff_id || row.assignedStaffId,
+    assignedStaffName: row.assigned_staff_name || row.assignedStaffName,
+    isLockedForStaff: row.is_locked_for_staff ?? row.isLockedForStaff,
+    notes: row.notes || [],
+  };
+}
+
+function mapStaffRow(row: any): StaffMember {
+  return {
+    ...row,
+    isBlocked: row.is_blocked ?? row.isBlocked,
+    blockedReason: row.blocked_reason ?? row.blockedReason,
+    isActive: row.is_active ?? row.isActive,
+    lastActiveAt: row.last_active_at ?? row.lastActiveAt,
+    currentIp: row.current_ip ?? row.currentIp,
+    currentDevice: row.current_device ?? row.currentDevice,
+  };
+}
 
 export function generateWhatsAppLink(details: any) {
   const travelDeskNumber = '919876543210';

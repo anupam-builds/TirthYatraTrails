@@ -5,6 +5,7 @@ import { api } from '../../services/api.js';
 import { City, Hotel, Package, Inquiry } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
 import { generateCustomerWhatsAppLink } from '../../utils/crmUtils.js';
+import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import {
   MessageSquare,
   Building,
@@ -35,7 +36,22 @@ export const AdminDashboard: React.FC = () => {
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const recalculateStats = (inqList: Inquiry[], hCount: number, pCount: number, cCount: number) => {
+    setRecentInquiries(inqList.slice(0, 5));
+    setStats({
+      hotelsCount: hCount,
+      packagesCount: pCount,
+      citiesCount: cCount,
+      inquiriesCount: inqList.length,
+      newInquiries: inqList.filter((i) => i.status === 'NEW').length,
+    });
+  };
+
   useEffect(() => {
+    let hotelsCountVal = 0;
+    let packagesCountVal = 0;
+    let citiesCountVal = 0;
+
     async function loadDashboard() {
       try {
         const [c, h, p, inq] = await Promise.all([
@@ -45,14 +61,10 @@ export const AdminDashboard: React.FC = () => {
           api.getInquiries(),
         ]);
         setCities(c);
-        setRecentInquiries(inq.slice(0, 5));
-        setStats({
-          hotelsCount: h.length,
-          packagesCount: p.length,
-          citiesCount: c.length,
-          inquiriesCount: inq.length,
-          newInquiries: inq.filter((i) => i.status === 'NEW').length,
-        });
+        hotelsCountVal = h.length;
+        packagesCountVal = p.length;
+        citiesCountVal = c.length;
+        recalculateStats(inq, hotelsCountVal, packagesCountVal, citiesCountVal);
       } catch (err) {
         console.error('Error loading dashboard:', err);
       } finally {
@@ -61,13 +73,13 @@ export const AdminDashboard: React.FC = () => {
     }
     loadDashboard();
 
-    // Dynamically update dashboard inquiries & stats when new lead arrives
+    // Dynamically update dashboard inquiries & stats when new lead arrives locally/legacy
     const unsub = subscribeToNewInquiries((newInquiry) => {
       setRecentInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)].slice(0, 5));
       setStats((prev) => ({
         ...prev,
         inquiriesCount: prev.inquiriesCount + 1,
-        newInquiries: prev.newInquiries + 1,
+        newInquiries: newInquiry.status === 'NEW' ? prev.newInquiries + 1 : prev.newInquiries,
       }));
     });
 
@@ -84,6 +96,32 @@ export const AdminDashboard: React.FC = () => {
     };
   }, []);
 
+  // Real-time synchronization across admins when status, staff assignment, or any inquiry changes
+  useRealtimeInquiries((updated) => {
+    setRecentInquiries((prev) => {
+      const exists = prev.some((i) => i.id === updated.id);
+      const updatedList = exists
+        ? prev.map((i) => (i.id === updated.id ? updated : i))
+        : [updated, ...prev];
+      return updatedList.slice(0, 5);
+    });
+
+    setStats((prev) => {
+      // Re-fetch counts cleanly or adjust dynamically
+      return {
+        ...prev,
+      };
+    });
+    // Async refresh full lists count accuracy
+    api.getInquiries().then((allInq) => {
+      setStats((prev) => ({
+        ...prev,
+        inquiriesCount: allInq.length,
+        newInquiries: allInq.filter((i) => i.status === 'NEW').length,
+      }));
+    });
+  });
+
   const handleUpdateStatus = async (id: string, status: Inquiry['status']) => {
     try {
       await api.updateInquiryStatus(id, status);
@@ -98,13 +136,13 @@ export const AdminDashboard: React.FC = () => {
   const handleOpenWhatsApp = async (inq: Inquiry) => {
     const waData = generateCustomerWhatsAppLink(inq, 'Travel Desk Admin');
     if (!waData) {
-      alert(`No valid phone or WhatsApp number is on record for ${inq.customerName || 'this customer'}.`);
+      alert(`No valid phone or WhatsApp number is on record for ${inq.fullName || inq.customerName || 'this customer'}.`);
       return;
     }
 
     if (inq.status === 'NEW') {
       const shouldUpdate = window.confirm(
-        `Open WhatsApp chat with ${inq.customerName} (${waData.phone})?\n\n` +
+        `Open WhatsApp chat with ${inq.fullName || inq.customerName} (${waData.phone})?\n\n` +
         `• Click "OK" to update status to CONTACTED and launch WhatsApp.\n` +
         `• Click "Cancel" to open WhatsApp without changing status.`
       );
@@ -235,35 +273,40 @@ export const AdminDashboard: React.FC = () => {
                   <th className="pb-3 px-3">Contact</th>
                   <th className="pb-3 px-3">Inquiry For</th>
                   <th className="pb-3 px-3">Plan / Dates</th>
-                  <th className="pb-3 px-3">Status</th>
+                  <th className="pb-3 px-3">Status / Assigned</th>
                   <th className="pb-3 px-3 text-right">Desk Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {recentInquiries.map((inq) => {
+                  const custName = inq.fullName || inq.customerName || 'Devotee';
+                  const custPhone = inq.phone || inq.customerPhone || '';
+                  const custEmail = inq.email || inq.customerEmail || '';
+                  const selPlan = inq.plan || inq.selectedPlan || 'Standard';
+
                   return (
                     <tr key={inq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="py-3.5 px-3 text-slate-500 dark:text-slate-400">
-                        {new Date(inq.createdAt).toLocaleDateString('en-IN')}
+                        {inq.createdAt ? new Date(inq.createdAt).toLocaleDateString('en-IN') : 'Today'}
                       </td>
                       <td className="py-3.5 px-3 font-bold text-slate-900 dark:text-white">
-                        {inq.customerName}
+                        {custName}
                       </td>
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
-                          <span>{inq.customerPhone}</span>
-                          {Boolean(inq.customerPhone) && (
+                          <span>{custPhone}</span>
+                          {Boolean(custPhone) && (
                             <button
                               type="button"
                               onClick={() => handleOpenWhatsApp(inq)}
-                              title={`WhatsApp ${inq.customerName}`}
+                              title={`WhatsApp ${custName}`}
                               className="p-1 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-colors"
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
-                        <div className="text-slate-400 dark:text-slate-500 text-[10px] truncate max-w-[140px]">{inq.customerEmail}</div>
+                        <div className="text-slate-400 dark:text-slate-500 text-[10px] truncate max-w-[140px]">{custEmail}</div>
                       </td>
                       <td className="py-3.5 px-3 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
                         <div>{inq.title}</div>
@@ -276,10 +319,10 @@ export const AdminDashboard: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3.5 px-3 text-slate-600 dark:text-slate-400">
-                        <div>{inq.selectedPlan || 'Standard'}</div>
-                        <div className="text-[10px] text-slate-400 dark:text-slate-500">{inq.checkInDate || 'Flexible'} • {inq.adults} Adults</div>
+                        <div>{selPlan}</div>
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500">{inq.checkInDate || 'Flexible'} • {inq.adults || 2} Adults</div>
                       </td>
-                      <td className="py-3.5 px-3">
+                      <td className="py-3.5 px-3 space-y-1">
                         <select
                           value={inq.status}
                           onChange={(e) => handleUpdateStatus(inq.id, e.target.value as any)}
@@ -298,6 +341,11 @@ export const AdminDashboard: React.FC = () => {
                           <option value="CONFIRMED">CONFIRMED</option>
                           <option value="CLOSED">CLOSED</option>
                         </select>
+                        {(inq.assignedStaffName || (inq as any).assigned_staff_name) && (
+                          <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium truncate">
+                            Staff: {inq.assignedStaffName || (inq as any).assigned_staff_name}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-3 text-right">
                         <button
@@ -367,7 +415,7 @@ export const AdminDashboard: React.FC = () => {
                 >
                   <span className="font-bold text-slate-800 dark:text-slate-200">{city.name}</span>
                   <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-950/60 px-2 py-0.5 rounded-md">
-                    {city.hotelCount} {city.hotelCount === 1 ? 'Stay Listed' : 'Stays Listed'}
+                    {city.hotelCount || 1} {city.hotelCount === 1 ? 'Stay Listed' : 'Stays Listed'}
                   </span>
                 </div>
               ))}
