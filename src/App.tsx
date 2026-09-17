@@ -28,6 +28,7 @@ import { AdminDashboard } from './pages/admin/AdminDashboard.js';
 import { AdminHotels } from './pages/admin/AdminHotels.js';
 import { AdminPackages } from './pages/admin/AdminPackages.js';
 import { AdminInquiries } from './pages/admin/AdminInquiries.js';
+import SacredCityManager from './components/admin/SacredCityManager';
 import { AdminStaff } from './pages/admin/AdminStaff.js';
 import { AdminCities } from './pages/admin/AdminCities.js';
 import { AdminReviews } from './pages/admin/AdminReviews.js';
