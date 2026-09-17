@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
@@ -199,6 +200,20 @@ export const StaffPortalPage: React.FC = () => {
       unsubUpdates();
     };
   }, []);
+
+  // Real-time Supabase synchronization hook for staff portal lead updates/assignments/status
+  useRealtimeInquiries((updated) => {
+    setInquiries((prev) => {
+      const exists = prev.some((i) => i.id === updated.id);
+      const nextList = exists
+        ? prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
+        : [updated, ...prev];
+      return nextList;
+    });
+    if (selectedInquiryForEdit && selectedInquiryForEdit.id === updated.id) {
+      setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...updated } : null));
+    }
+  });
 
   async function loadStaff() {
     try {
