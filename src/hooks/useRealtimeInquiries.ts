@@ -4,14 +4,18 @@ import { Inquiry } from '../types';
 
 export function useRealtimeInquiries(onUpdate: (updatedInquiry: Inquiry) => void) {
   useEffect(() => {
+    const channelName = `inquiries-realtime-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel('public:inquiries')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inquiries' },
         (payload) => {
-          const row = payload.new as any;
+          const row = (payload.new && Object.keys(payload.new).length > 0 ? payload.new : payload.old) as any;
           if (!row || !row.id) return;
+
+          console.log(`[Realtime ${channelName}] Event: ${payload.event}`, row);
+
           const mapped: Inquiry = {
             id: row.id,
             title: row.title,
@@ -39,7 +43,13 @@ export function useRealtimeInquiries(onUpdate: (updatedInquiry: Inquiry) => void
           onUpdate(mapped);
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) {
+          console.error(`[Realtime ${channelName}] Subscription error:`, err);
+        } else {
+          console.log(`[Realtime ${channelName}] Status:`, status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
