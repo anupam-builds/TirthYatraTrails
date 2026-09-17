@@ -7,7 +7,7 @@ export const api = {
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
     try {
-      const { data, error } = await supabase.from('users').select('*').eq('email', email).single();
+      const { data, error } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
       if (error || !data || data.password !== password) throw new Error('Invalid email or password.');
       if (portal === 'admin' && data.role !== 'ADMIN') throw new Error('Access Denied. Admin privileges required.');
       const { password: _, ...safeUser } = data;
@@ -19,7 +19,7 @@ export const api = {
 
   async loginStaff(email: string, password: string): Promise<{ user: StaffMember; token: string }> {
     try {
-      const { data, error } = await supabase.from('staff_members').select('*').eq('email', email).single();
+      const { data, error } = await supabase.from('staff_members').select('*').eq('email', email).maybeSingle();
       if (error || !data || data.password !== password) throw new Error('Invalid staff credentials.');
       if (data.is_blocked || !data.is_active) throw new Error(`Access Blocked: ${data.blocked_reason || 'Revoked'}`);
       const { password: _, ...safeStaff } = data;
@@ -37,8 +37,9 @@ export const api = {
     const token = localStorage.getItem('tyt_staff_token');
     if (!token) throw new Error('No staff token');
     const parsed = JSON.parse(atob(token));
-    const { data } = await supabase.from('staff_members').select('*').eq('id', parsed.id).single();
-    if (data?.is_blocked || !data?.is_active) throw new Error('Account Blocked');
+    const { data } = await supabase.from('staff_members').select('*').eq('id', parsed.id).maybeSingle();
+    if (!data) throw new Error('Staff account not found');
+    if (data.is_blocked || !data.is_active) throw new Error('Account Blocked');
     return { ok: true, staff: { ...data, isBlocked: data.is_blocked, isActive: data.is_active } };
   },
 
@@ -76,7 +77,7 @@ export const api = {
   },
 
   async getHotelById(id: string): Promise<Hotel> {
-    const { data } = await supabase.from('hotels').select('*').eq('id', id).single();
+    const { data } = await supabase.from('hotels').select('*').eq('id', id).maybeSingle();
     return data || localStore.getHotelById(id)!;
   },
 
@@ -86,14 +87,32 @@ export const api = {
   },
 
   async getPackageById(id: string): Promise<Package> {
-    const { data } = await supabase.from('packages').select('*').eq('id', id).single();
+    const { data } = await supabase.from('packages').select('*').eq('id', id).maybeSingle();
     return data || localStore.getPackageById(id)!;
   },
 
   // Inquiries
   async submitInquiry(inquiryData: Partial<Inquiry>): Promise<Inquiry> {
     try {
-      const { data, error } = await supabase.from('inquiries').insert([inquiryData]).select().single();
+      const payload = {
+        title: inquiryData.title,
+        type: inquiryData.type,
+        full_name: (inquiryData as any).fullName || (inquiryData as any).full_name,
+        phone: inquiryData.phone,
+        email: inquiryData.email,
+        check_in_date: (inquiryData as any).checkInDate || (inquiryData as any).check_in_date,
+        guests: inquiryData.guests,
+        adults: inquiryData.adults,
+        children: inquiryData.children,
+        child_ages: (inquiryData as any).childAges || (inquiryData as any).child_ages,
+        plan: inquiryData.plan,
+        special_requests: (inquiryData as any).specialRequests || (inquiryData as any).special_requests,
+        pickup_location: (inquiryData as any).pickupLocation || (inquiryData as any).pickup_location,
+        dropoff_location: (inquiryData as any).dropoffLocation || (inquiryData as any).dropoff_location,
+        user_id: (inquiryData as any).userId || (inquiryData as any).user_id,
+        status: inquiryData.status || 'NEW',
+      };
+      const { data, error } = await supabase.from('inquiries').insert([payload]).select().single();
       if (error) throw new Error(error.message);
       broadcastNewInquiry(data);
       return data;
@@ -177,20 +196,39 @@ export const api = {
     return data && data.length ? data : localStore.getStaffMembers();
   },
   async createStaffMember(staff: Partial<StaffMember>) {
-    const { data } = await supabase.from('staff_members').insert([staff]).select().single();
+    const payload = {
+      id: staff.id || `stf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: staff.name,
+      email: staff.email,
+      password: staff.password || 'Tirth@123',
+      role: staff.role || 'STAFF',
+      department: (staff as any).department || 'Operations',
+      is_active: (staff as any).isActive !== false,
+      is_blocked: Boolean((staff as any).isBlocked),
+    };
+    const { data, error } = await supabase.from('staff_members').insert([payload]).select().maybeSingle();
     return data || localStore.createStaffMember(staff);
   },
   async updateStaffMember(id: string, staff: Partial<StaffMember>) {
-    const { data } = await supabase.from('staff_members').update(staff).eq('id', id).select().single();
+    const payload: Record<string, any> = {};
+    if (staff.name !== undefined) payload.name = staff.name;
+    if (staff.email !== undefined) payload.email = staff.email;
+    if (staff.password !== undefined) payload.password = staff.password;
+    if (staff.role !== undefined) payload.role = staff.role;
+    if ((staff as any).department !== undefined) payload.department = (staff as any).department;
+    if ((staff as any).isActive !== undefined) payload.is_active = (staff as any).isActive;
+    if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
+
+    const { data } = await supabase.from('staff_members').update(payload).eq('id', id).select().maybeSingle();
     return data || localStore.updateStaffMember(id, staff);
   },
   async toggleStaffStatus(id: string) {
     const list = await this.getStaffMembers();
     const target = list.find(s => s.id === id);
-    return this.updateStaffMember(id, { isActive: !target?.isActive });
+    return this.updateStaffMember(id, { isActive: !target?.isActive } as any);
   },
   async blockStaffMember(id: string, isBlocked: boolean, reason?: string) {
-    return this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked });
+    return this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked } as any);
   },
   async getStaffSessions() { return localStore.getStaffSessionMonitor(); },
   async getStaffLogs() { return localStore.getStaffLogs(); },
@@ -204,16 +242,16 @@ export const api = {
   async uploadImage(base64OrDataUrl: string) { return base64OrDataUrl; },
 
   // Admin Hotels/Packages/Cities/Reviews fallbacks
-  async createHotel(hotel: Partial<Hotel>) { const { data } = await supabase.from('hotels').insert([hotel]).select().single(); return data || localStore.createHotel(hotel); },
-  async updateHotel(id: string, hotel: Partial<Hotel>) { const { data } = await supabase.from('hotels').update(hotel).eq('id', id).select().single(); return data || localStore.updateHotel(id, hotel); },
+  async createHotel(hotel: Partial<Hotel>) { const { data } = await supabase.from('hotels').insert([hotel]).select().maybeSingle(); return data || localStore.createHotel(hotel); },
+  async updateHotel(id: string, hotel: Partial<Hotel>) { const { data } = await supabase.from('hotels').update(hotel).eq('id', id).select().maybeSingle(); return data || localStore.updateHotel(id, hotel); },
   async deleteHotel(id: string) { await supabase.from('hotels').delete().eq('id', id); localStore.deleteHotel(id); return true; },
 
-  async createPackage(pkg: Partial<Package>) { const { data } = await supabase.from('packages').insert([pkg]).select().single(); return data || localStore.createPackage(pkg); },
-  async updatePackage(id: string, pkg: Partial<Package>) { const { data } = await supabase.from('packages').update(pkg).eq('id', id).select().single(); return data || localStore.updatePackage(id, pkg); },
+  async createPackage(pkg: Partial<Package>) { const { data } = await supabase.from('packages').insert([pkg]).select().maybeSingle(); return data || localStore.createPackage(pkg); },
+  async updatePackage(id: string, pkg: Partial<Package>) { const { data } = await supabase.from('packages').update(pkg).eq('id', id).select().maybeSingle(); return data || localStore.updatePackage(id, pkg); },
   async deletePackage(id: string) { await supabase.from('packages').delete().eq('id', id); localStore.deletePackage(id); return true; },
 
-  async createCity(city: Partial<City>) { const { data } = await supabase.from('cities').insert([city]).select().single(); return data || localStore.createCity(city); },
-  async updateCity(id: string, city: Partial<City>) { const { data } = await supabase.from('cities').update(city).eq('id', id).select().single(); return data || localStore.updateCity(id, city); },
+  async createCity(city: Partial<City>) { const { data } = await supabase.from('cities').insert([city]).select().maybeSingle(); return data || localStore.createCity(city); },
+  async updateCity(id: string, city: Partial<City>) { const { data } = await supabase.from('cities').update(city).eq('id', id).select().maybeSingle(); return data || localStore.updateCity(id, city); },
   async deleteCity(id: string) { await supabase.from('cities').delete().eq('id', id); localStore.deleteCity(id); return true; },
 
   async getReviews(featuredOnly = false) {
@@ -223,8 +261,8 @@ export const api = {
     return data && data.length ? data : localStore.getReviews(featuredOnly);
   },
   async getAdminReviews() { return this.getReviews(false); },
-  async createReview(rev: Partial<Review>) { const { data } = await supabase.from('reviews').insert([rev]).select().single(); return data || localStore.createReview(rev); },
-  async updateReview(id: string, rev: Partial<Review>) { const { data } = await supabase.from('reviews').update(rev).eq('id', id).select().single(); return data || localStore.updateReview(id, rev); },
+  async createReview(rev: Partial<Review>) { const { data } = await supabase.from('reviews').insert([rev]).select().maybeSingle(); return data || localStore.createReview(rev); },
+  async updateReview(id: string, rev: Partial<Review>) { const { data } = await supabase.from('reviews').update(rev).eq('id', id).select().maybeSingle(); return data || localStore.updateReview(id, rev); },
   async toggleReviewFeatured(id: string) { const list = await this.getReviews(); const t = list.find(r => r.id === id); return this.updateReview(id, { featured: !t?.featured }); },
   async deleteReview(id: string) { await supabase.from('reviews').delete().eq('id', id); localStore.deleteReview(id); return true; },
 
