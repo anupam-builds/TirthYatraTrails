@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor } from '../types.js';
+import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor, CompanionProfile, CompanionConnection, CompanionSearchFilters } from '../types.js';
 import {
   INITIAL_CITIES,
   INITIAL_HOTELS,
@@ -7,6 +7,7 @@ import {
   INITIAL_REVIEWS,
   INITIAL_STAFF,
   INITIAL_STAFF_LOGS,
+  INITIAL_COMPANIONS,
 } from '../server/seedData.js';
 
 const STORAGE_KEYS = {
@@ -18,6 +19,8 @@ const STORAGE_KEYS = {
   USERS: 'tyt_local_users',
   STAFF: 'tyt_local_staff',
   STAFF_LOGS: 'tyt_local_staff_logs',
+  COMPANIONS: 'tyt_local_companions',
+  COMPANION_CONNS: 'tyt_local_companion_conns',
 };
 
 function getStored<T>(key: string, defaultVal: T): T {
@@ -87,26 +90,64 @@ export const localStore = {
 
   createCity(cityData: Partial<City>): City {
     const cities = this.getCities();
-    const id = (cityData.name || 'city').toLowerCase().replace(/\s+/g, '-');
+    const cleanName = (cityData.name || 'Sacred Destination').trim();
+    const id = cityData.id || cleanName.toLowerCase().replace(/\s+/g, '-');
+
+    // Prevent duplicate city entries
+    const existingIndex = cities.findIndex(
+      (c) =>
+        c.name.toLowerCase().trim() === cleanName.toLowerCase() ||
+        c.id.toLowerCase() === id.toLowerCase()
+    );
+
+    if (existingIndex !== -1) {
+      const existing = cities[existingIndex];
+      const merged: City = {
+        ...existing,
+        ...cityData,
+        name: cleanName,
+        id: existing.id,
+      };
+      cities[existingIndex] = merged;
+      setStored(STORAGE_KEYS.CITIES, cities);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'update', city: merged } }));
+        window.dispatchEvent(new Event('tirth-hotel-changed'));
+      }
+      return merged;
+    }
+
     const newCity: City = {
-      id: cityData.id || id,
-      name: cityData.name || 'Sacred Destination',
-      state: cityData.state || 'India',
-      hotelCount: Number(cityData.hotelCount) || 1,
+      id,
+      name: cleanName,
+      state: (cityData.state || 'India').trim(),
+      hotelCount: Number(cityData.hotelCount) || 0,
       imageUrl: cityData.imageUrl || 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
-      popularFor: cityData.popularFor || 'Sacred Pilgrimage & Aarti',
+      popularFor: (cityData.popularFor || 'Sacred Pilgrimage & Aarti').trim(),
     };
     cities.push(newCity);
     setStored(STORAGE_KEYS.CITIES, cities);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'create', city: newCity } }));
+      window.dispatchEvent(new Event('tirth-hotel-changed'));
+    }
+
     return newCity;
   },
 
   updateCity(id: string, updates: Partial<City>): City {
     const cities = this.getCities();
-    const idx = cities.findIndex((c) => c.id === id);
+    const idx = cities.findIndex((c) => c.id === id || c.name.toLowerCase() === id.toLowerCase());
     if (idx === -1) throw new Error('City not found');
     cities[idx] = { ...cities[idx], ...updates };
     setStored(STORAGE_KEYS.CITIES, cities);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'update', city: cities[idx] } }));
+      window.dispatchEvent(new Event('tirth-hotel-changed'));
+    }
+
     return cities[idx];
   },
 
@@ -133,6 +174,12 @@ export const localStore = {
       return !matches;
     });
     setStored(STORAGE_KEYS.CITIES, cities);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', target } }));
+      window.dispatchEvent(new Event('tirth-hotel-changed'));
+    }
+
     return true;
   },
 
@@ -678,6 +725,18 @@ export const localStore = {
     } else {
       try {
         list = JSON.parse(raw);
+        // Ensure any seed reviews missing audio are updated
+        list.forEach((r) => {
+          if (!r.audioUrl) {
+            const seedMatch = INITIAL_REVIEWS.find((sr) => sr.id === r.id);
+            if (seedMatch && seedMatch.audioUrl) {
+              r.audioUrl = seedMatch.audioUrl;
+              r.audioDuration = seedMatch.audioDuration;
+              r.audioTitle = seedMatch.audioTitle;
+              r.language = seedMatch.language;
+            }
+          }
+        });
       } catch {
         list = [...INITIAL_REVIEWS];
       }
@@ -710,6 +769,10 @@ export const localStore = {
       googleReviewUrl: reviewData.googleReviewUrl || undefined,
       isFeatured: reviewData.isFeatured !== undefined ? Boolean(reviewData.isFeatured) : true,
       order: Number(reviewData.order) || reviews.length + 1,
+      audioUrl: reviewData.audioUrl || undefined,
+      audioDuration: reviewData.audioDuration ? Number(reviewData.audioDuration) : undefined,
+      audioTitle: reviewData.audioTitle || undefined,
+      language: reviewData.language || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -738,6 +801,10 @@ export const localStore = {
       order: updateData.order !== undefined ? Number(updateData.order) : existing.order,
       isVerified: updateData.isVerified !== undefined ? Boolean(updateData.isVerified) : existing.isVerified,
       isFeatured: updateData.isFeatured !== undefined ? Boolean(updateData.isFeatured) : existing.isFeatured,
+      audioUrl: updateData.audioUrl !== undefined ? updateData.audioUrl : existing.audioUrl,
+      audioDuration: updateData.audioDuration !== undefined ? (updateData.audioDuration ? Number(updateData.audioDuration) : undefined) : existing.audioDuration,
+      audioTitle: updateData.audioTitle !== undefined ? updateData.audioTitle : existing.audioTitle,
+      language: updateData.language !== undefined ? updateData.language : existing.language,
       updatedAt: new Date().toISOString(),
     };
     setStored(STORAGE_KEYS.REVIEWS, reviews);
@@ -1155,6 +1222,163 @@ export const localStore = {
     };
   },
 
+  // ==========================================
+  // PILGRIMAGE COMPANION MATCHING SYSTEM
+  // ==========================================
+  getCompanions(filters?: CompanionSearchFilters): CompanionProfile[] {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.COMPANIONS) : null;
+    let list: CompanionProfile[];
+    if (raw === null) {
+      setStored(STORAGE_KEYS.COMPANIONS, INITIAL_COMPANIONS);
+      list = [...INITIAL_COMPANIONS];
+    } else {
+      try {
+        list = JSON.parse(raw);
+      } catch {
+        list = [...INITIAL_COMPANIONS];
+      }
+    }
+
+    if (filters) {
+      if (filters.destination && filters.destination !== 'ALL') {
+        const d = filters.destination.toLowerCase();
+        list = list.filter((c) => c.destination.toLowerCase().includes(d));
+      }
+      if (filters.pilgrimType && filters.pilgrimType !== 'ALL') {
+        list = list.filter((c) => c.pilgrimType === filters.pilgrimType);
+      }
+      if (filters.travelMonth && filters.travelMonth !== 'ALL') {
+        const tm = filters.travelMonth.toLowerCase();
+        list = list.filter((c) => c.travelMonth.toLowerCase().includes(tm));
+      }
+      if (filters.language && filters.language !== 'ALL') {
+        const lang = filters.language.toLowerCase();
+        list = list.filter((c) => c.languages.some((l) => l.toLowerCase().includes(lang)));
+      }
+      if (filters.searchQuery) {
+        const q = filters.searchQuery.toLowerCase();
+        list = list.filter(
+          (c) =>
+            c.pilgrimName.toLowerCase().includes(q) ||
+            c.cityOfOrigin.toLowerCase().includes(q) ||
+            c.destination.toLowerCase().includes(q) ||
+            c.seekingDescription.toLowerCase().includes(q)
+        );
+      }
+    }
+
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  getCompanionById(id: string): CompanionProfile | null {
+    const list = this.getCompanions();
+    return list.find((c) => c.id === id) || null;
+  },
+
+  createCompanion(data: Partial<CompanionProfile>): CompanionProfile {
+    const list = this.getCompanions();
+    const initials =
+      data.avatarInitials ||
+      (data.pilgrimName
+        ? data.pilgrimName
+            .split(' ')
+            .map((n) => n[0])
+            .filter(Boolean)
+            .slice(0, 2)
+            .join('')
+            .toUpperCase()
+        : 'PT');
+
+    const newCompanion: CompanionProfile = {
+      id: data.id || `cmp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId: data.userId,
+      pilgrimName: data.pilgrimName || 'Devotee',
+      age: data.age ? Number(data.age) : undefined,
+      gender: data.gender || 'ANY',
+      pilgrimType: data.pilgrimType || 'SOLO_TRAVELER',
+      cityOfOrigin: data.cityOfOrigin || 'India',
+      destination: data.destination || 'Sacred Pilgrimage',
+      travelMonth: data.travelMonth || 'October 2026',
+      startDate: data.startDate,
+      endDate: data.endDate,
+      datesFlexible: data.datesFlexible !== undefined ? Boolean(data.datesFlexible) : true,
+      languages: Array.isArray(data.languages) && data.languages.length > 0 ? data.languages : ['Hindi', 'English'],
+      seekingDescription: data.seekingDescription || '',
+      assistanceNeeded: Array.isArray(data.assistanceNeeded) ? data.assistanceNeeded : [],
+      dietaryPreference: data.dietaryPreference || 'Vegetarian',
+      contactPhone: data.contactPhone,
+      contactEmail: data.contactEmail,
+      contactPreference: data.contactPreference || 'WHATSAPP',
+      isVerified: true,
+      emergencyContactListed: Boolean(data.emergencyContactListed),
+      status: 'OPEN',
+      avatarInitials: initials,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    list.unshift(newCompanion);
+    setStored(STORAGE_KEYS.COMPANIONS, list);
+    return newCompanion;
+  },
+
+  updateCompanion(id: string, updates: Partial<CompanionProfile>): CompanionProfile {
+    const list = this.getCompanions();
+    const idx = list.findIndex((c) => c.id === id);
+    if (idx === -1) throw new Error('Companion post not found');
+
+    list[idx] = {
+      ...list[idx],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    setStored(STORAGE_KEYS.COMPANIONS, list);
+    return list[idx];
+  },
+
+  deleteCompanion(id: string): boolean {
+    const list = this.getCompanions().filter((c) => c.id !== id);
+    setStored(STORAGE_KEYS.COMPANIONS, list);
+    return true;
+  },
+
+  createCompanionConnection(connData: Partial<CompanionConnection>): CompanionConnection {
+    const conns = getStored<CompanionConnection[]>(STORAGE_KEYS.COMPANION_CONNS, []);
+    const newConn: CompanionConnection = {
+      id: `conn-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      companionProfileId: connData.companionProfileId || '',
+      senderName: connData.senderName || 'Interested Devotee',
+      senderPhone: connData.senderPhone || '',
+      senderEmail: connData.senderEmail || '',
+      senderCity: connData.senderCity,
+      senderType: connData.senderType || 'SOLO_TRAVELER',
+      message: connData.message || 'Har Har Mahadev! I will be travelling during overlapping dates and would love to coordinate.',
+      proposedDates: connData.proposedDates,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+    conns.unshift(newConn);
+    setStored(STORAGE_KEYS.COMPANION_CONNS, conns);
+    return newConn;
+  },
+
+  getCompanionConnections(profileId?: string): CompanionConnection[] {
+    let conns = getStored<CompanionConnection[]>(STORAGE_KEYS.COMPANION_CONNS, []);
+    if (profileId) {
+      conns = conns.filter((c) => c.companionProfileId === profileId);
+    }
+    return conns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  updateCompanionConnectionStatus(connId: string, status: 'PENDING' | 'ACCEPTED' | 'DECLINED'): CompanionConnection {
+    const conns = getStored<CompanionConnection[]>(STORAGE_KEYS.COMPANION_CONNS, []);
+    const idx = conns.findIndex((c) => c.id === connId);
+    if (idx === -1) throw new Error('Connection request not found');
+    conns[idx].status = status;
+    setStored(STORAGE_KEYS.COMPANION_CONNS, conns);
+    return conns[idx];
+  },
+
   resetData(): void {
     setStored(STORAGE_KEYS.CITIES, INITIAL_CITIES);
     setStored(STORAGE_KEYS.HOTELS, INITIAL_HOTELS);
@@ -1163,5 +1387,7 @@ export const localStore = {
     setStored(STORAGE_KEYS.REVIEWS, INITIAL_REVIEWS);
     setStored(STORAGE_KEYS.STAFF, INITIAL_STAFF);
     setStored(STORAGE_KEYS.STAFF_LOGS, INITIAL_STAFF_LOGS);
+    setStored(STORAGE_KEYS.COMPANIONS, INITIAL_COMPANIONS);
+    setStored(STORAGE_KEYS.COMPANION_CONNS, []);
   },
 };

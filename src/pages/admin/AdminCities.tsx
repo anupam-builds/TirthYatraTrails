@@ -46,10 +46,12 @@ export const AdminCities: React.FC = () => {
       loadCities();
     };
     window.addEventListener('tirth-hotel-changed', handleHotelChange);
+    window.addEventListener('tirth-city-changed', handleHotelChange);
     window.addEventListener('storage', handleHotelChange);
 
     return () => {
       window.removeEventListener('tirth-hotel-changed', handleHotelChange);
+      window.removeEventListener('tirth-city-changed', handleHotelChange);
       window.removeEventListener('storage', handleHotelChange);
     };
   }, []);

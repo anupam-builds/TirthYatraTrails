@@ -407,6 +407,92 @@ async function startServer() {
     res.json(review);
   });
 
+  app.post('/api/reviews', (req, res) => {
+    try {
+      const newReview = db.createReview(req.body);
+      res.status(201).json(newReview);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ===================== PILGRIMAGE COMPANION MATCHING ROUTES =====================
+  app.get('/api/companions', (req, res) => {
+    try {
+      const companions = db.getCompanions(req.query as any);
+      res.json(companions);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/companions/:id', (req, res) => {
+    try {
+      const companion = db.getCompanionById(req.params.id);
+      if (!companion) return res.status(404).json({ error: 'Companion post not found' });
+      res.json(companion);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/companions', (req, res) => {
+    try {
+      const newCompanion = db.createCompanion(req.body);
+      res.status(201).json(newCompanion);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/companions/:id', (req, res) => {
+    try {
+      const updated = db.updateCompanion(req.params.id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/companions/:id', (req, res) => {
+    try {
+      db.deleteCompanion(req.params.id);
+      res.json({ success: true, message: 'Companion post deleted' });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/companions/:id/connect', (req, res) => {
+    try {
+      const conn = db.createCompanionConnection({
+        ...req.body,
+        companionProfileId: req.params.id,
+      });
+      res.status(201).json(conn);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/companions/:id/connections', (req, res) => {
+    try {
+      const conns = db.getCompanionConnections(req.params.id);
+      res.json(conns);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/companions/connections/:connId/status', (req, res) => {
+    try {
+      const updated = db.updateCompanionConnectionStatus(req.params.connId, req.body.status);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // ===================== ADMIN ENTERPRISE ROUTES =====================
   // Admin Hotel Management
   app.post('/api/admin/hotels', verifyAdminToken, (req, res) => {

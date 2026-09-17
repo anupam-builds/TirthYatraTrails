@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor } from '../types.js';
+import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor, CompanionProfile, CompanionConnection, CompanionSearchFilters } from '../types.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 
@@ -894,7 +894,7 @@ export const api = {
   // Admin Cities
   async createCity(city: Partial<City>): Promise<City> {
     try {
-      return await safeFetch<City>(
+      const result = await safeFetch<City>(
         `${API_BASE}/admin/cities`,
         {
           method: 'POST',
@@ -906,6 +906,11 @@ export const api = {
         },
         'Failed to create destination hub'
       );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'create', city: result } }));
+        window.dispatchEvent(new Event('tirth-hotel-changed'));
+      }
+      return result;
     } catch {
       return localStore.createCity(city);
     }
@@ -913,7 +918,7 @@ export const api = {
 
   async updateCity(id: string, city: Partial<City>): Promise<City> {
     try {
-      return await safeFetch<City>(
+      const result = await safeFetch<City>(
         `${API_BASE}/admin/cities/${id}`,
         {
           method: 'PUT',
@@ -925,6 +930,11 @@ export const api = {
         },
         'Failed to update destination hub'
       );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'update', city: result } }));
+        window.dispatchEvent(new Event('tirth-hotel-changed'));
+      }
+      return result;
     } catch {
       return localStore.updateCity(id, city);
     }
@@ -944,10 +954,19 @@ export const api = {
         'Failed to delete city'
       );
       localStore.deleteCity(raw);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', target: raw } }));
+        window.dispatchEvent(new Event('tirth-hotel-changed'));
+      }
       return true;
     } catch (err) {
       console.warn('Backend deleteCity fallback to localStore:', err);
-      return localStore.deleteCity(raw);
+      const res = localStore.deleteCity(raw);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', target: raw } }));
+        window.dispatchEvent(new Event('tirth-hotel-changed'));
+      }
+      return res;
     }
   },
 
@@ -976,14 +995,18 @@ export const api = {
 
   async createReview(review: Partial<Review>): Promise<Review> {
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      const adminHeader = getAdminAuthHeader();
+      if (adminHeader.Authorization) {
+        headers['Authorization'] = adminHeader.Authorization;
+      }
       return await safeFetch<Review>(
-        `${API_BASE}/admin/reviews`,
+        `${API_BASE}/reviews`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAdminAuthHeader(),
-          },
+          headers,
           body: JSON.stringify(review),
         },
         'Failed to create review'
@@ -1028,11 +1051,11 @@ export const api = {
   },
 
   async deleteReview(idOrName: string): Promise<boolean> {
-    const raw = String(idOrName || '').trim();
-    if (!raw) return true;
-    const encoded = encodeURIComponent(raw);
+    if (!idOrName) return true;
     try {
-      await safeFetch(
+      const raw = String(idOrName).trim();
+      let encoded = encodeURIComponent(raw);
+      await safeFetch<{ success: boolean; message: string; id: string }>(
         `${API_BASE}/admin/reviews/${encoded}`,
         {
           method: 'DELETE',
@@ -1040,13 +1063,142 @@ export const api = {
         },
         'Failed to delete review'
       );
-      // Synchronize with localStore so offline/reloads stay consistent
-      localStore.deleteReview(raw);
       return true;
-    } catch (err) {
-      console.warn('Backend deleteReview failed or unavailable, applying localStore fallback:', err);
-      return localStore.deleteReview(raw);
+    } catch {
+      return localStore.deleteReview(idOrName);
     }
+  },
+
+  // ==========================================
+  // PILGRIMAGE COMPANION MATCHING SYSTEM
+  // ==========================================
+  async getCompanions(filters?: CompanionSearchFilters): Promise<CompanionProfile[]> {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.destination && filters.destination !== 'ALL') params.append('destination', filters.destination);
+      if (filters?.pilgrimType && filters.pilgrimType !== 'ALL') params.append('pilgrimType', filters.pilgrimType);
+      if (filters?.travelMonth && filters.travelMonth !== 'ALL') params.append('travelMonth', filters.travelMonth);
+      if (filters?.language && filters.language !== 'ALL') params.append('language', filters.language);
+      if (filters?.searchQuery) params.append('searchQuery', filters.searchQuery);
+
+      return await safeFetch<CompanionProfile[]>(
+        `${API_BASE}/companions?${params.toString()}`,
+        undefined,
+        'Failed to fetch companions'
+      );
+    } catch {
+      return localStore.getCompanions(filters);
+    }
+  },
+
+  async getCompanionById(id: string): Promise<CompanionProfile | null> {
+    try {
+      return await safeFetch<CompanionProfile>(
+        `${API_BASE}/companions/${id}`,
+        undefined,
+        'Failed to fetch companion post'
+      );
+    } catch {
+      return localStore.getCompanionById(id);
+    }
+  },
+
+  async createCompanion(profile: Partial<CompanionProfile>): Promise<CompanionProfile> {
+    try {
+      return await safeFetch<CompanionProfile>(
+        `${API_BASE}/companions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(profile),
+        },
+        'Failed to create companion post'
+      );
+    } catch {
+      return localStore.createCompanion(profile);
+    }
+  },
+
+  async updateCompanion(id: string, updates: Partial<CompanionProfile>): Promise<CompanionProfile> {
+    try {
+      return await safeFetch<CompanionProfile>(
+        `${API_BASE}/companions/${id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        },
+        'Failed to update companion post'
+      );
+    } catch {
+      return localStore.updateCompanion(id, updates);
+    }
+  },
+
+  async deleteCompanion(id: string): Promise<boolean> {
+    try {
+      await safeFetch<{ success: boolean }>(
+        `${API_BASE}/companions/${id}`,
+        { method: 'DELETE' },
+        'Failed to delete companion post'
+      );
+      return true;
+    } catch {
+      return localStore.deleteCompanion(id);
+    }
+  },
+
+  async createCompanionConnection(conn: Partial<CompanionConnection>): Promise<CompanionConnection> {
+    try {
+      return await safeFetch<CompanionConnection>(
+        `${API_BASE}/companions/${conn.companionProfileId}/connect`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(conn),
+        },
+        'Failed to send connection request'
+      );
+    } catch {
+      return localStore.createCompanionConnection(conn);
+    }
+  },
+
+  async getCompanionConnections(profileId?: string): Promise<CompanionConnection[]> {
+    try {
+      if (!profileId) return [];
+      return await safeFetch<CompanionConnection[]>(
+        `${API_BASE}/companions/${profileId}/connections`,
+        undefined,
+        'Failed to fetch connections'
+      );
+    } catch {
+      return localStore.getCompanionConnections(profileId);
+    }
+  },
+
+  async updateCompanionConnectionStatus(connId: string, status: 'PENDING' | 'ACCEPTED' | 'DECLINED'): Promise<CompanionConnection> {
+    try {
+      return await safeFetch<CompanionConnection>(
+        `${API_BASE}/companions/connections/${connId}/status`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        },
+        'Failed to update connection status'
+      );
+    } catch {
+      return localStore.updateCompanionConnectionStatus(connId, status);
+    }
+  },
+
+  async getCompanionProfiles(filters?: CompanionSearchFilters): Promise<CompanionProfile[]> {
+    return this.getCompanions(filters);
+  },
+
+  async createCompanionProfile(profile: Partial<CompanionProfile>): Promise<CompanionProfile> {
+    return this.createCompanion(profile);
   },
 
   async resetData(): Promise<void> {

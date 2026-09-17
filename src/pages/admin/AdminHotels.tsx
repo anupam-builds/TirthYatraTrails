@@ -3,6 +3,8 @@ import { AdminLayout } from './AdminLayout.js';
 import { api } from '../../services/api.js';
 import { Hotel, City, Room } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
+import { useCitiesMaster } from '../../context/CitiesContext.js';
+import { SacredCityHybridSelector } from '../../components/admin/SacredCityHybridSelector.js';
 import {
   Building,
   Plus,
@@ -29,8 +31,8 @@ interface ToastAlert {
 }
 
 export const AdminHotels: React.FC = () => {
+  const { cities, refreshCities } = useCitiesMaster();
   const [hotels, setHotels] = useState<Hotel[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('');
@@ -64,15 +66,17 @@ export const AdminHotels: React.FC = () => {
   useEffect(() => {
     loadData();
 
-    const handleHotelChange = () => {
+    const handleDataChange = () => {
       loadData();
     };
-    window.addEventListener('tirth-hotel-changed', handleHotelChange);
-    window.addEventListener('storage', handleHotelChange);
+    window.addEventListener('tirth-hotel-changed', handleDataChange);
+    window.addEventListener('tirth-city-changed', handleDataChange);
+    window.addEventListener('storage', handleDataChange);
 
     return () => {
-      window.removeEventListener('tirth-hotel-changed', handleHotelChange);
-      window.removeEventListener('storage', handleHotelChange);
+      window.removeEventListener('tirth-hotel-changed', handleDataChange);
+      window.removeEventListener('tirth-city-changed', handleDataChange);
+      window.removeEventListener('storage', handleDataChange);
     };
   }, [selectedCityId, searchQuery]);
 
@@ -80,10 +84,9 @@ export const AdminHotels: React.FC = () => {
     setLoading(true);
     try {
       const [cList, hList] = await Promise.all([
-        api.getCities(),
+        refreshCities(),
         api.getHotels(selectedCityId, searchQuery),
       ]);
-      setCities(cList);
       setHotels(hList);
       if (cList.length > 0 && !cityId) {
         setCityId(cList[0].id);
@@ -155,14 +158,7 @@ export const AdminHotels: React.FC = () => {
       prev.filter((h) => h.id !== id && h.name.toLowerCase() !== hotelName.toLowerCase())
     );
     if (deletedRecord) {
-      setCities((prevCities) =>
-        prevCities.map((c) => {
-          const isTargetCity =
-            c.id === deletedRecord.cityId ||
-            (deletedRecord.cityName && c.name.toLowerCase() === deletedRecord.cityName.toLowerCase());
-          return isTargetCity ? { ...c, hotelCount: Math.max(0, c.hotelCount - 1) } : c;
-        })
-      );
+      refreshCities();
     }
 
     // 2. Trigger confirmation toast alert
@@ -186,8 +182,7 @@ export const AdminHotels: React.FC = () => {
       if (hName && hName !== id) {
         api.deleteHotel(hName).catch(() => {});
       }
-      const freshCities = await api.getCities();
-      setCities(freshCities);
+      await refreshCities();
     } catch (err: any) {
       console.error('Failed to delete hotel:', err);
       setToast({
@@ -208,8 +203,7 @@ export const AdminHotels: React.FC = () => {
     try {
       const restored = await api.createHotel(hotelToRestore);
       setHotels((prev) => [restored, ...prev]);
-      const freshCities = await api.getCities();
-      setCities(freshCities);
+      await refreshCities();
       setToast({
         id: String(Date.now()),
         type: 'info',
@@ -264,8 +258,7 @@ export const AdminHotels: React.FC = () => {
       if (editingHotel) {
         const updated = await api.updateHotel(editingHotel.id, hotelData);
         setHotels((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
-        const freshCities = await api.getCities();
-        setCities(freshCities);
+        await refreshCities();
         setToast({
           id: String(Date.now()),
           type: 'success',
@@ -275,8 +268,7 @@ export const AdminHotels: React.FC = () => {
       } else {
         const created = await api.createHotel(hotelData);
         setHotels((prev) => [created, ...prev]);
-        const freshCities = await api.getCities();
-        setCities(freshCities);
+        await refreshCities();
         setToast({
           id: String(Date.now()),
           type: 'success',
@@ -496,22 +488,14 @@ export const AdminHotels: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Sacred City</label>
-                  <select
-                    value={cityId}
-                    onChange={(e) => {
-                      setCityId(e.target.value);
-                      const c = cities.find((ci) => ci.id === e.target.value);
-                      if (c) setCityName(c.name);
+                  <SacredCityHybridSelector
+                    selectedCityId={cityId}
+                    selectedCityName={cityName}
+                    onChange={({ id, name }) => {
+                      setCityId(id);
+                      setCityName(name);
                     }}
-                    className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-                  >
-                    {cities.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
 

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { City, Hotel, Package, User, Inquiry, Room, Review, Account, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor } from '../types.js';
+import { City, Hotel, Package, User, Inquiry, Room, Review, Account, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor, CompanionProfile, CompanionConnection, CompanionSearchFilters } from '../types.js';
 import {
   getInitialSeedData,
   INITIAL_CITIES,
@@ -10,6 +10,7 @@ import {
   INITIAL_REVIEWS,
   INITIAL_STAFF,
   INITIAL_STAFF_LOGS,
+  INITIAL_COMPANIONS,
 } from './seedData.js';
 import bcrypt from 'bcryptjs';
 
@@ -23,6 +24,8 @@ interface DatabaseSchema {
   packages: Package[];
   inquiries: Inquiry[];
   reviews: Review[];
+  companions?: CompanionProfile[];
+  companionConnections?: CompanionConnection[];
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -39,6 +42,8 @@ class DatabaseStore {
     packages: [...INITIAL_PACKAGES],
     inquiries: [...INITIAL_INQUIRIES],
     reviews: [...INITIAL_REVIEWS],
+    companions: [...INITIAL_COMPANIONS],
+    companionConnections: [],
   };
   private isInitialized = false;
 
@@ -141,7 +146,28 @@ class DatabaseStore {
 
         // Ensure reviews array exists and is seeded if empty
         if (!this.data.reviews || this.data.reviews.length === 0) {
-          this.data.reviews = seed.reviews;
+          this.data.reviews = [...INITIAL_REVIEWS];
+        } else {
+          // Check if existing reviews need audio notes from INITIAL_REVIEWS
+          this.data.reviews.forEach((r) => {
+            if (!r.audioUrl) {
+              const matchedSeed = INITIAL_REVIEWS.find((sr) => sr.id === r.id);
+              if (matchedSeed && matchedSeed.audioUrl) {
+                r.audioUrl = matchedSeed.audioUrl;
+                r.audioDuration = matchedSeed.audioDuration;
+                r.audioTitle = matchedSeed.audioTitle;
+                r.language = matchedSeed.language;
+              }
+            }
+          });
+        }
+
+        // Ensure companions array exists
+        if (!this.data.companions || this.data.companions.length === 0) {
+          this.data.companions = [...INITIAL_COMPANIONS];
+        }
+        if (!this.data.companionConnections) {
+          this.data.companionConnections = [];
         }
 
         this.syncCityHotelCounts();
@@ -347,14 +373,37 @@ class DatabaseStore {
   }
 
   public createCity(cityData: Partial<City>) {
-    const id = (cityData.name || 'city').toLowerCase().replace(/\s+/g, '-');
+    const cleanName = (cityData.name || 'Sacred Destination').trim();
+    const id = cityData.id || cleanName.toLowerCase().replace(/\s+/g, '-');
+
+    // Check if city already exists
+    const existingIndex = this.data.cities.findIndex(
+      (c) =>
+        c.name.toLowerCase().trim() === cleanName.toLowerCase() ||
+        c.id.toLowerCase() === id.toLowerCase()
+    );
+
+    if (existingIndex !== -1) {
+      const existing = this.data.cities[existingIndex];
+      const merged: City = {
+        ...existing,
+        ...cityData,
+        name: cleanName,
+        id: existing.id,
+      };
+      merged.hotelCount = this.countHotelsForCity(merged);
+      this.data.cities[existingIndex] = merged;
+      this.save();
+      return merged;
+    }
+
     const newCity: City = {
-      id: cityData.id || id,
-      name: cityData.name || 'Sacred Destination',
-      state: cityData.state || 'India',
+      id,
+      name: cleanName,
+      state: (cityData.state || 'India').trim(),
       hotelCount: 0,
       imageUrl: cityData.imageUrl || 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
-      popularFor: cityData.popularFor || 'Sacred Pilgrimage & Aarti',
+      popularFor: (cityData.popularFor || 'Sacred Pilgrimage & Aarti').trim(),
     };
     newCity.hotelCount = this.countHotelsForCity(newCity);
     this.data.cities.push(newCity);
@@ -1297,6 +1346,10 @@ class DatabaseStore {
       googleReviewUrl: reviewData.googleReviewUrl || undefined,
       isFeatured: reviewData.isFeatured !== undefined ? Boolean(reviewData.isFeatured) : true,
       order: Number(reviewData.order) || (this.data.reviews.length + 1),
+      audioUrl: reviewData.audioUrl || undefined,
+      audioDuration: reviewData.audioDuration ? Number(reviewData.audioDuration) : undefined,
+      audioTitle: reviewData.audioTitle || undefined,
+      language: reviewData.language || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1325,6 +1378,10 @@ class DatabaseStore {
       order: updateData.order !== undefined ? Number(updateData.order) : existing.order,
       isVerified: updateData.isVerified !== undefined ? Boolean(updateData.isVerified) : existing.isVerified,
       isFeatured: updateData.isFeatured !== undefined ? Boolean(updateData.isFeatured) : existing.isFeatured,
+      audioUrl: updateData.audioUrl !== undefined ? updateData.audioUrl : existing.audioUrl,
+      audioDuration: updateData.audioDuration !== undefined ? (updateData.audioDuration ? Number(updateData.audioDuration) : undefined) : existing.audioDuration,
+      audioTitle: updateData.audioTitle !== undefined ? updateData.audioTitle : existing.audioTitle,
+      language: updateData.language !== undefined ? updateData.language : existing.language,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1372,6 +1429,161 @@ class DatabaseStore {
       this.save();
     }
     return true;
+  }
+
+  // ==========================================
+  // PILGRIMAGE COMPANION MATCHING SYSTEM
+  // ==========================================
+  public getCompanions(filters?: CompanionSearchFilters) {
+    let list = [...(this.data.companions || [])];
+
+    if (filters) {
+      if (filters.destination && filters.destination !== 'ALL') {
+        const d = filters.destination.toLowerCase();
+        list = list.filter((c) => c.destination.toLowerCase().includes(d));
+      }
+      if (filters.pilgrimType && filters.pilgrimType !== 'ALL') {
+        list = list.filter((c) => c.pilgrimType === filters.pilgrimType);
+      }
+      if (filters.travelMonth && filters.travelMonth !== 'ALL') {
+        const tm = filters.travelMonth.toLowerCase();
+        list = list.filter((c) => c.travelMonth.toLowerCase().includes(tm));
+      }
+      if (filters.language && filters.language !== 'ALL') {
+        const lang = filters.language.toLowerCase();
+        list = list.filter((c) => c.languages.some((l) => l.toLowerCase().includes(lang)));
+      }
+      if (filters.searchQuery) {
+        const q = filters.searchQuery.toLowerCase();
+        list = list.filter(
+          (c) =>
+            c.pilgrimName.toLowerCase().includes(q) ||
+            c.cityOfOrigin.toLowerCase().includes(q) ||
+            c.destination.toLowerCase().includes(q) ||
+            c.seekingDescription.toLowerCase().includes(q) ||
+            (c.dietaryPreference && c.dietaryPreference.toLowerCase().includes(q))
+        );
+      }
+    }
+
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  public getCompanionById(id: string) {
+    return (this.data.companions || []).find((c) => c.id === id) || null;
+  }
+
+  public createCompanion(data: Partial<CompanionProfile>) {
+    if (!this.data.companions) this.data.companions = [];
+    const initials =
+      data.avatarInitials ||
+      (data.pilgrimName
+        ? data.pilgrimName
+            .split(' ')
+            .map((n) => n[0])
+            .filter(Boolean)
+            .slice(0, 2)
+            .join('')
+            .toUpperCase()
+        : 'PT');
+
+    const newCompanion: CompanionProfile = {
+      id: `cmp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId: data.userId,
+      pilgrimName: data.pilgrimName || 'Devotee',
+      age: data.age ? Number(data.age) : undefined,
+      gender: data.gender || 'ANY',
+      pilgrimType: data.pilgrimType || 'SOLO_TRAVELER',
+      cityOfOrigin: data.cityOfOrigin || 'India',
+      destination: data.destination || 'Sacred Pilgrimage',
+      travelMonth: data.travelMonth || 'October 2026',
+      startDate: data.startDate,
+      endDate: data.endDate,
+      datesFlexible: data.datesFlexible !== undefined ? Boolean(data.datesFlexible) : true,
+      languages: Array.isArray(data.languages) && data.languages.length > 0 ? data.languages : ['Hindi', 'English'],
+      seekingDescription: data.seekingDescription || '',
+      assistanceNeeded: Array.isArray(data.assistanceNeeded) ? data.assistanceNeeded : [],
+      dietaryPreference: data.dietaryPreference || 'Vegetarian',
+      contactPhone: data.contactPhone,
+      contactEmail: data.contactEmail,
+      contactPreference: data.contactPreference || 'WHATSAPP',
+      isVerified: true,
+      emergencyContactListed: Boolean(data.emergencyContactListed),
+      status: 'OPEN',
+      avatarInitials: initials,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.data.companions.unshift(newCompanion);
+    this.save();
+    return newCompanion;
+  }
+
+  public updateCompanion(id: string, updates: Partial<CompanionProfile>) {
+    if (!this.data.companions) this.data.companions = [];
+    const index = this.data.companions.findIndex((c) => c.id === id);
+    if (index === -1) throw new Error('Companion post not found');
+
+    const existing = this.data.companions[index];
+    const updated: CompanionProfile = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.data.companions[index] = updated;
+    this.save();
+    return updated;
+  }
+
+  public deleteCompanion(id: string) {
+    if (!this.data.companions) this.data.companions = [];
+    const index = this.data.companions.findIndex((c) => c.id === id);
+    if (index !== -1) {
+      this.data.companions.splice(index, 1);
+      this.save();
+    }
+    return true;
+  }
+
+  public createCompanionConnection(connData: Partial<CompanionConnection>) {
+    if (!this.data.companionConnections) this.data.companionConnections = [];
+    const newConn: CompanionConnection = {
+      id: `conn-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      companionProfileId: connData.companionProfileId || '',
+      senderName: connData.senderName || 'Interested Devotee',
+      senderPhone: connData.senderPhone || '',
+      senderEmail: connData.senderEmail || '',
+      senderCity: connData.senderCity,
+      senderType: connData.senderType || 'SOLO_TRAVELER',
+      message: connData.message || 'Har Har Mahadev! I will be travelling during overlapping dates and would love to coordinate.',
+      proposedDates: connData.proposedDates,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+
+    this.data.companionConnections.unshift(newConn);
+    this.save();
+    return newConn;
+  }
+
+  public getCompanionConnections(companionProfileId?: string) {
+    let list = [...(this.data.companionConnections || [])];
+    if (companionProfileId) {
+      list = list.filter((c) => c.companionProfileId === companionProfileId);
+    }
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  public updateCompanionConnectionStatus(connectionId: string, status: 'PENDING' | 'ACCEPTED' | 'DECLINED') {
+    if (!this.data.companionConnections) this.data.companionConnections = [];
+    const index = this.data.companionConnections.findIndex((c) => c.id === connectionId);
+    if (index === -1) throw new Error('Connection request not found');
+
+    this.data.companionConnections[index].status = status;
+    this.save();
+    return this.data.companionConnections[index];
   }
 }
 

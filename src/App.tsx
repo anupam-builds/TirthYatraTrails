@@ -2,6 +2,7 @@ import React from 'react';
 import { RouterProvider, useRouter } from './context/RouterContext.js';
 import { AuthProvider } from './context/AuthContext.js';
 import { ThemeProvider } from './context/ThemeContext.js';
+import { CitiesProvider } from './context/CitiesContext.js';
 import { CustomerNavbar } from './components/layout/Navbar.js';
 import { CustomerFooter } from './components/layout/Footer.js';
 
@@ -53,7 +54,7 @@ const AppContent: React.FC = () => {
     if (cleanPath === '/admin/login') {
       return <AdminLoginPage />;
     }
-    if (cleanPath === '/admin/hotels') {
+    if (cleanPath === '/admin/hotels' || cleanPath === '/admin/inventory') {
       return <AdminHotels />;
     }
     if (cleanPath === '/admin/packages') {
@@ -153,9 +154,11 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RouterProvider>
-          <AppContent />
-        </RouterProvider>
+        <CitiesProvider>
+          <RouterProvider>
+            <AppContent />
+          </RouterProvider>
+        </CitiesProvider>
       </AuthProvider>
     </ThemeProvider>
   );

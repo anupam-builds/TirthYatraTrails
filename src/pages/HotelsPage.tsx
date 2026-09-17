@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from '../context/RouterContext.js';
+import { useCitiesMaster } from '../context/CitiesContext.js';
 import { api } from '../services/api.js';
 import { City, Hotel } from '../types.js';
 import { HeroSearchBar } from '../components/common/HeroSearchBar.js';
@@ -22,7 +23,7 @@ import {
 
 export const HotelsPage: React.FC = () => {
   const { path, navigate } = useRouter();
-  const [cities, setCities] = useState<City[]>([]);
+  const { cities, refreshCities } = useCitiesMaster();
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,11 +105,10 @@ export const HotelsPage: React.FC = () => {
     async function loadData() {
       setLoading(true);
       try {
-        const [cList, hList] = await Promise.all([
-          api.getCities(),
+        const [_, hList] = await Promise.all([
+          refreshCities(),
           api.getHotels(selectedCityId, searchQuery),
         ]);
-        setCities(cList);
         setHotels(hList);
       } catch (err) {
         console.error('Failed to load hotels:', err);
@@ -118,15 +118,17 @@ export const HotelsPage: React.FC = () => {
     }
     loadData();
 
-    const handleHotelChange = () => {
+    const handleDataChange = () => {
       loadData();
     };
-    window.addEventListener('tirth-hotel-changed', handleHotelChange);
-    window.addEventListener('storage', handleHotelChange);
+    window.addEventListener('tirth-hotel-changed', handleDataChange);
+    window.addEventListener('tirth-city-changed', handleDataChange);
+    window.addEventListener('storage', handleDataChange);
 
     return () => {
-      window.removeEventListener('tirth-hotel-changed', handleHotelChange);
-      window.removeEventListener('storage', handleHotelChange);
+      window.removeEventListener('tirth-hotel-changed', handleDataChange);
+      window.removeEventListener('tirth-city-changed', handleDataChange);
+      window.removeEventListener('storage', handleDataChange);
     };
   }, [selectedCityId, searchQuery]);
 

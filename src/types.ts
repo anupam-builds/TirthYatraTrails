@@ -223,6 +223,9 @@ export interface Inquiry {
   customerRating?: number;
   tags?: string[];
   tourDuration?: string;
+  companionMatchingOptIn?: boolean;
+  companionPilgrimType?: 'SOLO_TRAVELER' | 'ELDERLY_PILGRIM' | 'MOTHER_DAUGHTER' | 'FAMILY_GROUP' | 'SPIRITUAL_SEEKER';
+  companionNotes?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -257,6 +260,83 @@ export interface Review {
   googleReviewUrl?: string;
   isFeatured: boolean;
   order: number;
+  audioUrl?: string; // Base64 data URL or external audio URL
+  audioDuration?: number; // duration in seconds
+  audioTitle?: string; // short audio summary
+  language?: string; // devotee voice language, e.g. "Hindi", "English", "Gujarati"
   createdAt: string;
   updatedAt?: string;
+}
+
+export type PilgrimType =
+  | 'SOLO_TRAVELER'
+  | 'ELDERLY_PILGRIM'
+  | 'MOTHER_DAUGHTER'
+  | 'FAMILY_GROUP'
+  | 'SPIRITUAL_SEEKER'
+  | 'elderly_pilgrim'
+  | 'solo_traveler'
+  | 'family_seeking_company'
+  | 'spiritual_seeker'
+  | 'specially_abled_companion';
+
+export interface CompanionProfile {
+  id: string;
+  userId?: string;
+  pilgrimName: string;
+  fullName?: string;
+  age?: number;
+  gender?: 'MALE' | 'FEMALE' | 'ANY' | 'FAMILY' | 'male' | 'female' | 'other';
+  pilgrimType: PilgrimType;
+  cityOfOrigin: string;
+  originCity?: string;
+  destination: string; // e.g. "Kedarnath & Badrinath", "Kashi Vishwanath & Ayodhya", "Tirupati Balaji", etc.
+  destinationCity?: string;
+  travelMonth: string; // e.g. "October 2026", "November 2026"
+  travelDates?: string;
+  startDate?: string;
+  endDate?: string;
+  datesFlexible?: boolean;
+  groupSize?: number;
+  languages: string[];
+  languagesSpoken?: string[];
+  seekingDescription: string;
+  description?: string;
+  assistanceNeeded?: string[]; // e.g. ["Luggage Assistance", "Slow Walking Pace", "Shared Cab/Helicopter", "Pooja Coordination"]
+  dietaryPreference?: string; // e.g. "Strict Sattvic", "Jain Food", "Vegetarian"
+  contactPhone?: string;
+  contactWhatsApp?: string;
+  contactEmail?: string;
+  contactPreference?: 'WHATSAPP' | 'IN_APP_MESSAGE' | 'PHONE_CALL';
+  isVerified: boolean;
+  emergencyContactListed?: boolean;
+  status: 'OPEN' | 'MATCHED' | 'CLOSED' | 'active' | 'matched' | 'closed';
+  avatarInitials?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CompanionConnection {
+  id: string;
+  companionProfileId?: string;
+  targetProfileId?: string;
+  senderName: string;
+  senderPhone?: string;
+  senderContact?: string;
+  senderEmail?: string;
+  senderCity?: string;
+  senderType?: PilgrimType;
+  message: string;
+  proposedDates?: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'pending' | 'accepted' | 'declined';
+  createdAt: string;
+}
+
+export interface CompanionSearchFilters {
+  destination?: string;
+  pilgrimType?: PilgrimType | 'ALL';
+  travelMonth?: string;
+  language?: string;
+  assistanceNeeded?: string;
+  searchQuery?: string;
 }

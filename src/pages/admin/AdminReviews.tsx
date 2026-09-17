@@ -20,6 +20,7 @@ import {
   Check,
   AlertCircle,
   RotateCcw,
+  Volume2,
 } from 'lucide-react';
 
 export const AdminReviews: React.FC = () => {
@@ -384,12 +385,20 @@ export const AdminReviews: React.FC = () => {
                           </div>
                           <div>
                             <p className="font-bold text-slate-900 dark:text-white leading-tight">{review.authorName}</p>
-                            {review.isVerified && (
-                              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
-                                <CheckCircle2 className="w-2.5 h-2.5" />
-                                Google Verified
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {review.isVerified && (
+                                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  Google Verified
+                                </span>
+                              )}
+                              {review.audioUrl && (
+                                <span className="text-[9px] text-amber-700 dark:text-amber-300 font-bold bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/60 px-1.5 py-0.2 rounded flex items-center gap-1">
+                                  <Volume2 className="w-2.5 h-2.5 text-orange-600" />
+                                  <span>Voice Note</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
