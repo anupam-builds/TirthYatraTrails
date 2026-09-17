@@ -154,8 +154,11 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
     setInlineError(null);
   };
 
-  const handleSaveNewCity = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveNewCity = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const cleanName = newCityName.trim();
     if (!cleanName) {
       setInlineError('Please enter a destination or city name.');
@@ -372,7 +375,16 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
             </div>
           ) : (
             /* MODE 2: INLINE QUICK ADD NEW SACRED CITY */
-            <form onSubmit={handleSaveNewCity} className="p-3 space-y-3">
+            <div
+              className="p-3 space-y-3"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSaveNewCity();
+                }
+              }}
+            >
               <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-1.5">
                   <div className="p-1 bg-orange-500 text-white rounded-lg">
@@ -511,7 +523,8 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
                 </button>
 
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleSaveNewCity}
                   disabled={isSavingCity || !newCityName.trim()}
                   className="px-4 py-1.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-orange-600/30 transition-all cursor-pointer"
                 >
@@ -523,7 +536,7 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
                   <span>Save & Select City</span>
                 </button>
               </div>
-            </form>
+            </div>
           )}
         </div>
       )}
