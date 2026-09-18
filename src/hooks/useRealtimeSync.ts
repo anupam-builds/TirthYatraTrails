@@ -287,7 +287,7 @@ import type { Package, City, TransitHub, HotelInventory, TravelStory } from '../
 import { api, mapCityRow } from '../services/api.js';
 
 /**
- * Real-time Yatra Packages hook (subscribes to yatra_packages & packages)
+ * Real-time Yatra Packages hook (subscribes to public.packages)
  */
 export function useRealtimePackages(options?: {
   category?: string;
@@ -297,7 +297,7 @@ export function useRealtimePackages(options?: {
   onDelete?: (id: string) => void;
 }) {
   return useRealtimeSync<Package>({
-    table: ['yatra_packages', 'packages'],
+    table: 'packages',
     channelName: 'public:content-sync-channel',
     autoFetch: () => api.getPackages(options?.category, options?.query),
     onInsert: options?.onInsert,

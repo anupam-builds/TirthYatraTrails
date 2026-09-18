@@ -128,42 +128,30 @@ export const api = {
 
   async getPackages(category?: string, query?: string): Promise<Package[]> {
     try {
-      // 1. Try yatra_packages table
-      let q = supabase.from('yatra_packages').select('*');
+      let q = supabase.from('packages').select('*');
       if (category) q = q.eq('category', category);
-      const res1 = await q;
-      if (!res1.error && res1.data && res1.data.length) {
-        let list = res1.data.map(mapPackageRow);
+      const res = await q;
+      if (!res.error && res.data && res.data.length) {
+        let list = res.data.map(mapPackageRow);
         if (query) {
           const lower = query.toLowerCase();
           list = list.filter((p) => p.title.toLowerCase().includes(lower) || p.location.toLowerCase().includes(lower));
         }
         return list;
       }
-
-      // 2. Try packages table / view
-      let q2 = supabase.from('packages').select('*');
-      if (category) q2 = q2.eq('category', category);
-      const res2 = await q2;
-      if (!res2.error && res2.data && res2.data.length) {
-        let list = res2.data.map(mapPackageRow);
-        if (query) {
-          const lower = query.toLowerCase();
-          list = list.filter((p) => p.title.toLowerCase().includes(lower) || p.location.toLowerCase().includes(lower));
-        }
-        return list;
-      }
-    } catch {}
+    } catch (err) {
+      console.warn('getPackages query error, falling back to localStore:', err);
+    }
     return localStore.getPackages(category, query);
   },
 
   async getPackageById(id: string): Promise<Package> {
     try {
-      const res1 = await supabase.from('yatra_packages').select('*').eq('id', id).maybeSingle();
-      if (!res1.error && res1.data) return mapPackageRow(res1.data);
-      const res2 = await supabase.from('packages').select('*').eq('id', id).maybeSingle();
-      if (!res2.error && res2.data) return mapPackageRow(res2.data);
-    } catch {}
+      const res = await supabase.from('packages').select('*').eq('id', id).maybeSingle();
+      if (!res.error && res.data) return mapPackageRow(res.data);
+    } catch (err) {
+      console.warn('getPackageById query error, falling back to localStore:', err);
+    }
     return localStore.getPackageById(id)!;
   },
 
@@ -429,96 +417,198 @@ export const api = {
       payload.id = `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     }
 
-    // 1. Try Supabase SDK with yatra_packages table first, then packages table
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    // 1. Direct PostgREST POST with explicit headers
     try {
-      let res = await supabase.from('yatra_packages').insert([payload]).select().maybeSingle();
-      if (res.error) {
-        res = await supabase.from('packages').insert([payload]).select().maybeSingle();
+      const restUrl = `${SUPABASE_URL}/rest/v1/packages`;
+      const response = await fetch(restUrl, {
+        method: 'POST',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          const mapped = mapPackageRow(row);
+          localStore.createPackage(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } else {
+        const errText = await response.text();
+        console.warn(`Direct fetch createPackage failed (${response.status}):`, errText);
       }
-      if (!res.error && res.data) {
-        const mapped = mapPackageRow(res.data);
-        localStore.createPackage(mapped);
-        return mapped;
-      }
-    } catch (sdkErr) {
-      console.warn('Supabase SDK createPackage error, trying direct REST with explicit headers', sdkErr);
+    } catch (fetchErr) {
+      console.warn('Direct fetch createPackage network error:', fetchErr);
     }
 
-    // 2. Direct REST execution with guaranteed explicit apikey & Authorization headers
+    // 2. Secondary attempt via Supabase SDK or supabaseRest targeting packages table
     try {
-      let restRes = await supabaseRest<any[]>('yatra_packages', {
+      const { data, error } = await supabase.from('packages').insert([payload]).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapPackageRow(data);
+        localStore.createPackage(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+        }
+        return mapped;
+      }
+
+      const restRes = await supabaseRest<any[]>('packages', {
         method: 'POST',
+        headers: explicitHeaders,
         body: payload,
       });
-      if (restRes.error || !restRes.data?.length) {
-        restRes = await supabaseRest<any[]>('packages', {
-          method: 'POST',
-          body: payload,
-        });
-      }
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapPackageRow(restRes.data[0]);
         localStore.createPackage(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+        }
         return mapped;
       }
-    } catch (restErr) {
-      console.warn('Direct REST createPackage error, falling back to localStore', restErr);
+    } catch (err) {
+      console.warn('createPackage error, saving to localStore:', err);
     }
 
-    return localStore.createPackage({ ...pkg, id: payload.id } as Package);
+    const saved = localStore.createPackage({ ...pkg, id: payload.id } as Package);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: saved }));
+    }
+    return saved;
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
     const payload = packageToRow(pkg);
     delete payload.id;
 
-    // 1. Try Supabase SDK with yatra_packages table first, then packages table
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    // 1. Direct PostgREST PATCH with explicit headers
     try {
-      let res = await supabase.from('yatra_packages').update(payload).eq('id', id).select().maybeSingle();
-      if (res.error) {
-        res = await supabase.from('packages').update(payload).eq('id', id).select().maybeSingle();
+      const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(id)}`;
+      const response = await fetch(restUrl, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          const mapped = mapPackageRow(row);
+          localStore.updatePackage(id, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } else {
+        const errText = await response.text();
+        console.warn(`Direct fetch updatePackage failed (${response.status}):`, errText);
       }
-      if (!res.error && res.data) {
-        const mapped = mapPackageRow(res.data);
-        localStore.updatePackage(id, mapped);
-        return mapped;
-      }
-    } catch (sdkErr) {
-      console.warn('Supabase SDK updatePackage error, trying direct REST', sdkErr);
+    } catch (fetchErr) {
+      console.warn('Direct fetch updatePackage network error:', fetchErr);
     }
 
-    // 2. Direct REST execution with guaranteed explicit headers
+    // 2. Secondary attempt via Supabase SDK or supabaseRest targeting packages table
     try {
-      let restRes = await supabaseRest<any[]>('yatra_packages', {
+      const { data, error } = await supabase.from('packages').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapPackageRow(data);
+        localStore.updatePackage(id, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+        }
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('packages', {
         method: 'PATCH',
+        headers: explicitHeaders,
         params: { id: `eq.${id}` },
         body: payload,
       });
-      if (restRes.error || !restRes.data?.length) {
-        restRes = await supabaseRest<any[]>('packages', {
-          method: 'PATCH',
-          params: { id: `eq.${id}` },
-          body: payload,
-        });
-      }
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapPackageRow(restRes.data[0]);
         localStore.updatePackage(id, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+        }
         return mapped;
       }
-    } catch (restErr) {
-      console.warn('Direct REST updatePackage error, falling back to localStore', restErr);
+    } catch (err) {
+      console.warn('updatePackage remote error, saving to localStore:', err);
     }
 
-    return localStore.updatePackage(id, pkg);
+    const updated = localStore.updatePackage(id, pkg);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: updated }));
+    }
+    return updated;
   },
 
-  async deletePackage(id: string): Promise<boolean> {
+  async deletePackage(idOrQuery: string): Promise<boolean> {
+    const rawId = String(idOrQuery || '').trim();
+    // Parse safe id if rawId contains query expression like 'id=eq.pkg-123' or '?id=eq.pkg-123'
+    const id = rawId.includes('id=eq.')
+      ? rawId.split('id=eq.').pop()?.split('&')[0]?.trim() || rawId
+      : rawId;
+
+    if (!id) return false;
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    // 1. Direct PostgREST DELETE call safely targeting only /rest/v1/packages?id=eq.${id}
     try {
-      await supabase.from('yatra_packages').delete().eq('id', id);
+      const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(id)}`;
+      const response = await fetch(restUrl, {
+        method: 'DELETE',
+        headers: explicitHeaders,
+      });
+
+      if (!response.ok && response.status !== 404) {
+        const errText = await response.text();
+        console.warn(`Direct fetch deletePackage failed (${response.status}):`, errText);
+      }
+    } catch (fetchErr) {
+      console.warn('Direct fetch deletePackage network error:', fetchErr);
+    }
+
+    // 2. Secondary supabase SDK call targeting only packages
+    try {
       await supabase.from('packages').delete().eq('id', id);
-    } catch {}
+    } catch (err) {
+      console.warn('deletePackage Supabase SDK error:', err);
+    }
+
     localStore.deletePackage(id);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { id } }));
+    }
     return true;
   },
 
@@ -607,6 +697,43 @@ export const api = {
     const payload = cityToRow(city);
     delete payload.id;
 
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    // 1. Direct PostgREST PATCH with explicit headers
+    try {
+      const restUrl = `${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(id)}`;
+      const response = await fetch(restUrl, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          const mapped = mapCityRow(row);
+          localStore.updateCity(id, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } else {
+        const errText = await response.text();
+        console.warn(`Direct fetch updateCity failed (${response.status}):`, errText);
+      }
+    } catch (fetchErr) {
+      console.warn('Direct fetch updateCity network error:', fetchErr);
+    }
+
+    // 2. Secondary attempt via supabase-js or supabaseRest
     try {
       const { data, error } = await supabase.from('cities').update(payload).eq('id', id).select().maybeSingle();
       if (!error && data) {
@@ -619,6 +746,7 @@ export const api = {
       }
       const restRes = await supabaseRest<any[]>('cities', {
         method: 'PATCH',
+        headers: explicitHeaders,
         params: { id: `eq.${id}` },
         body: payload,
       });
@@ -653,7 +781,18 @@ export const api = {
   },
 
   async deleteCity(id: string): Promise<boolean> {
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+    };
+
     try {
+      await fetch(`${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: explicitHeaders,
+      });
       await supabase.from('cities').delete().eq('id', id);
     } catch (err) {
       console.warn('deleteCity remote error:', err);

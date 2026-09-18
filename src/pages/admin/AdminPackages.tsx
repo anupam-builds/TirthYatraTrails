@@ -80,7 +80,6 @@ export const AdminPackages: React.FC = () => {
     };
 
     channel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'yatra_packages' }, handlePayload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, handlePayload)
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {

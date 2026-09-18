@@ -96,7 +96,6 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
     };
 
     channel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'yatra_packages' }, handlePayload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, handlePayload)
       .subscribe();
 
