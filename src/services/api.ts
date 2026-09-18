@@ -3,6 +3,18 @@ import { supabase, supabaseRest, getSupabaseHeaders } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 
+// ------------------------------------------------------------------------------
+// Multi-Table Candidate Fallbacks & PostgREST 404 Resilience State
+// ------------------------------------------------------------------------------
+const CITY_TABLE_CANDIDATES = ['cities', 'destination_cities', 'destinations'];
+const HUB_TABLE_CANDIDATES = ['hubs', 'transit_hubs', 'city_hubs'];
+
+let activeCityTable: string | null = null;
+let activeHubTable: string | null = null;
+let cityRemoteCooldownUntil = 0;
+let hubRemoteCooldownUntil = 0;
+const COOLDOWN_DURATION_MS = 45000;
+
 export const api = {
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
@@ -79,12 +91,45 @@ export const api = {
     return token ? JSON.parse(atob(token)) : null;
   },
 
-  // Public & Admin Data via Supabase
+  // Public & Admin Data via Supabase (Resilient Candidate Routing & 404 Fallback)
   async getCities(): Promise<City[]> {
-    try {
-      const { data, error } = await supabase.from('cities').select('*');
-      if (!error && data && data.length) return data.map(mapCityRow);
-    } catch {}
+    if (Date.now() < cityRemoteCooldownUntil && !activeCityTable) {
+      return localStore.getCities();
+    }
+
+    const tablesToTry = activeCityTable
+      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
+      : CITY_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        const { data, error } = await supabase.from(tbl).select('*');
+        if (!error && data !== null) {
+          activeCityTable = tbl;
+          cityRemoteCooldownUntil = 0;
+          if (data.length > 0) {
+            return data.map(mapCityRow);
+          }
+          return localStore.getCities();
+        }
+        // If error is table not found / 404, test next candidate table
+        if (
+          error &&
+          (error.code === '42P01' ||
+            error.message?.includes('does not exist') ||
+            (error as any).status === 404 ||
+            error.code === 'PGRST116')
+        ) {
+          continue;
+        }
+      } catch {
+        // Continue to next candidate table
+      }
+    }
+
+    // If all remote candidates return 404 or fail, enter cooldown and serve local fallback
+    activeCityTable = null;
+    cityRemoteCooldownUntil = Date.now() + COOLDOWN_DURATION_MS;
     return localStore.getCities();
   },
 
@@ -514,59 +559,114 @@ export const api = {
     if (!payload.id) {
       payload.id = (city.name || 'city').toLowerCase().replace(/[^a-z0-9]+/g, '-');
     }
-    try {
-      const { data, error } = await supabase.from('cities').insert([payload]).select().maybeSingle();
-      if (!error && data) {
-        const mapped = mapCityRow(data);
-        localStore.createCity(mapped);
-        return mapped;
-      }
-      const restRes = await supabaseRest<any[]>('cities', {
-        method: 'POST',
-        body: payload,
-      });
-      if (restRes.data && restRes.data.length > 0) {
-        const mapped = mapCityRow(restRes.data[0]);
-        localStore.createCity(mapped);
-        return mapped;
-      }
-    } catch (err) {
-      console.warn('createCity remote error, falling back to localStore', err);
+
+    const tablesToTry = activeCityTable
+      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
+      : CITY_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        const { data, error } = await supabase.from(tbl).insert([payload]).select().maybeSingle();
+        if (!error && data) {
+          activeCityTable = tbl;
+          const mapped = mapCityRow(data);
+          localStore.createCity(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+        const restRes = await supabaseRest<any[]>(tbl, {
+          method: 'POST',
+          body: payload,
+        });
+        if (restRes.data && restRes.data.length > 0) {
+          activeCityTable = tbl;
+          const mapped = mapCityRow(restRes.data[0]);
+          localStore.createCity(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } catch {}
     }
-    return localStore.createCity({ ...city, id: payload.id } as City);
+
+    const saved = localStore.createCity({ ...city, id: payload.id } as City);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: saved }));
+    }
+    return saved;
   },
 
   async updateCity(id: string, city: Partial<City>): Promise<City> {
     const payload = cityToRow(city);
     delete payload.id;
-    try {
-      const { data, error } = await supabase.from('cities').update(payload).eq('id', id).select().maybeSingle();
-      if (!error && data) {
-        const mapped = mapCityRow(data);
-        localStore.updateCity(id, mapped);
-        return mapped;
-      }
-      const restRes = await supabaseRest<any[]>('cities', {
-        method: 'PATCH',
-        params: { id: `eq.${id}` },
-        body: payload,
-      });
-      if (restRes.data && restRes.data.length > 0) {
-        const mapped = mapCityRow(restRes.data[0]);
-        localStore.updateCity(id, mapped);
-        return mapped;
-      }
-    } catch (err) {
-      console.warn('updateCity remote error, falling back to localStore', err);
+
+    const tablesToTry = activeCityTable
+      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
+      : CITY_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        const { data, error } = await supabase.from(tbl).update(payload).eq('id', id).select().maybeSingle();
+        if (!error && data) {
+          activeCityTable = tbl;
+          const mapped = mapCityRow(data);
+          localStore.updateCity(id, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+        const restRes = await supabaseRest<any[]>(tbl, {
+          method: 'PATCH',
+          params: { id: `eq.${id}` },
+          body: payload,
+        });
+        if (restRes.data && restRes.data.length > 0) {
+          activeCityTable = tbl;
+          const mapped = mapCityRow(restRes.data[0]);
+          localStore.updateCity(id, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } catch {}
     }
-    return localStore.updateCity(id, city);
+
+    const updated = localStore.updateCity(id, city);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: updated }));
+    }
+    return updated;
+  },
+
+  async saveCity(city: Partial<City>): Promise<City> {
+    if (city.id) {
+      const existing = (await this.getCities()).find((c) => c.id === city.id);
+      if (existing) {
+        return this.updateCity(city.id, city);
+      }
+    }
+    return this.createCity(city);
   },
 
   async deleteCity(id: string): Promise<boolean> {
-    try {
-      await supabase.from('cities').delete().eq('id', id);
-    } catch {}
+    const tablesToTry = activeCityTable
+      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
+      : CITY_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        await supabase.from(tbl).delete().eq('id', id);
+      } catch {}
+    }
     localStore.deleteCity(id);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { id } }));
+    }
     return true;
   },
 
@@ -659,17 +759,46 @@ export const api = {
   async getCompanionProfiles() { return this.getCompanions(); },
   async createCompanionProfile(p: any) { return this.createCompanion(p); },
 
-  // Transit Hubs (Airports, Railway Stations, Helipads)
+  // Transit Hubs (Airports, Railway Stations, Helipads - Resilient Candidate Routing & 404 Fallback)
   async getHubs(cityId?: string): Promise<TransitHub[]> {
-    try {
-      let q = supabase.from('hubs').select('*');
-      if (cityId) q = q.eq('city_id', cityId);
-      const { data } = await q;
-      if (data && data.length) return data.map(mapHubRow);
-      return getFallbackHubs(cityId);
-    } catch {
-      return getFallbackHubs(cityId);
+    if (Date.now() < hubRemoteCooldownUntil && !activeHubTable) {
+      return localStore.getHubs(cityId);
     }
+
+    const tablesToTry = activeHubTable
+      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
+      : HUB_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        let q = supabase.from(tbl).select('*');
+        if (cityId) q = q.eq('city_id', cityId);
+        const { data, error } = await q;
+        if (!error && data !== null) {
+          activeHubTable = tbl;
+          hubRemoteCooldownUntil = 0;
+          if (data.length > 0) {
+            return data.map(mapHubRow);
+          }
+          return localStore.getHubs(cityId);
+        }
+        if (
+          error &&
+          (error.code === '42P01' ||
+            error.message?.includes('does not exist') ||
+            (error as any).status === 404 ||
+            error.code === 'PGRST116')
+        ) {
+          continue;
+        }
+      } catch {
+        // Continue to next candidate table
+      }
+    }
+
+    activeHubTable = null;
+    hubRemoteCooldownUntil = Date.now() + COOLDOWN_DURATION_MS;
+    return localStore.getHubs(cityId);
   },
 
   async createHub(hub: Partial<TransitHub>): Promise<TransitHub> {
@@ -682,16 +811,44 @@ export const api = {
       distance_to_temple_km: hub.distanceToTempleKm || 0,
       is_primary: Boolean(hub.isPrimary),
     };
-    try {
-      const { data, error } = await supabase.from('hubs').insert([payload]).select().maybeSingle();
-      if (!error && data) return mapHubRow(data);
-      const restRes = await supabaseRest<any[]>('hubs', {
-        method: 'POST',
-        body: payload,
-      });
-      if (restRes.data && restRes.data.length > 0) return mapHubRow(restRes.data[0]);
-    } catch {}
-    return { ...hub, id: payload.id } as TransitHub;
+
+    const tablesToTry = activeHubTable
+      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
+      : HUB_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        const { data, error } = await supabase.from(tbl).insert([payload]).select().maybeSingle();
+        if (!error && data) {
+          activeHubTable = tbl;
+          const mapped = mapHubRow(data);
+          localStore.createHub(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+        const restRes = await supabaseRest<any[]>(tbl, {
+          method: 'POST',
+          body: payload,
+        });
+        if (restRes.data && restRes.data.length > 0) {
+          activeHubTable = tbl;
+          const mapped = mapHubRow(restRes.data[0]);
+          localStore.createHub(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } catch {}
+    }
+
+    const saved = localStore.createHub({ ...hub, id: payload.id } as TransitHub);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: saved }));
+    }
+    return saved;
   },
 
   async updateHub(id: string, hub: Partial<TransitHub>): Promise<TransitHub> {
@@ -701,23 +858,72 @@ export const api = {
     if (hub.code !== undefined) payload.code = hub.code;
     if (hub.distanceToTempleKm !== undefined) payload.distance_to_temple_km = hub.distanceToTempleKm;
     if (hub.isPrimary !== undefined) payload.is_primary = hub.isPrimary;
-    try {
-      const { data, error } = await supabase.from('hubs').update(payload).eq('id', id).select().maybeSingle();
-      if (!error && data) return mapHubRow(data);
-      const restRes = await supabaseRest<any[]>('hubs', {
-        method: 'PATCH',
-        params: { id: `eq.${id}` },
-        body: payload,
-      });
-      if (restRes.data && restRes.data.length > 0) return mapHubRow(restRes.data[0]);
-    } catch {}
-    return { ...hub, id } as TransitHub;
+    if (hub.cityId !== undefined) payload.city_id = hub.cityId;
+
+    const tablesToTry = activeHubTable
+      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
+      : HUB_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        const { data, error } = await supabase.from(tbl).update(payload).eq('id', id).select().maybeSingle();
+        if (!error && data) {
+          activeHubTable = tbl;
+          const mapped = mapHubRow(data);
+          localStore.updateHub(id, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+        const restRes = await supabaseRest<any[]>(tbl, {
+          method: 'PATCH',
+          params: { id: `eq.${id}` },
+          body: payload,
+        });
+        if (restRes.data && restRes.data.length > 0) {
+          activeHubTable = tbl;
+          const mapped = mapHubRow(restRes.data[0]);
+          localStore.updateHub(id, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } catch {}
+    }
+
+    const updated = localStore.updateHub(id, hub);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: updated }));
+    }
+    return updated;
+  },
+
+  async saveHub(hub: Partial<TransitHub>): Promise<TransitHub> {
+    if (hub.id) {
+      const existing = (await this.getHubs()).find((h) => h.id === hub.id);
+      if (existing) {
+        return this.updateHub(hub.id, hub);
+      }
+    }
+    return this.createHub(hub);
   },
 
   async deleteHub(id: string): Promise<boolean> {
-    try {
-      await supabase.from('hubs').delete().eq('id', id);
-    } catch {}
+    const tablesToTry = activeHubTable
+      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
+      : HUB_TABLE_CANDIDATES;
+
+    for (const tbl of tablesToTry) {
+      try {
+        await supabase.from(tbl).delete().eq('id', id);
+      } catch {}
+    }
+    localStore.deleteHub(id);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { id } }));
+    }
     return true;
   },
 

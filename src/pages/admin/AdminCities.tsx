@@ -68,11 +68,13 @@ export const AdminCities: React.FC = () => {
     };
     window.addEventListener('tirth-hotel-changed', handleDataChange);
     window.addEventListener('tirth-city-changed', handleDataChange);
+    window.addEventListener('tirth-hub-changed', handleDataChange);
     window.addEventListener('storage', handleDataChange);
 
     return () => {
       window.removeEventListener('tirth-hotel-changed', handleDataChange);
       window.removeEventListener('tirth-city-changed', handleDataChange);
+      window.removeEventListener('tirth-hub-changed', handleDataChange);
       window.removeEventListener('storage', handleDataChange);
     };
   }, []);

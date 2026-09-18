@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor, CompanionProfile, CompanionConnection, CompanionSearchFilters } from '../types.js';
+import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub } from '../types.js';
 import {
   INITIAL_CITIES,
   INITIAL_HOTELS,
@@ -12,6 +12,7 @@ import {
 
 const STORAGE_KEYS = {
   CITIES: 'tyt_local_cities',
+  HUBS: 'tyt_local_hubs',
   HOTELS: 'tyt_local_hotels',
   PACKAGES: 'tyt_local_packages',
   INQUIRIES: 'tyt_local_inquiries',
@@ -22,6 +23,15 @@ const STORAGE_KEYS = {
   COMPANIONS: 'tyt_local_companions',
   COMPANION_CONNS: 'tyt_local_companion_conns',
 };
+
+const INITIAL_HUBS: TransitHub[] = [
+  { id: 'hub-ayj-air', cityId: 'ayodhya', cityName: 'Ayodhya', name: 'Maharishi Valmiki International Airport (AYJ)', hubType: 'AIRPORT', code: 'AYJ', distanceToTempleKm: 9.5, isPrimary: true },
+  { id: 'hub-ayj-rail', cityId: 'ayodhya', cityName: 'Ayodhya', name: 'Ayodhya Dham Junction (AY)', hubType: 'RAILWAY_STATION', code: 'AY', distanceToTempleKm: 1.2, isPrimary: false },
+  { id: 'hub-vns-air', cityId: 'varanasi', cityName: 'Varanasi', name: 'Lal Bahadur Shastri International Airport (VNS)', hubType: 'AIRPORT', code: 'VNS', distanceToTempleKm: 24.0, isPrimary: true },
+  { id: 'hub-vns-rail', cityId: 'varanasi', cityName: 'Varanasi', name: 'Varanasi Cantt Station (BSB)', hubType: 'RAILWAY_STATION', code: 'BSB', distanceToTempleKm: 4.5, isPrimary: false },
+  { id: 'hub-keda-heli', cityId: 'kedarnath', cityName: 'Kedarnath', name: 'Guptkashi & Phata Helipad Base', hubType: 'HELIPAD', code: 'GPK', distanceToTempleKm: 14.0, isPrimary: true },
+  { id: 'hub-puri-rail', cityId: 'puri', cityName: 'Puri', name: 'Puri Railway Station (PURI)', hubType: 'RAILWAY_STATION', code: 'PURI', distanceToTempleKm: 2.1, isPrimary: true },
+];
 
 function getStored<T>(key: string, defaultVal: T): T {
   try {
@@ -1379,8 +1389,72 @@ export const localStore = {
     return conns[idx];
   },
 
+  // Transit Hubs (Local Offline Fallback)
+  getHubs(cityId?: string): TransitHub[] {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.HUBS) : null;
+    let list: TransitHub[];
+    if (raw === null) {
+      setStored(STORAGE_KEYS.HUBS, INITIAL_HUBS);
+      list = [...INITIAL_HUBS];
+    } else {
+      try {
+        list = JSON.parse(raw);
+      } catch {
+        list = [...INITIAL_HUBS];
+      }
+    }
+    if (cityId) {
+      const lower = cityId.toLowerCase().trim();
+      return list.filter((h) => (h.cityId || '').toLowerCase().trim() === lower);
+    }
+    return list;
+  },
+
+  createHub(hubData: Partial<TransitHub>): TransitHub {
+    const list = this.getHubs();
+    const id = hubData.id || `hub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newHub: TransitHub = {
+      id,
+      cityId: hubData.cityId || 'ayodhya',
+      cityName: hubData.cityName || 'Ayodhya',
+      name: hubData.name || 'Transit Terminal',
+      hubType: hubData.hubType || 'AIRPORT',
+      code: hubData.code || '',
+      distanceToTempleKm: Number(hubData.distanceToTempleKm ?? 10),
+      isPrimary: Boolean(hubData.isPrimary),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    list.unshift(newHub);
+    setStored(STORAGE_KEYS.HUBS, list);
+    return newHub;
+  },
+
+  updateHub(id: string, hubData: Partial<TransitHub>): TransitHub {
+    const list = this.getHubs();
+    const idx = list.findIndex((h) => h.id === id);
+    if (idx === -1) {
+      return this.createHub({ ...hubData, id });
+    }
+    const updated = {
+      ...list[idx],
+      ...hubData,
+      updatedAt: new Date().toISOString(),
+    };
+    list[idx] = updated;
+    setStored(STORAGE_KEYS.HUBS, list);
+    return updated;
+  },
+
+  deleteHub(id: string): boolean {
+    const list = this.getHubs().filter((h) => h.id !== id);
+    setStored(STORAGE_KEYS.HUBS, list);
+    return true;
+  },
+
   resetData(): void {
     setStored(STORAGE_KEYS.CITIES, INITIAL_CITIES);
+    setStored(STORAGE_KEYS.HUBS, INITIAL_HUBS);
     setStored(STORAGE_KEYS.HOTELS, INITIAL_HOTELS);
     setStored(STORAGE_KEYS.PACKAGES, INITIAL_PACKAGES);
     setStored(STORAGE_KEYS.INQUIRIES, INITIAL_INQUIRIES);
