@@ -413,8 +413,36 @@ export const api = {
 
   async createPackage(pkg: Partial<Package>): Promise<Package> {
     const payload = packageToRow(pkg);
-    if (!payload.id) {
-      payload.id = `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    // Strip client-generated prefix IDs (`pkg-...`, `temp-...`) so Postgres handles canonical ID generation or UUID assignment cleanly
+    if (payload.id && typeof payload.id === 'string' && (payload.id.startsWith('pkg-') || payload.id.startsWith('temp-'))) {
+      delete payload.id;
+    }
+
+    // Ensure JSONB fields (itinerary, transfers, highlights, gallery_images) are passed as native arrays/objects, never double-stringified JSON text
+    if (typeof payload.itinerary === 'string') {
+      try { payload.itinerary = JSON.parse(payload.itinerary); } catch { payload.itinerary = []; }
+    }
+    if (!Array.isArray(payload.itinerary)) {
+      payload.itinerary = payload.itinerary ? [payload.itinerary] : [];
+    }
+
+    if (typeof payload.highlights === 'string') {
+      try { payload.highlights = JSON.parse(payload.highlights); } catch { payload.highlights = []; }
+    }
+    if (!Array.isArray(payload.highlights)) {
+      payload.highlights = payload.highlights ? [payload.highlights] : [];
+    }
+
+    if (typeof payload.gallery_images === 'string') {
+      try { payload.gallery_images = JSON.parse(payload.gallery_images); } catch { payload.gallery_images = []; }
+    }
+    if (!Array.isArray(payload.gallery_images)) {
+      payload.gallery_images = payload.gallery_images ? [payload.gallery_images] : [];
+    }
+
+    if (typeof payload.transfers === 'string' && (payload.transfers.trim().startsWith('{') || payload.transfers.trim().startsWith('['))) {
+      try { payload.transfers = JSON.parse(payload.transfers); } catch {}
     }
 
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
@@ -425,7 +453,10 @@ export const api = {
       Prefer: 'return=representation',
     };
 
-    // 1. Direct PostgREST POST with explicit headers
+    // Debug Logging
+    console.log('Sending package payload:', JSON.stringify(payload, null, 2));
+
+    // 1. Direct PostgREST POST with explicit headers targeting strictly packages
     try {
       const restUrl = `${SUPABASE_URL}/rest/v1/packages`;
       const response = await fetch(restUrl, {
@@ -447,7 +478,7 @@ export const api = {
         }
       } else {
         const errText = await response.text();
-        console.warn(`Direct fetch createPackage failed (${response.status}):`, errText);
+        console.error(`Direct fetch createPackage failed (${response.status}):`, errText);
       }
     } catch (fetchErr) {
       console.warn('Direct fetch createPackage network error:', fetchErr);
@@ -463,6 +494,9 @@ export const api = {
           window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
         }
         return mapped;
+      }
+      if (error) {
+        console.error('Supabase SDK createPackage error:', error.message, error.details);
       }
 
       const restRes = await supabaseRest<any[]>('packages', {
@@ -482,7 +516,8 @@ export const api = {
       console.warn('createPackage error, saving to localStore:', err);
     }
 
-    const saved = localStore.createPackage({ ...pkg, id: payload.id } as Package);
+    const fallbackId = payload.id || `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const saved = localStore.createPackage({ ...pkg, ...payload, id: fallbackId } as Package);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: saved }));
     }
@@ -493,6 +528,32 @@ export const api = {
     const payload = packageToRow(pkg);
     delete payload.id;
 
+    // Ensure JSONB fields (itinerary, transfers, highlights, gallery_images) are passed as native arrays/objects, never double-stringified JSON text
+    if (typeof payload.itinerary === 'string') {
+      try { payload.itinerary = JSON.parse(payload.itinerary); } catch { payload.itinerary = []; }
+    }
+    if (payload.itinerary !== undefined && !Array.isArray(payload.itinerary)) {
+      payload.itinerary = [payload.itinerary];
+    }
+
+    if (typeof payload.highlights === 'string') {
+      try { payload.highlights = JSON.parse(payload.highlights); } catch { payload.highlights = []; }
+    }
+    if (payload.highlights !== undefined && !Array.isArray(payload.highlights)) {
+      payload.highlights = [payload.highlights];
+    }
+
+    if (typeof payload.gallery_images === 'string') {
+      try { payload.gallery_images = JSON.parse(payload.gallery_images); } catch { payload.gallery_images = []; }
+    }
+    if (payload.gallery_images !== undefined && !Array.isArray(payload.gallery_images)) {
+      payload.gallery_images = [payload.gallery_images];
+    }
+
+    if (typeof payload.transfers === 'string' && (payload.transfers.trim().startsWith('{') || payload.transfers.trim().startsWith('['))) {
+      try { payload.transfers = JSON.parse(payload.transfers); } catch {}
+    }
+
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
     const explicitHeaders = {
       apikey: anonKey,
@@ -500,6 +561,8 @@ export const api = {
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
     };
+
+    console.log('Sending package update payload:', JSON.stringify(payload, null, 2));
 
     // 1. Direct PostgREST PATCH with explicit headers
     try {
@@ -523,7 +586,7 @@ export const api = {
         }
       } else {
         const errText = await response.text();
-        console.warn(`Direct fetch updatePackage failed (${response.status}):`, errText);
+        console.error(`Direct fetch updatePackage failed (${response.status}):`, errText);
       }
     } catch (fetchErr) {
       console.warn('Direct fetch updatePackage network error:', fetchErr);
@@ -592,7 +655,7 @@ export const api = {
 
       if (!response.ok && response.status !== 404) {
         const errText = await response.text();
-        console.warn(`Direct fetch deletePackage failed (${response.status}):`, errText);
+        console.error(`Direct fetch deletePackage failed (${response.status}):`, errText);
       }
     } catch (fetchErr) {
       console.warn('Direct fetch deletePackage network error:', fetchErr);
@@ -1381,7 +1444,10 @@ export function packageToRow(pkg: Partial<Package>): Record<string, any> {
     row.image_url = pkg.imageUrl ?? (pkg as any).image_url;
   }
   if (pkg.galleryImages !== undefined || (pkg as any).gallery_images !== undefined) {
-    const rawImgs = pkg.galleryImages ?? (pkg as any).gallery_images;
+    let rawImgs = pkg.galleryImages ?? (pkg as any).gallery_images;
+    if (typeof rawImgs === 'string') {
+      try { rawImgs = JSON.parse(rawImgs); } catch { rawImgs = []; }
+    }
     row.gallery_images = Array.isArray(rawImgs) ? rawImgs : [];
   }
   if (pkg.startingPrice !== undefined || (pkg as any).starting_price !== undefined) {
@@ -1389,7 +1455,11 @@ export function packageToRow(pkg: Partial<Package>): Record<string, any> {
   }
   if (pkg.overview !== undefined) row.overview = pkg.overview;
   if (pkg.highlights !== undefined) {
-    row.highlights = Array.isArray(pkg.highlights) ? pkg.highlights : [];
+    let rawHls = pkg.highlights;
+    if (typeof rawHls === 'string') {
+      try { rawHls = JSON.parse(rawHls); } catch { rawHls = []; }
+    }
+    row.highlights = Array.isArray(rawHls) ? rawHls : [];
   }
   if (pkg.cancellationPolicy !== undefined || (pkg as any).cancellation_policy !== undefined) {
     row.cancellation_policy = pkg.cancellationPolicy ?? (pkg as any).cancellation_policy;
@@ -1404,9 +1474,19 @@ export function packageToRow(pkg: Partial<Package>): Record<string, any> {
   if (pkg.hotelsLevel !== undefined || (pkg as any).hotels_level !== undefined) {
     row.hotels_level = pkg.hotelsLevel ?? (pkg as any).hotels_level;
   }
-  if (pkg.transfers !== undefined) row.transfers = pkg.transfers;
+  if (pkg.transfers !== undefined) {
+    let rawTrs = pkg.transfers;
+    if (typeof rawTrs === 'string' && (rawTrs.trim().startsWith('{') || rawTrs.trim().startsWith('['))) {
+      try { rawTrs = JSON.parse(rawTrs); } catch {}
+    }
+    row.transfers = rawTrs;
+  }
   if (pkg.itinerary !== undefined) {
-    row.itinerary = Array.isArray(pkg.itinerary) ? pkg.itinerary : [];
+    let rawItin = pkg.itinerary;
+    if (typeof rawItin === 'string') {
+      try { rawItin = JSON.parse(rawItin); } catch { rawItin = []; }
+    }
+    row.itinerary = Array.isArray(rawItin) ? rawItin : [];
   }
   if (pkg.isPublished !== undefined || (pkg as any).is_published !== undefined) {
     row.is_published = Boolean(pkg.isPublished ?? (pkg as any).is_published ?? true);
