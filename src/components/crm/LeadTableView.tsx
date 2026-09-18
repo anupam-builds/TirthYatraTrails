@@ -83,13 +83,25 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   // In Staff Mode, staff members can ONLY view inquiries explicitly assigned to them by the administrator
   const baseInquiries = useMemo(() => {
     if (!isStaffMode) return inquiries;
+    const targetId = String(currentStaffId || '').trim().toLowerCase();
+    const targetName = String(currentStaffName || '').trim().toLowerCase();
+
     return inquiries.filter((inq) => {
-      const matchesId = Boolean(currentStaffId && inq.assignedStaffId === currentStaffId);
-      const matchesName = Boolean(
-        currentStaffName &&
-        inq.assignedStaffName &&
-        inq.assignedStaffName.trim().toLowerCase() === currentStaffName.trim().toLowerCase()
+      // 1. Strict & normalized ID matching
+      const inqStaffId = String(inq.assignedStaffId || '').trim().toLowerCase();
+      const hasStaffId = Boolean(inqStaffId && inqStaffId !== 'undefined' && inqStaffId !== 'null');
+      const matchesId = hasStaffId && targetId !== '' && inqStaffId === targetId;
+
+      // 2. Resilient Name matching (trimmed, case-insensitive, whitespace-normalized)
+      const inqStaffName = String(inq.assignedStaffName || '').trim().toLowerCase();
+      const hasStaffName = Boolean(inqStaffName && inqStaffName !== 'undefined' && inqStaffName !== 'null');
+      const matchesName = hasStaffName && Boolean(
+        targetName && (
+          inqStaffName === targetName ||
+          inqStaffName.replace(/\s+/g, ' ') === targetName.replace(/\s+/g, ' ')
+        )
       );
+
       return matchesId || matchesName;
     });
   }, [inquiries, isStaffMode, currentStaffId, currentStaffName]);

@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
 import { getLeadId, formatCrmTimestamp } from '../../utils/crmUtils.js';
+import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import {
   MessageSquare,
   RefreshCw,
@@ -22,18 +23,37 @@ import {
   AlertCircle,
   Clock,
   Archive,
+  Radio,
 } from 'lucide-react';
 
 export const AdminInquiries: React.FC = () => {
   const { adminUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
-  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [deletedInquiries, setDeletedInquiries] = useState<Inquiry[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
-  const [loading, setLoading] = useState(true);
   const [trashLoading, setTrashLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedInquiryForEdit, setSelectedInquiryForEdit] = useState<Inquiry | null>(null);
+
+  // Realtime inquiries hook using static channel public:inquiries-global-sync
+  const {
+    inquiries,
+    setInquiries,
+    connectionStatus: realtimeStatus,
+    isConnected: isRealtimeConnected,
+    loading,
+    refetch: refetchInquiries,
+  } = useRealtimeInquiries({
+    onInsert: (newInq) => {
+      console.log('📡 [AdminInquiries] Realtime lead INSERT received:', newInq.id);
+    },
+    onUpdate: (updatedInq) => {
+      console.log('🔄 [AdminInquiries] Realtime lead UPDATE received:', updatedInq.id);
+      setSelectedInquiryForEdit((curr) =>
+        curr && String(curr.id) === String(updatedInq.id) ? { ...curr, ...updatedInq } : curr
+      );
+    },
+  });
 
   // Trash UI states
   const [trashSearchQuery, setTrashSearchQuery] = useState('');
@@ -43,20 +63,31 @@ export const AdminInquiries: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadInquiries();
     loadStaff();
     loadDeletedInquiries();
 
-    // Auto prepend new incoming leads live without manual refresh
+    // Auto prepend new incoming leads live via local BroadcastChannel as fallback
     const unsubNew = subscribeToNewInquiries((newInquiry) => {
-      setInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)]);
+      setInquiries((prev) => [
+        newInquiry,
+        ...prev.filter((i) => String(i.id) !== String(newInquiry.id)),
+      ]);
     });
 
     // Auto sync lead updates live
     const unsubUpdates = subscribeToInquiryUpdates(({ inquiry: updatedInquiry }) => {
       if (!updatedInquiry) return;
       setInquiries((prev) =>
-        prev.map((item) => (item.id === updatedInquiry.id ? { ...item, ...updatedInquiry } : item))
+        prev.map((item) =>
+          String(item.id) === String(updatedInquiry.id)
+            ? {
+                ...item,
+                ...updatedInquiry,
+                assignedStaffId: updatedInquiry.assignedStaffId ?? item.assignedStaffId,
+                assignedStaffName: updatedInquiry.assignedStaffName ?? item.assignedStaffName,
+              }
+            : item
+        )
       );
     });
 
@@ -64,7 +95,7 @@ export const AdminInquiries: React.FC = () => {
       unsubNew();
       unsubUpdates();
     };
-  }, []);
+  }, [setInquiries]);
 
   async function loadStaff() {
     try {
@@ -72,18 +103,6 @@ export const AdminInquiries: React.FC = () => {
       setStaffList(list);
     } catch (err) {
       console.error('Failed loading staff for assignment:', err);
-    }
-  }
-
-  async function loadInquiries() {
-    setLoading(true);
-    try {
-      const list = await api.getInquiries();
-      setInquiries(list);
-    } catch (err) {
-      console.error('Failed to load inquiries:', err);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -102,11 +121,10 @@ export const AdminInquiries: React.FC = () => {
   const handleManualRefresh = async () => {
     setRefreshing(true);
     try {
-      const [activeList, trashList] = await Promise.all([
-        api.getInquiries(),
+      const [, trashList] = await Promise.all([
+        refetchInquiries(),
         api.getDeletedInquiries(),
       ]);
-      setInquiries(activeList);
       setDeletedInquiries(trashList);
     } catch (err) {
       console.error('Refresh error:', err);
@@ -118,9 +136,20 @@ export const AdminInquiries: React.FC = () => {
   const handleUpdateStatus = async (id: string, status: InquiryStatus) => {
     try {
       const updated = await api.updateInquiry(id, { status }, false);
-      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
-      if (selectedInquiryForEdit && selectedInquiryForEdit.id === id) {
-        setSelectedInquiryForEdit(updated);
+      setInquiries((prev) =>
+        prev.map((i) =>
+          String(i.id) === String(id)
+            ? {
+                ...i,
+                ...updated,
+                assignedStaffId: updated.assignedStaffId ?? i.assignedStaffId,
+                assignedStaffName: updated.assignedStaffName ?? i.assignedStaffName,
+              }
+            : i
+        )
+      );
+      if (selectedInquiryForEdit && String(selectedInquiryForEdit.id) === String(id)) {
+        setSelectedInquiryForEdit((curr) => (curr ? { ...curr, ...updated } : null));
       }
     } catch (err: any) {
       alert(err.message || 'Failed updating inquiry status');
@@ -129,12 +158,23 @@ export const AdminInquiries: React.FC = () => {
 
   const handleAssignStaff = async (inquiryId: string, staffId: string) => {
     try {
-      const staffMember = staffList.find((s) => s.id === staffId);
+      const staffMember = staffList.find((s) => String(s.id) === String(staffId));
       const staffName = staffMember ? staffMember.name : '';
       const updated = await api.assignInquiryStaff(inquiryId, staffId, staffName);
-      setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
-      if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
-        setSelectedInquiryForEdit(updated);
+      setInquiries((prev) =>
+        prev.map((i) =>
+          String(i.id) === String(inquiryId)
+            ? {
+                ...i,
+                ...updated,
+                assignedStaffId: updated.assignedStaffId ?? staffId,
+                assignedStaffName: updated.assignedStaffName ?? staffName,
+              }
+            : i
+        )
+      );
+      if (selectedInquiryForEdit && String(selectedInquiryForEdit.id) === String(inquiryId)) {
+        setSelectedInquiryForEdit((curr) => (curr ? { ...curr, ...updated } : null));
       }
     } catch (err: any) {
       alert(err.message || 'Failed assigning staff');
@@ -144,7 +184,18 @@ export const AdminInquiries: React.FC = () => {
   const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
     try {
       const updated = await api.updateInquiry(id, updates, false);
-      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      setInquiries((prev) =>
+        prev.map((i) =>
+          String(i.id) === String(id)
+            ? {
+                ...i,
+                ...updated,
+                assignedStaffId: updated.assignedStaffId ?? i.assignedStaffId,
+                assignedStaffName: updated.assignedStaffName ?? i.assignedStaffName,
+              }
+            : i
+        )
+      );
       setSelectedInquiryForEdit(null);
     } catch (err: any) {
       throw new Error(err.message || 'Failed to save lead updates');
@@ -322,9 +373,27 @@ export const AdminInquiries: React.FC = () => {
               <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border border-orange-200 dark:border-orange-800">
                 CRM Travel Desk
               </span>
-              <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Live Sync Active
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                  isRealtimeConnected
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                    : realtimeStatus === 'JOINING'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                    : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                }`}
+                title={`Supabase Realtime Channel: public:inquiries-global-sync (${realtimeStatus})`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isRealtimeConnected
+                      ? 'bg-emerald-500 animate-pulse'
+                      : realtimeStatus === 'JOINING'
+                      ? 'bg-amber-500 animate-pulse'
+                      : 'bg-slate-400'
+                  }`}
+                />
+                <Radio className="w-3 h-3" />
+                <span>{isRealtimeConnected ? 'Live Realtime Active' : `Realtime: ${realtimeStatus}`}</span>
               </span>
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif mt-1">
