@@ -351,30 +351,89 @@ export const api = {
 
   // Admin Hotels/Packages/Cities/Reviews with guaranteed snake_case mapping and explicit REST header fallback
   async createHotel(hotel: Partial<Hotel>): Promise<Hotel> {
-    const payload = hotelToRow(hotel);
-    if (!payload.id) {
-      payload.id = `htl-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    }
+    const rawPayload = hotelToRow(hotel);
+    const { id, ...cleanPayload } = rawPayload;
+    const isTempId = id && (String(id).startsWith('htl-') || String(id).startsWith('hotel-') || String(id).startsWith('temp-'));
+    const insertPayload: Record<string, any> = id && String(id).trim() !== '' && !isTempId
+      ? { id: String(id).trim(), ...cleanPayload }
+      : { ...cleanPayload };
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    console.log('Sending hotel payload:', JSON.stringify(insertPayload, null, 2));
+
+    // 1. Direct PostgREST POST with explicit headers
     try {
-      const { data, error } = await supabase.from('hotels').insert([payload]).select().maybeSingle();
+      const restUrl = `${SUPABASE_URL}/rest/v1/hotels`;
+      const response = await fetch(restUrl, {
+        method: 'POST',
+        headers: explicitHeaders,
+        body: JSON.stringify(insertPayload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          const mapped = mapHotelRow(row);
+          localStore.createHotel(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: mapped } }));
+          }
+          return mapped;
+        }
+      } else {
+        const errText = await response.text();
+        console.error(`Direct fetch createHotel failed (${response.status}):`, errText);
+      }
+    } catch (fetchErr) {
+      console.warn('Direct fetch createHotel network error:', fetchErr);
+    }
+
+    // 2. Secondary attempt via Supabase SDK or supabaseRest
+    try {
+      const { data, error } = await supabase.from('hotels').insert([insertPayload]).select().maybeSingle();
       if (!error && data) {
         const mapped = mapHotelRow(data);
         localStore.createHotel(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: mapped } }));
+        }
         return mapped;
       }
+      if (error) {
+        console.error('Supabase SDK createHotel error:', error.message, error.details);
+      }
+
       const restRes = await supabaseRest<any[]>('hotels', {
         method: 'POST',
-        body: payload,
+        headers: explicitHeaders,
+        body: insertPayload,
       });
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapHotelRow(restRes.data[0]);
         localStore.createHotel(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: mapped } }));
+        }
         return mapped;
       }
     } catch (err) {
       console.warn('createHotel remote error, falling back to localStore', err);
     }
-    return localStore.createHotel({ ...hotel, id: payload.id } as Hotel);
+
+    const fallbackId = (insertPayload as any).id || (id && !isTempId ? id : `htl-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
+    const saved = localStore.createHotel({ ...hotel, ...insertPayload, id: fallbackId } as Hotel);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: saved } }));
+    }
+    return saved;
   },
 
   async updateHotel(id: string, hotel: Partial<Hotel>): Promise<Hotel> {
@@ -412,37 +471,37 @@ export const api = {
   },
 
   async createPackage(pkg: Partial<Package>): Promise<Package> {
-    const payload = packageToRow(pkg);
-
-    // Strip client-generated prefix IDs (`pkg-...`, `temp-...`) so Postgres handles canonical ID generation or UUID assignment cleanly
-    if (payload.id && typeof payload.id === 'string' && (payload.id.startsWith('pkg-') || payload.id.startsWith('temp-'))) {
-      delete payload.id;
-    }
+    const rawPayload = packageToRow(pkg);
+    const { id, ...cleanPayload } = rawPayload;
+    const isTempId = id && (String(id).startsWith('pkg-') || String(id).startsWith('temp-'));
+    const insertPayload: Record<string, any> = id && String(id).trim() !== '' && !isTempId
+      ? { id: String(id).trim(), ...cleanPayload }
+      : { ...cleanPayload };
 
     // Ensure JSONB fields (itinerary, transfers, highlights, gallery_images) are passed as native arrays/objects, never double-stringified JSON text
-    if (typeof payload.itinerary === 'string') {
-      try { payload.itinerary = JSON.parse(payload.itinerary); } catch { payload.itinerary = []; }
+    if (typeof insertPayload.itinerary === 'string') {
+      try { insertPayload.itinerary = JSON.parse(insertPayload.itinerary); } catch { insertPayload.itinerary = []; }
     }
-    if (!Array.isArray(payload.itinerary)) {
-      payload.itinerary = payload.itinerary ? [payload.itinerary] : [];
-    }
-
-    if (typeof payload.highlights === 'string') {
-      try { payload.highlights = JSON.parse(payload.highlights); } catch { payload.highlights = []; }
-    }
-    if (!Array.isArray(payload.highlights)) {
-      payload.highlights = payload.highlights ? [payload.highlights] : [];
+    if (!Array.isArray(insertPayload.itinerary)) {
+      insertPayload.itinerary = insertPayload.itinerary ? [insertPayload.itinerary] : [];
     }
 
-    if (typeof payload.gallery_images === 'string') {
-      try { payload.gallery_images = JSON.parse(payload.gallery_images); } catch { payload.gallery_images = []; }
+    if (typeof insertPayload.highlights === 'string') {
+      try { insertPayload.highlights = JSON.parse(insertPayload.highlights); } catch { insertPayload.highlights = []; }
     }
-    if (!Array.isArray(payload.gallery_images)) {
-      payload.gallery_images = payload.gallery_images ? [payload.gallery_images] : [];
+    if (!Array.isArray(insertPayload.highlights)) {
+      insertPayload.highlights = insertPayload.highlights ? [insertPayload.highlights] : [];
     }
 
-    if (typeof payload.transfers === 'string' && (payload.transfers.trim().startsWith('{') || payload.transfers.trim().startsWith('['))) {
-      try { payload.transfers = JSON.parse(payload.transfers); } catch {}
+    if (typeof insertPayload.gallery_images === 'string') {
+      try { insertPayload.gallery_images = JSON.parse(insertPayload.gallery_images); } catch { insertPayload.gallery_images = []; }
+    }
+    if (!Array.isArray(insertPayload.gallery_images)) {
+      insertPayload.gallery_images = insertPayload.gallery_images ? [insertPayload.gallery_images] : [];
+    }
+
+    if (typeof insertPayload.transfers === 'string' && (insertPayload.transfers.trim().startsWith('{') || insertPayload.transfers.trim().startsWith('['))) {
+      try { insertPayload.transfers = JSON.parse(insertPayload.transfers); } catch {}
     }
 
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
@@ -454,7 +513,7 @@ export const api = {
     };
 
     // Debug Logging
-    console.log('Sending package payload:', JSON.stringify(payload, null, 2));
+    console.log('Sending package payload:', JSON.stringify(insertPayload, null, 2));
 
     // 1. Direct PostgREST POST with explicit headers targeting strictly packages
     try {
@@ -462,7 +521,7 @@ export const api = {
       const response = await fetch(restUrl, {
         method: 'POST',
         headers: explicitHeaders,
-        body: JSON.stringify(payload),
+        body: JSON.stringify(insertPayload),
       });
 
       if (response.ok) {
@@ -486,7 +545,7 @@ export const api = {
 
     // 2. Secondary attempt via Supabase SDK or supabaseRest targeting packages table
     try {
-      const { data, error } = await supabase.from('packages').insert([payload]).select().maybeSingle();
+      const { data, error } = await supabase.from('packages').insert([insertPayload]).select().maybeSingle();
       if (!error && data) {
         const mapped = mapPackageRow(data);
         localStore.createPackage(mapped);
@@ -502,7 +561,7 @@ export const api = {
       const restRes = await supabaseRest<any[]>('packages', {
         method: 'POST',
         headers: explicitHeaders,
-        body: payload,
+        body: insertPayload,
       });
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapPackageRow(restRes.data[0]);
@@ -516,8 +575,8 @@ export const api = {
       console.warn('createPackage error, saving to localStore:', err);
     }
 
-    const fallbackId = payload.id || `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const saved = localStore.createPackage({ ...pkg, ...payload, id: fallbackId } as Package);
+    const fallbackId = (insertPayload as any).id || (id && !isTempId ? id : `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
+    const saved = localStore.createPackage({ ...pkg, ...insertPayload, id: fallbackId } as Package);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: saved }));
     }
