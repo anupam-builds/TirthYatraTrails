@@ -284,7 +284,7 @@ export function useRealtimeSync<T extends Record<string, any>>({
 // ==============================================================================
 
 import type { Package, City, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { api } from '../services/api.js';
+import { api, mapCityRow } from '../services/api.js';
 
 /**
  * Real-time Yatra Packages hook (subscribes to yatra_packages & packages)
@@ -336,51 +336,36 @@ export function useRealtimeCitiesAndHubs(options?: {
     const unsubCities = registerChannelListener('public:content-sync-channel', 'cities', (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = String(payload.oldRecord?.id || payload.newRecord?.id);
-        setCities((prev) => prev.filter((c) => c.id !== id));
+        setCities((prev) => {
+          const nextCities = prev.filter((c) => c.id !== id);
+          setHubs((currHubs) => currHubs.filter((h) => h.cityId !== id));
+          return nextCities;
+        });
         return;
       }
       const raw = payload.newRecord || payload.oldRecord;
       if (!raw) return;
-      const mapped: City = {
-        id: String(raw.id),
-        name: raw.name,
-        state: raw.state,
-        imageUrl: raw.image_url || raw.imageUrl,
-        hotelCount: Number(raw.hotel_count ?? raw.hotelCount ?? 0),
-        popularFor: raw.popular_for || raw.popularFor,
-        createdAt: raw.created_at,
-        updatedAt: raw.updated_at,
-      };
-      setCities((prev) => reconcileRealtimeList(prev, payload.eventType, mapped));
+      const mapped: City = mapCityRow(raw);
+      setCities((prev) => {
+        const updated = reconcileRealtimeList(prev, payload.eventType, mapped);
+        const allHubs: TransitHub[] = [];
+        updated.forEach((c) => {
+          if (Array.isArray(c.transitHubs)) {
+            c.transitHubs.forEach((h) => {
+              allHubs.push({ ...h, cityId: h.cityId || c.id, cityName: h.cityName || c.name });
+            });
+          }
+        });
+        if (allHubs.length > 0) {
+          setHubs(allHubs);
+        }
+        return updated;
+      });
       options?.onCityChange?.(mapped);
-    });
-
-    const unsubHubs = registerChannelListener('public:content-sync-channel', 'hubs', (payload) => {
-      if (payload.eventType === 'DELETE') {
-        const id = String(payload.oldRecord?.id || payload.newRecord?.id);
-        setHubs((prev) => prev.filter((h) => h.id !== id));
-        return;
-      }
-      const raw = payload.newRecord || payload.oldRecord;
-      if (!raw) return;
-      const mapped: TransitHub = {
-        id: String(raw.id),
-        cityId: raw.city_id || raw.cityId,
-        name: raw.name,
-        hubType: raw.hub_type || raw.hubType,
-        code: raw.code,
-        distanceToTempleKm: Number(raw.distance_to_temple_km ?? raw.distanceToTempleKm ?? 0),
-        isPrimary: Boolean(raw.is_primary ?? raw.isPrimary),
-        createdAt: raw.created_at,
-        updatedAt: raw.updated_at,
-      };
-      setHubs((prev) => reconcileRealtimeList(prev, payload.eventType, mapped));
-      options?.onHubChange?.(mapped);
     });
 
     return () => {
       unsubCities();
-      unsubHubs();
     };
   }, [options]);
 

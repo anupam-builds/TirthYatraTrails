@@ -89,30 +89,32 @@ export const AdminCities: React.FC = () => {
         const eventType = payload.eventType || payload.event || 'UPDATE';
         if (eventType === 'DELETE') {
           const id = String(payload.old?.id || payload.new?.id);
-          setCities((prev) => prev.filter((c) => c.id !== id));
+          setCities((prev) => {
+            const nextCities = prev.filter((c) => c.id !== id);
+            setHubs((currHubs) => currHubs.filter((h) => h.cityId !== id));
+            return nextCities;
+          });
           setLastSyncMsg(`City removed live`);
         } else {
           const raw = payload.new || payload.old;
           if (raw) {
             const mapped = mapCityRow(raw);
-            setCities((prev) => reconcileRealtimeList(prev, eventType, mapped));
+            setCities((prev) => {
+              const updated = reconcileRealtimeList(prev, eventType, mapped);
+              const allHubs: TransitHub[] = [];
+              updated.forEach((c) => {
+                if (Array.isArray(c.transitHubs)) {
+                  c.transitHubs.forEach((h) => {
+                    allHubs.push({ ...h, cityId: h.cityId || c.id, cityName: h.cityName || c.name });
+                  });
+                }
+              });
+              if (allHubs.length > 0) {
+                setHubs(allHubs);
+              }
+              return updated;
+            });
             setLastSyncMsg(`Realtime: Destination "${mapped.name}" synced`);
-          }
-        }
-        setTimeout(() => setLastSyncMsg(null), 4000);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hubs' }, (payload: any) => {
-        const eventType = payload.eventType || payload.event || 'UPDATE';
-        if (eventType === 'DELETE') {
-          const id = String(payload.old?.id || payload.new?.id);
-          setHubs((prev) => prev.filter((h) => h.id !== id));
-          setLastSyncMsg(`Transit Hub removed live`);
-        } else {
-          const raw = payload.new || payload.old;
-          if (raw) {
-            const mapped = mapHubRow(raw);
-            setHubs((prev) => reconcileRealtimeList(prev, eventType, mapped));
-            setLastSyncMsg(`Realtime: Hub "${mapped.name}" synced`);
           }
         }
         setTimeout(() => setLastSyncMsg(null), 4000);

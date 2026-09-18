@@ -92,10 +92,17 @@ export const localStore = {
       }
     }
     const hotels = this.getHotels();
-    return list.map((c) => ({
-      ...c,
-      hotelCount: this.countHotelsForCity(c, hotels),
-    }));
+    const hubs = this.getHubs();
+    return list.map((c) => {
+      const cityHubs = c.transitHubs && c.transitHubs.length > 0
+        ? c.transitHubs
+        : hubs.filter((h) => (h.cityId || '').toLowerCase() === (c.id || '').toLowerCase() || (h.cityName || '').toLowerCase() === (c.name || '').toLowerCase());
+      return {
+        ...c,
+        hotelCount: this.countHotelsForCity(c, hotels),
+        transitHubs: cityHubs,
+      };
+    });
   },
 
   createCity(cityData: Partial<City>): City {
@@ -134,6 +141,7 @@ export const localStore = {
       hotelCount: Number(cityData.hotelCount) || 0,
       imageUrl: cityData.imageUrl || 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
       popularFor: (cityData.popularFor || 'Sacred Pilgrimage & Aarti').trim(),
+      transitHubs: cityData.transitHubs || [],
     };
     cities.push(newCity);
     setStored(STORAGE_KEYS.CITIES, cities);

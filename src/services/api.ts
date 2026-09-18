@@ -4,16 +4,10 @@ import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 
 // ------------------------------------------------------------------------------
-// Multi-Table Candidate Fallbacks & PostgREST 404 Resilience State
+// Sacred Cities & Transit Hubs Persistence
+// Note: Transit hubs are embedded directly as JSONB (transit_hubs) on public.cities
+// to eliminate redundant relational table queries and avoid 404 errors.
 // ------------------------------------------------------------------------------
-const CITY_TABLE_CANDIDATES = ['cities', 'destination_cities', 'destinations'];
-const HUB_TABLE_CANDIDATES = ['hubs', 'transit_hubs', 'city_hubs'];
-
-let activeCityTable: string | null = null;
-let activeHubTable: string | null = null;
-let cityRemoteCooldownUntil = 0;
-let hubRemoteCooldownUntil = 0;
-const COOLDOWN_DURATION_MS = 45000;
 
 export const api = {
   // Authentication
@@ -91,45 +85,19 @@ export const api = {
     return token ? JSON.parse(atob(token)) : null;
   },
 
-  // Public & Admin Data via Supabase (Resilient Candidate Routing & 404 Fallback)
+  // Public & Admin Cities Data via Supabase (Embedded Transit Hubs)
   async getCities(): Promise<City[]> {
-    if (Date.now() < cityRemoteCooldownUntil && !activeCityTable) {
-      return localStore.getCities();
-    }
-
-    const tablesToTry = activeCityTable
-      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
-      : CITY_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        const { data, error } = await supabase.from(tbl).select('*');
-        if (!error && data !== null) {
-          activeCityTable = tbl;
-          cityRemoteCooldownUntil = 0;
-          if (data.length > 0) {
-            return data.map(mapCityRow);
-          }
-          return localStore.getCities();
-        }
-        // If error is table not found / 404, test next candidate table
-        if (
-          error &&
-          (error.code === '42P01' ||
-            error.message?.includes('does not exist') ||
-            (error as any).status === 404 ||
-            error.code === 'PGRST116')
-        ) {
-          continue;
-        }
-      } catch {
-        // Continue to next candidate table
+    try {
+      const { data, error } = await supabase.from('cities').select('*');
+      if (!error && data && data.length > 0) {
+        return data.map(mapCityRow);
       }
+      if (error) {
+        console.warn('getCities remote warning, checking localStore:', error.message);
+      }
+    } catch (err) {
+      console.warn('getCities network error, falling back to localStore:', err);
     }
-
-    // If all remote candidates return 404 or fail, enter cooldown and serve local fallback
-    activeCityTable = null;
-    cityRemoteCooldownUntil = Date.now() + COOLDOWN_DURATION_MS;
     return localStore.getCities();
   },
 
@@ -559,37 +527,34 @@ export const api = {
     if (!payload.id) {
       payload.id = (city.name || 'city').toLowerCase().replace(/[^a-z0-9]+/g, '-');
     }
+    if (!payload.transit_hubs) {
+      payload.transit_hubs = city.transitHubs || [];
+    }
 
-    const tablesToTry = activeCityTable
-      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
-      : CITY_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        const { data, error } = await supabase.from(tbl).insert([payload]).select().maybeSingle();
-        if (!error && data) {
-          activeCityTable = tbl;
-          const mapped = mapCityRow(data);
-          localStore.createCity(mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
-          }
-          return mapped;
+    try {
+      const { data, error } = await supabase.from('cities').insert([payload]).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapCityRow(data);
+        localStore.createCity(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
-        const restRes = await supabaseRest<any[]>(tbl, {
-          method: 'POST',
-          body: payload,
-        });
-        if (restRes.data && restRes.data.length > 0) {
-          activeCityTable = tbl;
-          const mapped = mapCityRow(restRes.data[0]);
-          localStore.createCity(mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
-          }
-          return mapped;
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('cities', {
+        method: 'POST',
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapCityRow(restRes.data[0]);
+        localStore.createCity(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
-      } catch {}
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('createCity remote error, saving to localStore:', err);
     }
 
     const saved = localStore.createCity({ ...city, id: payload.id } as City);
@@ -603,37 +568,31 @@ export const api = {
     const payload = cityToRow(city);
     delete payload.id;
 
-    const tablesToTry = activeCityTable
-      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
-      : CITY_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        const { data, error } = await supabase.from(tbl).update(payload).eq('id', id).select().maybeSingle();
-        if (!error && data) {
-          activeCityTable = tbl;
-          const mapped = mapCityRow(data);
-          localStore.updateCity(id, mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
-          }
-          return mapped;
+    try {
+      const { data, error } = await supabase.from('cities').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapCityRow(data);
+        localStore.updateCity(id, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
-        const restRes = await supabaseRest<any[]>(tbl, {
-          method: 'PATCH',
-          params: { id: `eq.${id}` },
-          body: payload,
-        });
-        if (restRes.data && restRes.data.length > 0) {
-          activeCityTable = tbl;
-          const mapped = mapCityRow(restRes.data[0]);
-          localStore.updateCity(id, mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
-          }
-          return mapped;
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('cities', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapCityRow(restRes.data[0]);
+        localStore.updateCity(id, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
-      } catch {}
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('updateCity remote error, saving to localStore:', err);
     }
 
     const updated = localStore.updateCity(id, city);
@@ -645,7 +604,8 @@ export const api = {
 
   async saveCity(city: Partial<City>): Promise<City> {
     if (city.id) {
-      const existing = (await this.getCities()).find((c) => c.id === city.id);
+      const cities = await this.getCities();
+      const existing = cities.find((c) => c.id === city.id);
       if (existing) {
         return this.updateCity(city.id, city);
       }
@@ -654,14 +614,10 @@ export const api = {
   },
 
   async deleteCity(id: string): Promise<boolean> {
-    const tablesToTry = activeCityTable
-      ? [activeCityTable, ...CITY_TABLE_CANDIDATES.filter((t) => t !== activeCityTable)]
-      : CITY_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        await supabase.from(tbl).delete().eq('id', id);
-      } catch {}
+    try {
+      await supabase.from('cities').delete().eq('id', id);
+    } catch (err) {
+      console.warn('deleteCity remote error:', err);
     }
     localStore.deleteCity(id);
     if (typeof window !== 'undefined') {
@@ -759,145 +715,102 @@ export const api = {
   async getCompanionProfiles() { return this.getCompanions(); },
   async createCompanionProfile(p: any) { return this.createCompanion(p); },
 
-  // Transit Hubs (Airports, Railway Stations, Helipads - Resilient Candidate Routing & 404 Fallback)
+  // Transit Hubs (Extracted directly from embedded cities.transit_hubs - Zero 404 queries)
   async getHubs(cityId?: string): Promise<TransitHub[]> {
-    if (Date.now() < hubRemoteCooldownUntil && !activeHubTable) {
-      return localStore.getHubs(cityId);
-    }
-
-    const tablesToTry = activeHubTable
-      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
-      : HUB_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        let q = supabase.from(tbl).select('*');
-        if (cityId) q = q.eq('city_id', cityId);
-        const { data, error } = await q;
-        if (!error && data !== null) {
-          activeHubTable = tbl;
-          hubRemoteCooldownUntil = 0;
-          if (data.length > 0) {
-            return data.map(mapHubRow);
-          }
-          return localStore.getHubs(cityId);
+    try {
+      const cities = await this.getCities();
+      const allHubs: TransitHub[] = [];
+      cities.forEach((c) => {
+        if (Array.isArray(c.transitHubs)) {
+          c.transitHubs.forEach((h) => {
+            allHubs.push({
+              ...h,
+              cityId: h.cityId || c.id,
+              cityName: h.cityName || c.name,
+            });
+          });
         }
-        if (
-          error &&
-          (error.code === '42P01' ||
-            error.message?.includes('does not exist') ||
-            (error as any).status === 404 ||
-            error.code === 'PGRST116')
-        ) {
-          continue;
+      });
+
+      if (allHubs.length > 0) {
+        if (cityId) {
+          const lower = cityId.toLowerCase().trim();
+          return allHubs.filter((h) => (h.cityId || '').toLowerCase().trim() === lower);
         }
-      } catch {
-        // Continue to next candidate table
+        return allHubs;
       }
+    } catch (err) {
+      console.warn('getHubs extraction error, using localStore:', err);
     }
-
-    activeHubTable = null;
-    hubRemoteCooldownUntil = Date.now() + COOLDOWN_DURATION_MS;
     return localStore.getHubs(cityId);
   },
 
   async createHub(hub: Partial<TransitHub>): Promise<TransitHub> {
-    const payload = {
-      id: hub.id || `hub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      city_id: hub.cityId,
-      name: hub.name,
-      hub_type: hub.hubType || 'AIRPORT',
+    const hubId = hub.id || `hub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newHub: TransitHub = {
+      id: hubId,
+      cityId: hub.cityId || 'ayodhya',
+      cityName: hub.cityName || 'Ayodhya',
+      name: hub.name || 'Transit Hub',
+      hubType: hub.hubType || 'AIRPORT',
       code: hub.code || '',
-      distance_to_temple_km: hub.distanceToTempleKm || 0,
-      is_primary: Boolean(hub.isPrimary),
+      distanceToTempleKm: Number(hub.distanceToTempleKm ?? 10),
+      isPrimary: Boolean(hub.isPrimary),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
-    const tablesToTry = activeHubTable
-      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
-      : HUB_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        const { data, error } = await supabase.from(tbl).insert([payload]).select().maybeSingle();
-        if (!error && data) {
-          activeHubTable = tbl;
-          const mapped = mapHubRow(data);
-          localStore.createHub(mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
-          }
-          return mapped;
-        }
-        const restRes = await supabaseRest<any[]>(tbl, {
-          method: 'POST',
-          body: payload,
-        });
-        if (restRes.data && restRes.data.length > 0) {
-          activeHubTable = tbl;
-          const mapped = mapHubRow(restRes.data[0]);
-          localStore.createHub(mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
-          }
-          return mapped;
-        }
-      } catch {}
+    try {
+      const cities = await this.getCities();
+      const targetCity = cities.find(
+        (c) => c.id.toLowerCase() === (newHub.cityId || '').toLowerCase()
+      );
+      if (targetCity) {
+        newHub.cityName = targetCity.name;
+        const existingHubs = Array.isArray(targetCity.transitHubs) ? targetCity.transitHubs : [];
+        const updatedHubs = [newHub, ...existingHubs.filter((h) => h.id !== hubId)];
+        await this.updateCity(targetCity.id, { transitHubs: updatedHubs });
+      }
+    } catch (err) {
+      console.warn('createHub city update error, saving to localStore:', err);
     }
 
-    const saved = localStore.createHub({ ...hub, id: payload.id } as TransitHub);
+    localStore.createHub(newHub);
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: saved }));
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: newHub }));
     }
-    return saved;
+    return newHub;
   },
 
   async updateHub(id: string, hub: Partial<TransitHub>): Promise<TransitHub> {
-    const payload: Record<string, any> = {};
-    if (hub.name !== undefined) payload.name = hub.name;
-    if (hub.hubType !== undefined) payload.hub_type = hub.hubType;
-    if (hub.code !== undefined) payload.code = hub.code;
-    if (hub.distanceToTempleKm !== undefined) payload.distance_to_temple_km = hub.distanceToTempleKm;
-    if (hub.isPrimary !== undefined) payload.is_primary = hub.isPrimary;
-    if (hub.cityId !== undefined) payload.city_id = hub.cityId;
+    let updatedHub: TransitHub = { ...hub, id } as TransitHub;
 
-    const tablesToTry = activeHubTable
-      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
-      : HUB_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        const { data, error } = await supabase.from(tbl).update(payload).eq('id', id).select().maybeSingle();
-        if (!error && data) {
-          activeHubTable = tbl;
-          const mapped = mapHubRow(data);
-          localStore.updateHub(id, mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
-          }
-          return mapped;
+    try {
+      const cities = await this.getCities();
+      for (const city of cities) {
+        const hubs = Array.isArray(city.transitHubs) ? city.transitHubs : [];
+        const idx = hubs.findIndex((h) => h.id === id);
+        if (idx !== -1) {
+          updatedHub = {
+            ...hubs[idx],
+            ...hub,
+            id,
+            updatedAt: new Date().toISOString(),
+          };
+          hubs[idx] = updatedHub;
+          await this.updateCity(city.id, { transitHubs: [...hubs] });
+          break;
         }
-        const restRes = await supabaseRest<any[]>(tbl, {
-          method: 'PATCH',
-          params: { id: `eq.${id}` },
-          body: payload,
-        });
-        if (restRes.data && restRes.data.length > 0) {
-          activeHubTable = tbl;
-          const mapped = mapHubRow(restRes.data[0]);
-          localStore.updateHub(id, mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: mapped }));
-          }
-          return mapped;
-        }
-      } catch {}
+      }
+    } catch (err) {
+      console.warn('updateHub city update error, saving to localStore:', err);
     }
 
-    const updated = localStore.updateHub(id, hub);
+    localStore.updateHub(id, updatedHub);
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: updated }));
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: updatedHub }));
     }
-    return updated;
+    return updatedHub;
   },
 
   async saveHub(hub: Partial<TransitHub>): Promise<TransitHub> {
@@ -911,15 +824,20 @@ export const api = {
   },
 
   async deleteHub(id: string): Promise<boolean> {
-    const tablesToTry = activeHubTable
-      ? [activeHubTable, ...HUB_TABLE_CANDIDATES.filter((t) => t !== activeHubTable)]
-      : HUB_TABLE_CANDIDATES;
-
-    for (const tbl of tablesToTry) {
-      try {
-        await supabase.from(tbl).delete().eq('id', id);
-      } catch {}
+    try {
+      const cities = await this.getCities();
+      for (const city of cities) {
+        const hubs = Array.isArray(city.transitHubs) ? city.transitHubs : [];
+        if (hubs.some((h) => h.id === id)) {
+          const filtered = hubs.filter((h) => h.id !== id);
+          await this.updateCity(city.id, { transitHubs: filtered });
+          break;
+        }
+      }
+    } catch (err) {
+      console.warn('deleteHub city update error:', err);
     }
+
     localStore.deleteHub(id);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { id } }));
@@ -1109,6 +1027,20 @@ function mapStaffRow(row: any): StaffMember {
 
 export function mapCityRow(row: any): City {
   if (!row) return {} as City;
+
+  let transitHubs: TransitHub[] = [];
+  const rawHubs = row.transit_hubs ?? row.transitHubs ?? row.hubs;
+  if (Array.isArray(rawHubs)) {
+    transitHubs = rawHubs.map(mapHubRow);
+  } else if (typeof rawHubs === 'string') {
+    try {
+      const parsed = JSON.parse(rawHubs);
+      if (Array.isArray(parsed)) {
+        transitHubs = parsed.map(mapHubRow);
+      }
+    } catch {}
+  }
+
   return {
     id: String(row.id),
     name: row.name || 'Sacred Destination',
@@ -1116,6 +1048,7 @@ export function mapCityRow(row: any): City {
     imageUrl: row.image_url || row.imageUrl || 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
     hotelCount: Number(row.hotel_count ?? row.hotelCount ?? 0),
     popularFor: row.popular_for || row.popularFor || 'Sacred Temple Darshan',
+    transitHubs,
     createdAt: row.created_at || row.createdAt,
     updatedAt: row.updated_at || row.updatedAt,
   };
@@ -1361,6 +1294,10 @@ export function cityToRow(city: Partial<City>): Record<string, any> {
   }
   if (city.popularFor !== undefined || (city as any).popular_for !== undefined) {
     row.popular_for = city.popularFor ?? (city as any).popular_for;
+  }
+  if (city.transitHubs !== undefined || (city as any).transit_hubs !== undefined) {
+    const raw = city.transitHubs ?? (city as any).transit_hubs;
+    row.transit_hubs = Array.isArray(raw) ? raw : [];
   }
   return row;
 }

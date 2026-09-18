@@ -111,6 +111,7 @@ export interface City {
   hotelCount: number;
   popularFor?: string;
   state?: string;
+  transitHubs?: TransitHub[];
   createdAt?: string;
   updatedAt?: string;
 }
