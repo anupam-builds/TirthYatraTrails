@@ -36,9 +36,9 @@ export function getCandidateLeadIds(rawId: string | number): string[] {
     }
   } catch {}
 
-  // Strip prefixes like "inq-" or "lead-"
-  if (/^(inq|lead)[-_]/i.test(trimmed)) {
-    const stripped = trimmed.replace(/^(inq|lead)[-_]/i, '');
+  // Strip prefixes like "inq-", "lead-", or "ttt-"
+  if (/^(inq|lead|ttt)[-_]/i.test(trimmed)) {
+    const stripped = trimmed.replace(/^(inq|lead|ttt)[-_]/i, '');
     if (stripped) candidates.add(stripped);
   }
 
@@ -48,20 +48,53 @@ export function getCandidateLeadIds(rawId: string | number): string[] {
     candidates.add(numMatch[0]);
   }
 
-  return Array.from(candidates);
+  return Array.from(candidates).filter((c) => c && c !== 'undefined' && c !== 'null');
 }
 
 /**
  * Resilient PATCH executor for Supabase tables ('leads' and 'inquiries').
- * Tries all candidate IDs across common ID columns ('id', 'lead_id', 'reference_id'),
+ * Dynamically routes 'inq-*' IDs to 'inquiries' and 'TTT*' (or other) IDs to 'leads',
+ * strips malformed requests (invalid IDs or empty payloads),
+ * tries candidate IDs across common ID columns ('id', 'lead_id', 'reference_id'),
  * logs exact Supabase/PostgREST error details on non-2xx responses,
  * and recovers gracefully.
  */
 export async function resilientPatchRecord(
-  tables: Array<'leads' | 'inquiries'>,
+  tablesOrTarget: Array<'leads' | 'inquiries'> | 'leads' | 'inquiries' | undefined,
   rawId: string | number,
   payload: Record<string, any>
 ): Promise<any | null> {
+  const id = rawId;
+  const cleanId = String(id || '').trim();
+
+  // Strip malformed requests (empty, 'undefined', 'null')
+  if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+    console.warn('[resilientPatchRecord] Stripped malformed request with invalid id:', id);
+    return null;
+  }
+
+  // Dynamic Table Resolver
+  const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+
+  // Sanitize payload: strip keys with undefined values or empty names
+  const cleanPayload: Record<string, any> = {};
+  for (const [k, v] of Object.entries(payload || {})) {
+    if (v !== undefined && k !== 'undefined' && k.trim() !== '') {
+      cleanPayload[k] = v;
+    }
+  }
+
+  if (Object.keys(cleanPayload).length === 0) {
+    console.warn('[resilientPatchRecord] Stripped malformed request: empty payload for id:', id);
+    return null;
+  }
+
+  const tables: Array<'leads' | 'inquiries'> = Array.isArray(tablesOrTarget)
+    ? [targetTable, ...tablesOrTarget.filter((t) => t !== targetTable)]
+    : tablesOrTarget
+    ? [tablesOrTarget, tablesOrTarget === 'inquiries' ? 'leads' : 'inquiries']
+    : [targetTable, targetTable === 'inquiries' ? 'leads' : 'inquiries'];
+
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
   const explicitHeaders = {
     apikey: anonKey,
@@ -70,7 +103,7 @@ export async function resilientPatchRecord(
     Prefer: 'return=representation',
   };
 
-  const candidateIds = getCandidateLeadIds(rawId);
+  const candidateIds = getCandidateLeadIds(cleanId);
   const candidateColumns = ['id', 'lead_id', 'reference_id'];
 
   for (const table of tables) {
@@ -81,20 +114,20 @@ export async function resilientPatchRecord(
           const res = await fetch(url, {
             method: 'PATCH',
             headers: explicitHeaders,
-            body: JSON.stringify(payload),
+            body: JSON.stringify(cleanPayload),
           });
 
           if (!res.ok) {
             const errData = await res.json().catch(() => null);
-            console.error('PATCH failed details:', { status: res.status, errData, payload });
+            console.error('PATCH failed details:', { status: res.status, errData, payload: cleanPayload });
 
             // If error is 400 and might be due to check constraint on status (e.g. enum casing), try alternate casing
-            if (res.status === 400 && payload.status && typeof payload.status === 'string') {
+            if (res.status === 400 && cleanPayload.status && typeof cleanPayload.status === 'string') {
               const altStatus =
-                payload.status === payload.status.toLowerCase()
-                  ? payload.status.toUpperCase()
-                  : payload.status.toLowerCase();
-              const altPayload = { ...payload, status: altStatus };
+                cleanPayload.status === cleanPayload.status.toLowerCase()
+                  ? cleanPayload.status.toUpperCase()
+                  : cleanPayload.status.toLowerCase();
+              const altPayload = { ...cleanPayload, status: altStatus };
               try {
                 const retryRes = await fetch(url, {
                   method: 'PATCH',
@@ -132,7 +165,7 @@ export async function resilientPatchRecord(
   for (const table of tables) {
     for (const cid of candidateIds) {
       try {
-        const { data, error } = await supabase.from(table).update(payload).eq('id', cid).select().maybeSingle();
+        const { data, error } = await supabase.from(table).update(cleanPayload).eq('id', cid).select().maybeSingle();
         if (error) {
           console.error(`SDK update failed details (${table}.id=${cid}):`, error);
         } else if (data) {
@@ -426,7 +459,15 @@ export const api = {
   // Lead Assignment & Status Sync (targets 'leads' and 'inquiries' tables)
   // ---------------------------------------------------------------------------
   async updateLeadAssignment(leadId: string | number, staffId: string, staffName?: string): Promise<Inquiry> {
-    const normalizedLeadId = String(leadId || '').trim();
+    const id = leadId;
+    const cleanId = String(id || '').trim();
+    if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+      console.warn('updateLeadAssignment stripped malformed id:', id);
+      throw new Error('Invalid lead ID for assignment');
+    }
+
+    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+
     let resolvedStaffName = staffName;
     if (!resolvedStaffName && staffId) {
       try {
@@ -442,18 +483,18 @@ export const api = {
       updated_at: new Date().toISOString(),
     };
 
-    const updatedRow = await resilientPatchRecord(['leads', 'inquiries'], normalizedLeadId, payload);
+    const updatedRow = await resilientPatchRecord(targetTable, cleanId, payload);
 
     const mapped: Inquiry = updatedRow
       ? mapInquiryRow(updatedRow)
       : ({
-          ...(await this.getInquiries()).find((i) => String(i.id) === normalizedLeadId) || {},
-          id: normalizedLeadId,
+          ...(await this.getInquiries()).find((i) => String(i.id) === cleanId) || {},
+          id: cleanId,
           assignedStaffId: staffId || undefined,
           assignedStaffName: resolvedStaffName || undefined,
         } as Inquiry);
 
-    localStore.updateInquiry(normalizedLeadId, {
+    localStore.updateInquiry(cleanId, {
       assignedStaffId: staffId || undefined,
       assignedStaffName: resolvedStaffName || undefined,
     });
@@ -463,12 +504,12 @@ export const api = {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-lead-changed', {
-          detail: { action: 'assign', leadId: normalizedLeadId, staffId, staffName: resolvedStaffName, lead: mapped },
+          detail: { action: 'assign', leadId: cleanId, staffId, staffName: resolvedStaffName, lead: mapped },
         })
       );
       window.dispatchEvent(
         new CustomEvent('tirth-inquiry-changed', {
-          detail: { action: 'assign', id: normalizedLeadId, assignedStaffId: staffId, assignedStaffName: resolvedStaffName, inquiry: mapped },
+          detail: { action: 'assign', id: cleanId, assignedStaffId: staffId, assignedStaffName: resolvedStaffName, inquiry: mapped },
         })
       );
     }
@@ -482,7 +523,15 @@ export const api = {
     staffId?: string,
     staffName?: string
   ): Promise<Inquiry> {
-    const normalizedLeadId = String(leadId || '').trim();
+    const id = leadId;
+    const cleanId = String(id || '').trim();
+    if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+      console.warn('updateLeadStatus stripped malformed id:', id);
+      throw new Error('Invalid lead ID for status update');
+    }
+
+    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+
     const rawStatus = String(status || '').trim();
     const formattedStatus = rawStatus.toLowerCase(); // e.g. 'contacted'
     const upperStatus = rawStatus.toUpperCase();
@@ -501,18 +550,18 @@ export const api = {
       if (staffName) payload.closed_by = staffName;
     }
 
-    const updatedRow = await resilientPatchRecord(['leads', 'inquiries'], normalizedLeadId, payload);
+    const updatedRow = await resilientPatchRecord(targetTable, cleanId, payload);
 
     const mapped: Inquiry = updatedRow
       ? mapInquiryRow(updatedRow)
       : ({
-          ...(await this.getInquiries()).find((i) => String(i.id) === normalizedLeadId) || {},
-          id: normalizedLeadId,
+          ...(await this.getInquiries()).find((i) => String(i.id) === cleanId) || {},
+          id: cleanId,
           status: upperStatus as any,
           ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
         } as Inquiry);
 
-    localStore.updateInquiry(normalizedLeadId, {
+    localStore.updateInquiry(cleanId, {
       status: upperStatus as any,
       ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
     });
@@ -522,12 +571,12 @@ export const api = {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-lead-changed', {
-          detail: { action: 'status', leadId: normalizedLeadId, status: formattedStatus, lead: mapped },
+          detail: { action: 'status', leadId: cleanId, status: formattedStatus, lead: mapped },
         })
       );
       window.dispatchEvent(
         new CustomEvent('tirth-inquiry-changed', {
-          detail: { action: 'update', id: normalizedLeadId, inquiry: mapped },
+          detail: { action: 'update', id: cleanId, inquiry: mapped },
         })
       );
     }
@@ -541,10 +590,19 @@ export const api = {
     staffId?: string,
     staffName?: string
   ): Promise<Inquiry> {
+    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
     return this.updateLeadStatus(id, status, staffId, staffName);
   },
 
-  async updateInquiry(id: string, updates: Partial<Inquiry>, _asStaff = false): Promise<Inquiry> {
+  async updateInquiry(id: string | number, updates: Partial<Inquiry>, _asStaff = false): Promise<Inquiry> {
+    const cleanId = String(id || '').trim();
+    if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+      console.warn('updateInquiry stripped malformed id:', id);
+      throw new Error('Invalid inquiry ID');
+    }
+
+    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+
     try {
       const payload: Record<string, any> = {};
       if (updates.status !== undefined) payload.status = String(updates.status).toLowerCase();
@@ -555,10 +613,10 @@ export const api = {
       if (updates.specialRequests !== undefined) payload.special_requests = updates.specialRequests;
       if (updates.title !== undefined) payload.title = updates.title;
 
-      const data = await resilientPatchRecord(['leads', 'inquiries'], id, payload);
+      const data = await resilientPatchRecord(targetTable, cleanId, payload);
 
-      const mapped = data ? mapInquiryRow(data) : localStore.updateInquiry(id, updates);
-      localStore.updateInquiry(id, mapped);
+      const mapped = data ? mapInquiryRow(data) : localStore.updateInquiry(cleanId, updates);
+      localStore.updateInquiry(cleanId, mapped);
       broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: mapped.assignedStaffName });
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'update', lead: mapped } }));
@@ -566,7 +624,7 @@ export const api = {
       }
       return mapped;
     } catch {
-      const updated = localStore.updateInquiry(id, updates);
+      const updated = localStore.updateInquiry(cleanId, updates);
       broadcastInquiryUpdated(updated, { newStatus: updated.status });
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'update', lead: updated } }));
