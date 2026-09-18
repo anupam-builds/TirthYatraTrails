@@ -1,5 +1,5 @@
 import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 
@@ -81,30 +81,77 @@ export const api = {
 
   // Public & Admin Data via Supabase
   async getCities(): Promise<City[]> {
-    const { data } = await supabase.from('cities').select('*');
-    return data && data.length ? data : localStore.getCities();
+    try {
+      const { data, error } = await supabase.from('cities').select('*');
+      if (!error && data && data.length) return data.map(mapCityRow);
+    } catch {}
+    return localStore.getCities();
   },
 
   async getHotels(cityId?: string, query?: string): Promise<Hotel[]> {
-    const { data } = await supabase.from('hotels').select('*');
-    let list = data && data.length ? data : localStore.getHotels(cityId, query);
-    if (cityId) list = list.filter((h: any) => h.city_id === cityId || h.cityId === cityId);
-    return list;
+    try {
+      let q = supabase.from('hotels').select('*');
+      if (cityId) q = q.eq('city_id', cityId);
+      const { data, error } = await q;
+      if (!error && data && data.length) {
+        let list = data.map(mapHotelRow);
+        if (query) {
+          const lower = query.toLowerCase();
+          list = list.filter((h) => h.name.toLowerCase().includes(lower) || h.cityName?.toLowerCase().includes(lower));
+        }
+        return list;
+      }
+    } catch {}
+    return localStore.getHotels(cityId, query);
   },
 
   async getHotelById(id: string): Promise<Hotel> {
-    const { data } = await supabase.from('hotels').select('*').eq('id', id).maybeSingle();
-    return data || localStore.getHotelById(id)!;
+    try {
+      const { data, error } = await supabase.from('hotels').select('*').eq('id', id).maybeSingle();
+      if (!error && data) return mapHotelRow(data);
+    } catch {}
+    return localStore.getHotelById(id)!;
   },
 
   async getPackages(category?: string, query?: string): Promise<Package[]> {
-    const { data } = await supabase.from('packages').select('*');
-    return data && data.length ? data : localStore.getPackages(category, query);
+    try {
+      // 1. Try yatra_packages table
+      let q = supabase.from('yatra_packages').select('*');
+      if (category) q = q.eq('category', category);
+      const res1 = await q;
+      if (!res1.error && res1.data && res1.data.length) {
+        let list = res1.data.map(mapPackageRow);
+        if (query) {
+          const lower = query.toLowerCase();
+          list = list.filter((p) => p.title.toLowerCase().includes(lower) || p.location.toLowerCase().includes(lower));
+        }
+        return list;
+      }
+
+      // 2. Try packages table / view
+      let q2 = supabase.from('packages').select('*');
+      if (category) q2 = q2.eq('category', category);
+      const res2 = await q2;
+      if (!res2.error && res2.data && res2.data.length) {
+        let list = res2.data.map(mapPackageRow);
+        if (query) {
+          const lower = query.toLowerCase();
+          list = list.filter((p) => p.title.toLowerCase().includes(lower) || p.location.toLowerCase().includes(lower));
+        }
+        return list;
+      }
+    } catch {}
+    return localStore.getPackages(category, query);
   },
 
   async getPackageById(id: string): Promise<Package> {
-    const { data } = await supabase.from('packages').select('*').eq('id', id).maybeSingle();
-    return data || localStore.getPackageById(id)!;
+    try {
+      const res1 = await supabase.from('yatra_packages').select('*').eq('id', id).maybeSingle();
+      if (!res1.error && res1.data) return mapPackageRow(res1.data);
+      const res2 = await supabase.from('packages').select('*').eq('id', id).maybeSingle();
+      if (!res2.error && res2.data) return mapPackageRow(res2.data);
+    } catch {}
+    return localStore.getPackageById(id)!;
   },
 
   // Inquiries
@@ -301,30 +348,305 @@ export const api = {
 
   async uploadImage(base64OrDataUrl: string) { return base64OrDataUrl; },
 
-  // Admin Hotels/Packages/Cities/Reviews fallbacks
-  async createHotel(hotel: Partial<Hotel>) { const { data } = await supabase.from('hotels').insert([hotel]).select().maybeSingle(); return data || localStore.createHotel(hotel); },
-  async updateHotel(id: string, hotel: Partial<Hotel>) { const { data } = await supabase.from('hotels').update(hotel).eq('id', id).select().maybeSingle(); return data || localStore.updateHotel(id, hotel); },
-  async deleteHotel(id: string) { await supabase.from('hotels').delete().eq('id', id); localStore.deleteHotel(id); return true; },
-
-  async createPackage(pkg: Partial<Package>) { const { data } = await supabase.from('packages').insert([pkg]).select().maybeSingle(); return data || localStore.createPackage(pkg); },
-  async updatePackage(id: string, pkg: Partial<Package>) { const { data } = await supabase.from('packages').update(pkg).eq('id', id).select().maybeSingle(); return data || localStore.updatePackage(id, pkg); },
-  async deletePackage(id: string) { await supabase.from('packages').delete().eq('id', id); localStore.deletePackage(id); return true; },
-
-  async createCity(city: Partial<City>) { const { data } = await supabase.from('cities').insert([city]).select().maybeSingle(); return data || localStore.createCity(city); },
-  async updateCity(id: string, city: Partial<City>) { const { data } = await supabase.from('cities').update(city).eq('id', id).select().maybeSingle(); return data || localStore.updateCity(id, city); },
-  async deleteCity(id: string) { await supabase.from('cities').delete().eq('id', id); localStore.deleteCity(id); return true; },
-
-  async getReviews(featuredOnly = false) {
-    let q = supabase.from('reviews').select('*');
-    if (featuredOnly) q = q.eq('featured', true);
-    const { data } = await q;
-    return data && data.length ? data : localStore.getReviews(featuredOnly);
+  // Admin Hotels/Packages/Cities/Reviews with guaranteed snake_case mapping and explicit REST header fallback
+  async createHotel(hotel: Partial<Hotel>): Promise<Hotel> {
+    const payload = hotelToRow(hotel);
+    if (!payload.id) {
+      payload.id = `htl-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    }
+    try {
+      const { data, error } = await supabase.from('hotels').insert([payload]).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapHotelRow(data);
+        localStore.createHotel(mapped);
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('hotels', {
+        method: 'POST',
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapHotelRow(restRes.data[0]);
+        localStore.createHotel(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('createHotel remote error, falling back to localStore', err);
+    }
+    return localStore.createHotel({ ...hotel, id: payload.id } as Hotel);
   },
-  async getAdminReviews() { return this.getReviews(false); },
-  async createReview(rev: Partial<Review>) { const { data } = await supabase.from('reviews').insert([rev]).select().maybeSingle(); return data || localStore.createReview(rev); },
-  async updateReview(id: string, rev: Partial<Review>) { const { data } = await supabase.from('reviews').update(rev).eq('id', id).select().maybeSingle(); return data || localStore.updateReview(id, rev); },
-  async toggleReviewFeatured(id: string) { const list = await this.getReviews(); const t = list.find(r => r.id === id); return this.updateReview(id, { featured: !t?.featured }); },
-  async deleteReview(id: string) { await supabase.from('reviews').delete().eq('id', id); localStore.deleteReview(id); return true; },
+
+  async updateHotel(id: string, hotel: Partial<Hotel>): Promise<Hotel> {
+    const payload = hotelToRow(hotel);
+    delete payload.id;
+    try {
+      const { data, error } = await supabase.from('hotels').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapHotelRow(data);
+        localStore.updateHotel(id, mapped);
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('hotels', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapHotelRow(restRes.data[0]);
+        localStore.updateHotel(id, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('updateHotel remote error, falling back to localStore', err);
+    }
+    return localStore.updateHotel(id, hotel);
+  },
+
+  async deleteHotel(id: string): Promise<boolean> {
+    try {
+      await supabase.from('hotels').delete().eq('id', id);
+    } catch {}
+    localStore.deleteHotel(id);
+    return true;
+  },
+
+  async createPackage(pkg: Partial<Package>): Promise<Package> {
+    const payload = packageToRow(pkg);
+    if (!payload.id) {
+      payload.id = `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    }
+
+    // 1. Try Supabase SDK with yatra_packages table first, then packages table
+    try {
+      let res = await supabase.from('yatra_packages').insert([payload]).select().maybeSingle();
+      if (res.error) {
+        res = await supabase.from('packages').insert([payload]).select().maybeSingle();
+      }
+      if (!res.error && res.data) {
+        const mapped = mapPackageRow(res.data);
+        localStore.createPackage(mapped);
+        return mapped;
+      }
+    } catch (sdkErr) {
+      console.warn('Supabase SDK createPackage error, trying direct REST with explicit headers', sdkErr);
+    }
+
+    // 2. Direct REST execution with guaranteed explicit apikey & Authorization headers
+    try {
+      let restRes = await supabaseRest<any[]>('yatra_packages', {
+        method: 'POST',
+        body: payload,
+      });
+      if (restRes.error || !restRes.data?.length) {
+        restRes = await supabaseRest<any[]>('packages', {
+          method: 'POST',
+          body: payload,
+        });
+      }
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapPackageRow(restRes.data[0]);
+        localStore.createPackage(mapped);
+        return mapped;
+      }
+    } catch (restErr) {
+      console.warn('Direct REST createPackage error, falling back to localStore', restErr);
+    }
+
+    return localStore.createPackage({ ...pkg, id: payload.id } as Package);
+  },
+
+  async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
+    const payload = packageToRow(pkg);
+    delete payload.id;
+
+    // 1. Try Supabase SDK with yatra_packages table first, then packages table
+    try {
+      let res = await supabase.from('yatra_packages').update(payload).eq('id', id).select().maybeSingle();
+      if (res.error) {
+        res = await supabase.from('packages').update(payload).eq('id', id).select().maybeSingle();
+      }
+      if (!res.error && res.data) {
+        const mapped = mapPackageRow(res.data);
+        localStore.updatePackage(id, mapped);
+        return mapped;
+      }
+    } catch (sdkErr) {
+      console.warn('Supabase SDK updatePackage error, trying direct REST', sdkErr);
+    }
+
+    // 2. Direct REST execution with guaranteed explicit headers
+    try {
+      let restRes = await supabaseRest<any[]>('yatra_packages', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.error || !restRes.data?.length) {
+        restRes = await supabaseRest<any[]>('packages', {
+          method: 'PATCH',
+          params: { id: `eq.${id}` },
+          body: payload,
+        });
+      }
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapPackageRow(restRes.data[0]);
+        localStore.updatePackage(id, mapped);
+        return mapped;
+      }
+    } catch (restErr) {
+      console.warn('Direct REST updatePackage error, falling back to localStore', restErr);
+    }
+
+    return localStore.updatePackage(id, pkg);
+  },
+
+  async deletePackage(id: string): Promise<boolean> {
+    try {
+      await supabase.from('yatra_packages').delete().eq('id', id);
+      await supabase.from('packages').delete().eq('id', id);
+    } catch {}
+    localStore.deletePackage(id);
+    return true;
+  },
+
+  async createCity(city: Partial<City>): Promise<City> {
+    const payload = cityToRow(city);
+    if (!payload.id) {
+      payload.id = (city.name || 'city').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    }
+    try {
+      const { data, error } = await supabase.from('cities').insert([payload]).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapCityRow(data);
+        localStore.createCity(mapped);
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('cities', {
+        method: 'POST',
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapCityRow(restRes.data[0]);
+        localStore.createCity(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('createCity remote error, falling back to localStore', err);
+    }
+    return localStore.createCity({ ...city, id: payload.id } as City);
+  },
+
+  async updateCity(id: string, city: Partial<City>): Promise<City> {
+    const payload = cityToRow(city);
+    delete payload.id;
+    try {
+      const { data, error } = await supabase.from('cities').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapCityRow(data);
+        localStore.updateCity(id, mapped);
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('cities', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapCityRow(restRes.data[0]);
+        localStore.updateCity(id, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('updateCity remote error, falling back to localStore', err);
+    }
+    return localStore.updateCity(id, city);
+  },
+
+  async deleteCity(id: string): Promise<boolean> {
+    try {
+      await supabase.from('cities').delete().eq('id', id);
+    } catch {}
+    localStore.deleteCity(id);
+    return true;
+  },
+
+  async getReviews(featuredOnly = false): Promise<Review[]> {
+    try {
+      let q = supabase.from('reviews').select('*');
+      if (featuredOnly) q = q.eq('is_featured', true);
+      const { data, error } = await q;
+      if (!error && data && data.length) return data.map(mapReviewRow);
+    } catch {}
+    return localStore.getReviews(featuredOnly);
+  },
+  async getAdminReviews(): Promise<Review[]> { return this.getReviews(false); },
+
+  async createReview(rev: Partial<Review>): Promise<Review> {
+    const payload = reviewToRow(rev);
+    if (!payload.id) {
+      payload.id = `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    }
+    try {
+      const { data, error } = await supabase.from('reviews').insert([payload]).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapReviewRow(data);
+        localStore.createReview(mapped);
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('reviews', {
+        method: 'POST',
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapReviewRow(restRes.data[0]);
+        localStore.createReview(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('createReview remote error, falling back to localStore', err);
+    }
+    return localStore.createReview({ ...rev, id: payload.id } as Review);
+  },
+
+  async updateReview(id: string, rev: Partial<Review>): Promise<Review> {
+    const payload = reviewToRow(rev);
+    delete payload.id;
+    try {
+      const { data, error } = await supabase.from('reviews').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapReviewRow(data);
+        localStore.updateReview(id, mapped);
+        return mapped;
+      }
+      const restRes = await supabaseRest<any[]>('reviews', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) {
+        const mapped = mapReviewRow(restRes.data[0]);
+        localStore.updateReview(id, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('updateReview remote error, falling back to localStore', err);
+    }
+    return localStore.updateReview(id, rev);
+  },
+
+  async toggleReviewFeatured(id: string): Promise<Review> {
+    const list = await this.getReviews();
+    const t = list.find((r) => r.id === id);
+    return this.updateReview(id, { isFeatured: !t?.isFeatured });
+  },
+
+  async deleteReview(id: string): Promise<boolean> {
+    try {
+      await supabase.from('reviews').delete().eq('id', id);
+    } catch {}
+    localStore.deleteReview(id);
+    return true;
+  },
 
   async getCompanions() { return localStore.getCompanions(); },
   async getCompanionById(id: string) { return localStore.getCompanionById(id); },
@@ -349,6 +671,7 @@ export const api = {
       return getFallbackHubs(cityId);
     }
   },
+
   async createHub(hub: Partial<TransitHub>): Promise<TransitHub> {
     const payload = {
       id: hub.id || `hub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -359,9 +682,18 @@ export const api = {
       distance_to_temple_km: hub.distanceToTempleKm || 0,
       is_primary: Boolean(hub.isPrimary),
     };
-    const { data } = await supabase.from('hubs').insert([payload]).select().maybeSingle();
-    return data ? mapHubRow(data) : { ...hub, id: payload.id } as TransitHub;
+    try {
+      const { data, error } = await supabase.from('hubs').insert([payload]).select().maybeSingle();
+      if (!error && data) return mapHubRow(data);
+      const restRes = await supabaseRest<any[]>('hubs', {
+        method: 'POST',
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) return mapHubRow(restRes.data[0]);
+    } catch {}
+    return { ...hub, id: payload.id } as TransitHub;
   },
+
   async updateHub(id: string, hub: Partial<TransitHub>): Promise<TransitHub> {
     const payload: Record<string, any> = {};
     if (hub.name !== undefined) payload.name = hub.name;
@@ -369,11 +701,23 @@ export const api = {
     if (hub.code !== undefined) payload.code = hub.code;
     if (hub.distanceToTempleKm !== undefined) payload.distance_to_temple_km = hub.distanceToTempleKm;
     if (hub.isPrimary !== undefined) payload.is_primary = hub.isPrimary;
-    const { data } = await supabase.from('hubs').update(payload).eq('id', id).select().maybeSingle();
-    return data ? mapHubRow(data) : { ...hub, id } as TransitHub;
+    try {
+      const { data, error } = await supabase.from('hubs').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) return mapHubRow(data);
+      const restRes = await supabaseRest<any[]>('hubs', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) return mapHubRow(restRes.data[0]);
+    } catch {}
+    return { ...hub, id } as TransitHub;
   },
+
   async deleteHub(id: string): Promise<boolean> {
-    await supabase.from('hubs').delete().eq('id', id);
+    try {
+      await supabase.from('hubs').delete().eq('id', id);
+    } catch {}
     return true;
   },
 
@@ -389,6 +733,7 @@ export const api = {
       return getFallbackInventory(hotelId);
     }
   },
+
   async updateHotelInventory(id: string, updates: Partial<HotelInventory>): Promise<HotelInventory> {
     const payload: Record<string, any> = {};
     if (updates.totalInventory !== undefined) payload.total_inventory = updates.totalInventory;
@@ -397,9 +742,19 @@ export const api = {
     if (updates.priceOverride !== undefined) payload.price_override = updates.priceOverride;
     if (updates.status !== undefined) payload.status = updates.status;
     if (updates.updatedBy !== undefined) payload.updated_by = updates.updatedBy;
-    const { data } = await supabase.from('hotel_inventory').update(payload).eq('id', id).select().maybeSingle();
-    return data ? mapHotelInventoryRow(data) : { ...updates, id } as HotelInventory;
+    try {
+      const { data, error } = await supabase.from('hotel_inventory').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) return mapHotelInventoryRow(data);
+      const restRes = await supabaseRest<any[]>('hotel_inventory', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) return mapHotelInventoryRow(restRes.data[0]);
+    } catch {}
+    return { ...updates, id } as HotelInventory;
   },
+
   async batchUpdateHotelInventory(updates: Array<Partial<HotelInventory>>): Promise<boolean> {
     for (const item of updates) {
       if (item.id) {
@@ -419,6 +774,7 @@ export const api = {
       return getFallbackStories();
     }
   },
+
   async createTravelStory(story: Partial<TravelStory>): Promise<TravelStory> {
     const payload = {
       id: story.id || `story-${Date.now()}`,
@@ -435,9 +791,18 @@ export const api = {
       is_published: story.isPublished !== false,
       likes_count: story.likesCount || 0,
     };
-    const { data } = await supabase.from('travel_stories').insert([payload]).select().maybeSingle();
-    return data ? mapTravelStoryRow(data) : { ...story, id: payload.id } as TravelStory;
+    try {
+      const { data, error } = await supabase.from('travel_stories').insert([payload]).select().maybeSingle();
+      if (!error && data) return mapTravelStoryRow(data);
+      const restRes = await supabaseRest<any[]>('travel_stories', {
+        method: 'POST',
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) return mapTravelStoryRow(restRes.data[0]);
+    } catch {}
+    return { ...story, id: payload.id } as TravelStory;
   },
+
   async updateTravelStory(id: string, story: Partial<TravelStory>): Promise<TravelStory> {
     const payload: Record<string, any> = {};
     if (story.title !== undefined) payload.title = story.title;
@@ -445,11 +810,23 @@ export const api = {
     if (story.excerpt !== undefined) payload.excerpt = story.excerpt;
     if (story.isPublished !== undefined) payload.is_published = story.isPublished;
     if (story.likesCount !== undefined) payload.likes_count = story.likesCount;
-    const { data } = await supabase.from('travel_stories').update(payload).eq('id', id).select().maybeSingle();
-    return data ? mapTravelStoryRow(data) : { ...story, id } as TravelStory;
+    try {
+      const { data, error } = await supabase.from('travel_stories').update(payload).eq('id', id).select().maybeSingle();
+      if (!error && data) return mapTravelStoryRow(data);
+      const restRes = await supabaseRest<any[]>('travel_stories', {
+        method: 'PATCH',
+        params: { id: `eq.${id}` },
+        body: payload,
+      });
+      if (restRes.data && restRes.data.length > 0) return mapTravelStoryRow(restRes.data[0]);
+    } catch {}
+    return { ...story, id } as TravelStory;
   },
+
   async deleteTravelStory(id: string): Promise<boolean> {
-    await supabase.from('travel_stories').delete().eq('id', id);
+    try {
+      await supabase.from('travel_stories').delete().eq('id', id);
+    } catch {}
     return true;
   },
 
@@ -672,6 +1049,146 @@ export function mapReviewRow(row: any): Review {
     createdAt: row.created_at || row.createdAt,
     updatedAt: row.updated_at || row.updatedAt,
   };
+}
+
+export function packageToRow(pkg: Partial<Package>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (pkg.id !== undefined) row.id = pkg.id;
+  if (pkg.title !== undefined) row.title = pkg.title;
+  if (pkg.location !== undefined) row.location = pkg.location;
+  if (pkg.duration !== undefined) row.duration = pkg.duration;
+  if (pkg.bookedRank !== undefined || (pkg as any).booked_rank !== undefined) {
+    row.booked_rank = pkg.bookedRank ?? (pkg as any).booked_rank;
+  }
+  if (pkg.imageUrl !== undefined || (pkg as any).image_url !== undefined) {
+    row.image_url = pkg.imageUrl ?? (pkg as any).image_url;
+  }
+  if (pkg.galleryImages !== undefined || (pkg as any).gallery_images !== undefined) {
+    const rawImgs = pkg.galleryImages ?? (pkg as any).gallery_images;
+    row.gallery_images = Array.isArray(rawImgs) ? rawImgs : [];
+  }
+  if (pkg.startingPrice !== undefined || (pkg as any).starting_price !== undefined) {
+    row.starting_price = Number(pkg.startingPrice ?? (pkg as any).starting_price ?? 0);
+  }
+  if (pkg.overview !== undefined) row.overview = pkg.overview;
+  if (pkg.highlights !== undefined) {
+    row.highlights = Array.isArray(pkg.highlights) ? pkg.highlights : [];
+  }
+  if (pkg.cancellationPolicy !== undefined || (pkg as any).cancellation_policy !== undefined) {
+    row.cancellation_policy = pkg.cancellationPolicy ?? (pkg as any).cancellation_policy;
+  }
+  if (pkg.category !== undefined) row.category = pkg.category;
+  if (pkg.packageType !== undefined || (pkg as any).package_type !== undefined) {
+    row.package_type = pkg.packageType ?? (pkg as any).package_type;
+  }
+  if (pkg.experienceLevel !== undefined || (pkg as any).experience_level !== undefined) {
+    row.experience_level = pkg.experienceLevel ?? (pkg as any).experience_level;
+  }
+  if (pkg.hotelsLevel !== undefined || (pkg as any).hotels_level !== undefined) {
+    row.hotels_level = pkg.hotelsLevel ?? (pkg as any).hotels_level;
+  }
+  if (pkg.transfers !== undefined) row.transfers = pkg.transfers;
+  if (pkg.itinerary !== undefined) {
+    row.itinerary = Array.isArray(pkg.itinerary) ? pkg.itinerary : [];
+  }
+  if (pkg.isPublished !== undefined || (pkg as any).is_published !== undefined) {
+    row.is_published = Boolean(pkg.isPublished ?? (pkg as any).is_published ?? true);
+  }
+  return row;
+}
+
+export function hotelToRow(hotel: Partial<Hotel>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (hotel.id !== undefined) row.id = hotel.id;
+  if (hotel.cityId !== undefined || (hotel as any).city_id !== undefined) {
+    row.city_id = hotel.cityId ?? (hotel as any).city_id;
+  }
+  if (hotel.cityName !== undefined || (hotel as any).city_name !== undefined) {
+    row.city_name = hotel.cityName ?? (hotel as any).city_name;
+  }
+  if (hotel.name !== undefined) row.name = hotel.name;
+  if (hotel.starRating !== undefined || (hotel as any).star_rating !== undefined) {
+    row.star_rating = Number(hotel.starRating ?? (hotel as any).star_rating ?? 3);
+  }
+  if (hotel.googleRating !== undefined || (hotel as any).google_rating !== undefined) {
+    row.google_rating = Number(hotel.googleRating ?? (hotel as any).google_rating ?? 4.5);
+  }
+  if (hotel.reviewCount !== undefined || (hotel as any).review_count !== undefined) {
+    row.review_count = Number(hotel.reviewCount ?? (hotel as any).review_count ?? 0);
+  }
+  if (hotel.address !== undefined) row.address = hotel.address;
+  if (hotel.description !== undefined) row.description = hotel.description;
+  if (hotel.images !== undefined) {
+    row.images = Array.isArray(hotel.images) ? hotel.images : [];
+  }
+  if (hotel.amenities !== undefined) {
+    row.amenities = Array.isArray(hotel.amenities) ? hotel.amenities : [];
+  }
+  if (hotel.basePrice !== undefined || (hotel as any).base_price !== undefined) {
+    row.base_price = Number(hotel.basePrice ?? (hotel as any).base_price ?? 0);
+  }
+  if (hotel.isTopRated !== undefined || (hotel as any).is_top_rated !== undefined) {
+    row.is_top_rated = Boolean(hotel.isTopRated ?? (hotel as any).is_top_rated);
+  }
+  if (hotel.distanceToTemple !== undefined || (hotel as any).distance_to_temple !== undefined) {
+    row.distance_to_temple = hotel.distanceToTemple ?? (hotel as any).distance_to_temple;
+  }
+  if (hotel.darshanType !== undefined || (hotel as any).darshan_type !== undefined) {
+    row.darshan_type = hotel.darshanType ?? (hotel as any).darshan_type;
+  }
+  if (hotel.rooms !== undefined) {
+    row.rooms = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+  }
+  return row;
+}
+
+export function cityToRow(city: Partial<City>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (city.id !== undefined) row.id = city.id;
+  if (city.name !== undefined) row.name = city.name;
+  if (city.state !== undefined) row.state = city.state;
+  if (city.imageUrl !== undefined || (city as any).image_url !== undefined) {
+    row.image_url = city.imageUrl ?? (city as any).image_url;
+  }
+  if (city.hotelCount !== undefined || (city as any).hotel_count !== undefined) {
+    row.hotel_count = Number(city.hotelCount ?? (city as any).hotel_count ?? 0);
+  }
+  if (city.popularFor !== undefined || (city as any).popular_for !== undefined) {
+    row.popular_for = city.popularFor ?? (city as any).popular_for;
+  }
+  return row;
+}
+
+export function reviewToRow(rev: Partial<Review>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (rev.id !== undefined) row.id = rev.id;
+  if (rev.authorName !== undefined || (rev as any).author_name !== undefined) {
+    row.author_name = rev.authorName ?? (rev as any).author_name;
+  }
+  if (rev.authorLocation !== undefined || (rev as any).author_location !== undefined) {
+    row.author_location = rev.authorLocation ?? (rev as any).author_location;
+  }
+  if (rev.authorInitials !== undefined || (rev as any).author_initials !== undefined) {
+    row.author_initials = rev.authorInitials ?? (rev as any).author_initials;
+  }
+  if (rev.rating !== undefined) row.rating = Number(rev.rating);
+  if (rev.reviewText !== undefined || (rev as any).review_text !== undefined) {
+    row.review_text = rev.reviewText ?? (rev as any).review_text;
+  }
+  if (rev.destinationImage !== undefined || (rev as any).destination_image !== undefined) {
+    row.destination_image = rev.destinationImage ?? (rev as any).destination_image;
+  }
+  if (rev.isVerified !== undefined || (rev as any).is_verified !== undefined) {
+    row.is_verified = Boolean(rev.isVerified ?? (rev as any).is_verified);
+  }
+  if (rev.googleReviewUrl !== undefined || (rev as any).google_review_url !== undefined) {
+    row.google_review_url = rev.googleReviewUrl ?? (rev as any).google_review_url;
+  }
+  if (rev.isFeatured !== undefined || (rev as any).is_featured !== undefined) {
+    row.is_featured = Boolean(rev.isFeatured ?? (rev as any).is_featured);
+  }
+  if (rev.order !== undefined) row.order = Number(rev.order);
+  return row;
 }
 
 // Fallback seed generators
