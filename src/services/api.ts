@@ -70,8 +70,8 @@ export const api = {
   },
 
   async getGoogleAuthUrl() { return { url: '', isConfigured: false }; },
-  async googleDirectLogin(payload: { email: string; name?: string; image?: string }) {
-    const mockUser: User = { id: `usr-google-${Date.now()}`, name: payload.name || 'Devotee', email: payload.email, role: 'USER', createdAt: new Date().toISOString() };
+  async googleDirectLogin(payload: { email: string; name?: string; image?: string; sub?: string }) {
+    const mockUser: User = { id: payload.sub || `usr-google-${Date.now()}`, name: payload.name || 'Devotee', email: payload.email, role: 'USER', createdAt: new Date().toISOString() };
     return { user: mockUser, token: btoa(JSON.stringify(mockUser)) };
   },
   async getMe(tokenKey = 'tyt_auth_token') {
@@ -339,30 +339,59 @@ export const api = {
   async resetData() { localStore.resetData(); },
 };
 
-function mapInquiryRow(row: any): Inquiry {
+export function mapInquiryRow(row: any): Inquiry {
+  if (!row) return {} as Inquiry;
+  const customerName = row.customer_name || row.customerName || row.full_name || row.fullName || 'Pilgrim Devotee';
+  const customerEmail = row.customer_email || row.customerEmail || row.email || '';
+  const phone = row.phone || row.customer_phone || row.customerPhone || row.whatsapp_number || row.whatsappNumber || '';
   return {
-    id: row.id,
-    title: row.title,
-    type: row.type,
-    fullName: row.full_name || row.fullName,
-    phone: row.phone,
-    email: row.email,
-    checkInDate: row.check_in_date || row.checkInDate,
-    guests: row.guests,
-    adults: row.adults,
-    children: row.children,
+    id: String(row.id),
+    leadId: row.lead_id || row.leadId,
+    userId: row.user_id || row.userId,
+    type: row.type || 'PACKAGE',
+    referenceId: row.reference_id || row.referenceId || row.id || '',
+    referenceName: row.reference_name || row.referenceName || row.title || 'Pilgrimage Booking',
+    title: row.title || 'Pilgrimage Inquiry',
+    fullName: row.full_name || row.fullName || customerName,
+    customerName: customerName,
+    email: customerEmail,
+    customerEmail: customerEmail,
+    whatsappNumber: row.whatsapp_number || row.whatsappNumber || phone,
+    customerPhone: phone,
+    phone: phone,
+    userCity: row.user_city || row.userCity,
+    checkInDate: row.check_in_date || row.checkInDate || new Date().toISOString().split('T')[0],
+    guests: Number(row.guests ?? 1),
+    adults: Number(row.adults ?? 1),
+    children: Number(row.children ?? 0),
     childAges: row.child_ages || row.childAges,
-    plan: row.plan,
-    specialRequests: row.special_requests || row.specialRequests,
+    planChosen: row.plan_chosen || row.planChosen || row.plan || row.selected_plan || row.selectedPlan,
+    selectedPlan: row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || row.plan,
+    plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen,
+    accommodationTier: row.accommodation_tier || row.accommodationTier,
     pickupLocation: row.pickup_location || row.pickupLocation,
     dropoffLocation: row.dropoff_location || row.dropoffLocation,
-    userId: row.user_id || row.userId,
-    status: row.status,
-    createdAt: row.created_at || row.createdAt,
-    assignedStaffId: row.assigned_staff_id || row.assignedStaffId,
-    assignedStaffName: row.assigned_staff_name || row.assignedStaffName,
-    isLockedForStaff: row.is_locked_for_staff ?? row.isLockedForStaff,
-    notes: row.notes || [],
+    specialRequests: row.special_requests || row.specialRequests,
+    status: row.status || 'NEW',
+    isResolved: Boolean(row.is_resolved ?? row.isResolved ?? (row.status === 'CLOSED' || row.status === 'CONFIRMED')),
+    assignedStaffId: row.assigned_staff_id || row.assignedStaffId || undefined,
+    assignedStaffName: row.assigned_staff_name || row.assignedStaffName || undefined,
+    isLockedForStaff: Boolean(row.is_locked_for_staff ?? row.isLockedForStaff),
+    closedAt: row.closed_at || row.closedAt,
+    closedBy: row.closed_by || row.closedBy,
+    isDeleted: Boolean(row.is_deleted ?? row.isDeleted),
+    deletedAt: row.deleted_at || row.deletedAt,
+    deletedBy: row.deleted_by || row.deletedBy,
+    notes: typeof row.notes === 'string' ? row.notes : (Array.isArray(row.notes) ? row.notes.map((n: any) => n.text || JSON.stringify(n)).join('\n') : ''),
+    followUpNotes: Array.isArray(row.follow_up_notes) ? row.follow_up_notes : (Array.isArray(row.followUpNotes) ? row.followUpNotes : (Array.isArray(row.notes) ? row.notes : [])),
+    customerRating: row.customer_rating || row.customerRating,
+    tags: row.tags || [],
+    tourDuration: row.tour_duration || row.tourDuration,
+    companionMatchingOptIn: Boolean(row.companion_matching_opt_in ?? row.companionMatchingOptIn),
+    companionPilgrimType: row.companion_pilgrim_type || row.companionPilgrimType,
+    companionNotes: row.companion_notes || row.companionNotes,
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    updatedAt: row.updated_at || row.updatedAt,
   };
 }
 

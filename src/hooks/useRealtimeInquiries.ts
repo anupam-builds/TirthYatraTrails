@@ -1,60 +1,131 @@
-import { useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { supabase } from '../lib/supabase';
 import { Inquiry } from '../types';
+import { api, mapInquiryRow } from '../services/api';
 
-export function useRealtimeInquiries(onUpdate: (updatedInquiry: Inquiry) => void) {
+export interface UseRealtimeInquiriesOptions {
+  onInsert?: (inquiry: Inquiry) => void;
+  onUpdate?: (inquiry: Inquiry) => void;
+  onDelete?: (id: string) => void;
+  initialInquiries?: Inquiry[];
+  autoFetch?: boolean;
+}
+
+export interface UseRealtimeInquiriesResult {
+  inquiries: Inquiry[];
+  setInquiries: Dispatch<SetStateAction<Inquiry[]>>;
+  connectionStatus: string;
+  isConnected: boolean;
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+type HookInput = ((updatedInquiry: Inquiry) => void) | UseRealtimeInquiriesOptions | undefined;
+
+export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesResult {
+  // Normalize parameter to support both callback function and options object
+  const options: UseRealtimeInquiriesOptions =
+    typeof param === 'function' ? { onUpdate: param } : (param || {});
+
+  const [inquiries, setInquiries] = useState<Inquiry[]>(options.initialInquiries || []);
+  const [connectionStatus, setConnectionStatus] = useState<string>('CONNECTING');
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(options.autoFetch !== false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Store options in ref to avoid reconnecting channel whenever inline callbacks change
+  const optionsRef = useRef<UseRealtimeInquiriesOptions>(options);
   useEffect(() => {
-    // Use a static, reliable shared channel name instead of random per-mount strings
+    optionsRef.current = options;
+  });
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.getInquiries();
+      setInquiries(data);
+    } catch (err: any) {
+      console.error('[Realtime Sync] Failed fetching inquiries:', err);
+      setError(err.message || 'Failed to load inquiries');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial fetch if autoFetch is not explicitly false
+  useEffect(() => {
+    if (options.autoFetch !== false) {
+      refetch();
+    }
+  }, [refetch, options.autoFetch]);
+
+  useEffect(() => {
+    // Static reliable shared channel name
     const channelName = 'public:inquiries-global-sync';
+    setConnectionStatus('CONNECTING');
+
     const channel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inquiries' },
-        (payload) => {
-          // Supabase postgres_changes payload structure: payload.new contains new record (or empty on delete), payload.old has primary keys/old values
-          const rawRow = payload.new && Object.keys(payload.new).length > 0 ? payload.new : payload.old;
-          if (!rawRow || !rawRow.id) {
-            console.warn('[Realtime Sync] Received payload without valid row/id:', payload);
+        (payload: any) => {
+          const eventType = payload.eventType || payload.event;
+          console.log(`📡 [Realtime Sync] postgres_changes [${eventType}]:`, payload);
+
+          if (eventType === 'DELETE') {
+            const deletedId = String(payload.old?.id || payload.new?.id || '');
+            if (deletedId) {
+              setInquiries((prev) => prev.filter((i) => String(i.id) !== deletedId));
+              if (optionsRef.current.onDelete) {
+                optionsRef.current.onDelete(deletedId);
+              }
+            }
             return;
           }
 
-          console.log(`[Realtime Sync] Event [${payload.event}] raw row:`, rawRow);
+          const rawRow = payload.new && Object.keys(payload.new).length > 0 ? payload.new : payload.old;
+          if (!rawRow || !rawRow.id) {
+            console.warn('[Realtime Sync] Received payload without valid row or id:', payload);
+            return;
+          }
 
-          const mapped: Inquiry = {
-            id: rawRow.id,
-            title: rawRow.title ?? '',
-            type: rawRow.type ?? '',
-            fullName: rawRow.full_name || rawRow.fullName || '',
-            phone: rawRow.phone ?? '',
-            email: rawRow.email ?? '',
-            checkInDate: rawRow.check_in_date || rawRow.checkInDate || '',
-            guests: Number(rawRow.guests ?? 1),
-            adults: Number(rawRow.adults ?? 1),
-            children: Number(rawRow.children ?? 0),
-            childAges: rawRow.child_ages || rawRow.childAges || [],
-            plan: rawRow.plan ?? '',
-            specialRequests: rawRow.special_requests || rawRow.specialRequests || '',
-            pickupLocation: rawRow.pickup_location || rawRow.pickupLocation || '',
-            dropoffLocation: rawRow.dropoff_location || rawRow.dropoffLocation || '',
-            userId: rawRow.user_id || rawRow.userId || '',
-            status: rawRow.status || 'NEW',
-            createdAt: rawRow.created_at || rawRow.createdAt || new Date().toISOString(),
-            assignedStaffId: rawRow.assigned_staff_id || rawRow.assignedStaffId || undefined,
-            assignedStaffName: rawRow.assigned_staff_name || rawRow.assignedStaffName || undefined,
-            isLockedForStaff: rawRow.is_locked_for_staff ?? rawRow.isLockedForStaff ?? false,
-            notes: Array.isArray(rawRow.notes) ? rawRow.notes : [],
-          };
+          const mapped = mapInquiryRow(rawRow);
 
-          console.log('[Realtime Sync] Mapped inquiry ready for state update:', mapped);
-          onUpdate(mapped);
+          if (eventType === 'INSERT') {
+            setInquiries((prev) => {
+              const exists = prev.some((i) => String(i.id) === String(mapped.id));
+              if (exists) return prev;
+              return [mapped, ...prev];
+            });
+            if (optionsRef.current.onInsert) {
+              optionsRef.current.onInsert(mapped);
+            }
+          } else {
+            // UPDATE or other
+            setInquiries((prev) => {
+              const exists = prev.some((i) => String(i.id) === String(mapped.id));
+              if (!exists) {
+                return [mapped, ...prev];
+              }
+              return prev.map((i) => (String(i.id) === String(mapped.id) ? { ...i, ...mapped } : i));
+            });
+            if (optionsRef.current.onUpdate) {
+              optionsRef.current.onUpdate(mapped);
+            }
+          }
         }
       )
       .subscribe((status, err) => {
+        setConnectionStatus(status);
         if (err) {
           console.error(`[Realtime Sync] Subscription error on ${channelName}:`, err);
+          setIsConnected(false);
         } else {
           console.log(`[Realtime Sync] Channel ${channelName} status:`, status);
+          setIsConnected(status === 'SUBSCRIBED');
         }
       });
 
@@ -62,5 +133,15 @@ export function useRealtimeInquiries(onUpdate: (updatedInquiry: Inquiry) => void
       console.log(`[Realtime Sync] Cleaning up channel ${channelName}`);
       supabase.removeChannel(channel);
     };
-  }, [onUpdate]);
+  }, []);
+
+  return {
+    inquiries,
+    setInquiries,
+    connectionStatus,
+    isConnected,
+    loading,
+    error,
+    refetch,
+  };
 }

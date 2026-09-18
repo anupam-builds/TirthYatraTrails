@@ -196,6 +196,7 @@ export interface Inquiry {
   customerEmail: string;
   whatsappNumber: string;
   customerPhone: string;
+  phone?: string;
   userCity?: string;
   checkInDate: string;
   guests: number;
@@ -204,6 +205,7 @@ export interface Inquiry {
   childAges?: string | number[];
   planChosen?: string;
   selectedPlan?: string;
+  plan?: string;
   accommodationTier?: string; // e.g. "3 Star Hotel", "4 Star Deluxe", "5 Star Luxury"
   pickupLocation?: string;
   dropoffLocation?: string;

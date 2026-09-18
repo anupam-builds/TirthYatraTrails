@@ -484,12 +484,12 @@ app.all('/api/*', (req, res) => {
 });
 
 // Global API error handler
-app.use((err: any, req: express.Request, res: express.NextFunction) => {
-  if (req.path.startsWith('/api')) {
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (req && req.path && req.path.startsWith('/api')) {
     console.error('API Error:', err);
     return res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
   }
-  // next(err);
+  next(err);
 });
 
 // Vite middleware or static bundle for production
