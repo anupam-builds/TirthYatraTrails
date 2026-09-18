@@ -9,6 +9,142 @@ import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotificatio
 // to eliminate redundant relational table queries and avoid 404 errors.
 // ------------------------------------------------------------------------------
 
+/**
+ * Resolves candidate IDs for a lead/inquiry to handle type and format mismatches
+ * (e.g. UUID, integer, client prefix 'inq-', 'lead-', reference_id, or localStore mapping).
+ */
+export function getCandidateLeadIds(rawId: string | number): string[] {
+  const trimmed = String(rawId || '').trim();
+  if (!trimmed) return [];
+
+  const candidates = new Set<string>();
+  candidates.add(trimmed);
+
+  // If there's an inquiry in localStore with this id, leadId, or referenceId:
+  try {
+    const list = localStore.getInquiries();
+    const found = list.find(
+      (i) =>
+        String(i.id) === trimmed ||
+        String(i.leadId) === trimmed ||
+        String(i.referenceId) === trimmed
+    );
+    if (found) {
+      if (found.id) candidates.add(String(found.id));
+      if (found.leadId) candidates.add(String(found.leadId));
+      if (found.referenceId) candidates.add(String(found.referenceId));
+    }
+  } catch {}
+
+  // Strip prefixes like "inq-" or "lead-"
+  if (/^(inq|lead)[-_]/i.test(trimmed)) {
+    const stripped = trimmed.replace(/^(inq|lead)[-_]/i, '');
+    if (stripped) candidates.add(stripped);
+  }
+
+  // If ends with numeric digits
+  const numMatch = trimmed.match(/\d+$/);
+  if (numMatch) {
+    candidates.add(numMatch[0]);
+  }
+
+  return Array.from(candidates);
+}
+
+/**
+ * Resilient PATCH executor for Supabase tables ('leads' and 'inquiries').
+ * Tries all candidate IDs across common ID columns ('id', 'lead_id', 'reference_id'),
+ * logs exact Supabase/PostgREST error details on non-2xx responses,
+ * and recovers gracefully.
+ */
+export async function resilientPatchRecord(
+  tables: Array<'leads' | 'inquiries'>,
+  rawId: string | number,
+  payload: Record<string, any>
+): Promise<any | null> {
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+  const explicitHeaders = {
+    apikey: anonKey,
+    Authorization: `Bearer ${anonKey}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  };
+
+  const candidateIds = getCandidateLeadIds(rawId);
+  const candidateColumns = ['id', 'lead_id', 'reference_id'];
+
+  for (const table of tables) {
+    for (const cid of candidateIds) {
+      for (const col of candidateColumns) {
+        try {
+          const url = `${SUPABASE_URL}/rest/v1/${table}?${col}=eq.${encodeURIComponent(cid)}`;
+          const res = await fetch(url, {
+            method: 'PATCH',
+            headers: explicitHeaders,
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => null);
+            console.error('PATCH failed details:', { status: res.status, errData, payload });
+
+            // If error is 400 and might be due to check constraint on status (e.g. enum casing), try alternate casing
+            if (res.status === 400 && payload.status && typeof payload.status === 'string') {
+              const altStatus =
+                payload.status === payload.status.toLowerCase()
+                  ? payload.status.toUpperCase()
+                  : payload.status.toLowerCase();
+              const altPayload = { ...payload, status: altStatus };
+              try {
+                const retryRes = await fetch(url, {
+                  method: 'PATCH',
+                  headers: explicitHeaders,
+                  body: JSON.stringify(altPayload),
+                });
+                if (!retryRes.ok) {
+                  const retryErrData = await retryRes.json().catch(() => null);
+                  console.error('PATCH failed details:', { status: retryRes.status, errData: retryErrData, payload: altPayload });
+                } else {
+                  const retryData = await retryRes.json().catch(() => null);
+                  const row = Array.isArray(retryData) ? retryData[0] : retryData;
+                  if (row && Object.keys(row).length > 0) {
+                    return row;
+                  }
+                }
+              } catch {}
+            }
+            continue;
+          }
+
+          const data = await res.json().catch(() => null);
+          const row = Array.isArray(data) ? data[0] : data;
+          if (row && Object.keys(row).length > 0) {
+            return row;
+          }
+        } catch (fetchErr) {
+          console.warn(`[resilientPatchRecord] Network error patching ${table}.${col}=${cid}:`, fetchErr);
+        }
+      }
+    }
+  }
+
+  // SDK fallback
+  for (const table of tables) {
+    for (const cid of candidateIds) {
+      try {
+        const { data, error } = await supabase.from(table).update(payload).eq('id', cid).select().maybeSingle();
+        if (error) {
+          console.error(`SDK update failed details (${table}.id=${cid}):`, error);
+        } else if (data) {
+          return data;
+        }
+      } catch {}
+    }
+  }
+
+  return null;
+}
+
 export const api = {
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
@@ -289,7 +425,8 @@ export const api = {
   // ---------------------------------------------------------------------------
   // Lead Assignment & Status Sync (targets 'leads' and 'inquiries' tables)
   // ---------------------------------------------------------------------------
-  async updateLeadAssignment(leadId: string, staffId: string, staffName?: string): Promise<Inquiry> {
+  async updateLeadAssignment(leadId: string | number, staffId: string, staffName?: string): Promise<Inquiry> {
+    const normalizedLeadId = String(leadId || '').trim();
     let resolvedStaffName = staffName;
     if (!resolvedStaffName && staffId) {
       try {
@@ -305,68 +442,18 @@ export const api = {
       updated_at: new Date().toISOString(),
     };
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
-
-    let updatedRow: any = null;
-
-    // 1. Direct REST to 'leads' table
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${encodeURIComponent(leadId)}`, {
-        method: 'PATCH',
-        headers: explicitHeaders,
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        updatedRow = Array.isArray(data) ? data[0] : data;
-      }
-    } catch {}
-
-    // 2. Direct REST to 'inquiries' table
-    if (!updatedRow) {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries?id=eq.${encodeURIComponent(leadId)}`, {
-          method: 'PATCH',
-          headers: explicitHeaders,
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          updatedRow = Array.isArray(data) ? data[0] : data;
-        }
-      } catch {}
-    }
-
-    // 3. SDK fallback
-    if (!updatedRow) {
-      try {
-        const { data } = await supabase.from('leads').update(payload).eq('id', leadId).select().maybeSingle();
-        if (data) updatedRow = data;
-      } catch {}
-    }
-    if (!updatedRow) {
-      try {
-        const { data } = await supabase.from('inquiries').update(payload).eq('id', leadId).select().maybeSingle();
-        if (data) updatedRow = data;
-      } catch {}
-    }
+    const updatedRow = await resilientPatchRecord(['leads', 'inquiries'], normalizedLeadId, payload);
 
     const mapped: Inquiry = updatedRow
       ? mapInquiryRow(updatedRow)
       : ({
-          ...(await this.getInquiries()).find((i) => String(i.id) === String(leadId)) || {},
-          id: leadId,
+          ...(await this.getInquiries()).find((i) => String(i.id) === normalizedLeadId) || {},
+          id: normalizedLeadId,
           assignedStaffId: staffId || undefined,
           assignedStaffName: resolvedStaffName || undefined,
         } as Inquiry);
 
-    localStore.updateInquiry(leadId, {
+    localStore.updateInquiry(normalizedLeadId, {
       assignedStaffId: staffId || undefined,
       assignedStaffName: resolvedStaffName || undefined,
     });
@@ -376,12 +463,12 @@ export const api = {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-lead-changed', {
-          detail: { action: 'assign', leadId, staffId, staffName: resolvedStaffName, lead: mapped },
+          detail: { action: 'assign', leadId: normalizedLeadId, staffId, staffName: resolvedStaffName, lead: mapped },
         })
       );
       window.dispatchEvent(
         new CustomEvent('tirth-inquiry-changed', {
-          detail: { action: 'assign', id: leadId, assignedStaffId: staffId, assignedStaffName: resolvedStaffName, inquiry: mapped },
+          detail: { action: 'assign', id: normalizedLeadId, assignedStaffId: staffId, assignedStaffName: resolvedStaffName, inquiry: mapped },
         })
       );
     }
@@ -390,12 +477,13 @@ export const api = {
   },
 
   async updateLeadStatus(
-    leadId: string,
-    status: string,
+    leadId: string | number,
+    status: Inquiry['status'] | string,
     staffId?: string,
     staffName?: string
   ): Promise<Inquiry> {
-    const rawStatus = String(status).trim();
+    const normalizedLeadId = String(leadId || '').trim();
+    const rawStatus = String(status || '').trim();
     const formattedStatus = rawStatus.toLowerCase(); // e.g. 'contacted'
     const upperStatus = rawStatus.toUpperCase();
 
@@ -413,68 +501,18 @@ export const api = {
       if (staffName) payload.closed_by = staffName;
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
-
-    let updatedRow: any = null;
-
-    // 1. Direct REST to 'leads' table
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${encodeURIComponent(leadId)}`, {
-        method: 'PATCH',
-        headers: explicitHeaders,
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        updatedRow = Array.isArray(data) ? data[0] : data;
-      }
-    } catch {}
-
-    // 2. Direct REST to 'inquiries' table
-    if (!updatedRow) {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries?id=eq.${encodeURIComponent(leadId)}`, {
-          method: 'PATCH',
-          headers: explicitHeaders,
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          updatedRow = Array.isArray(data) ? data[0] : data;
-        }
-      } catch {}
-    }
-
-    // 3. SDK fallback
-    if (!updatedRow) {
-      try {
-        const { data } = await supabase.from('leads').update(payload).eq('id', leadId).select().maybeSingle();
-        if (data) updatedRow = data;
-      } catch {}
-    }
-    if (!updatedRow) {
-      try {
-        const { data } = await supabase.from('inquiries').update(payload).eq('id', leadId).select().maybeSingle();
-        if (data) updatedRow = data;
-      } catch {}
-    }
+    const updatedRow = await resilientPatchRecord(['leads', 'inquiries'], normalizedLeadId, payload);
 
     const mapped: Inquiry = updatedRow
       ? mapInquiryRow(updatedRow)
       : ({
-          ...(await this.getInquiries()).find((i) => String(i.id) === String(leadId)) || {},
-          id: leadId,
+          ...(await this.getInquiries()).find((i) => String(i.id) === normalizedLeadId) || {},
+          id: normalizedLeadId,
           status: upperStatus as any,
           ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
         } as Inquiry);
 
-    localStore.updateInquiry(leadId, {
+    localStore.updateInquiry(normalizedLeadId, {
       status: upperStatus as any,
       ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
     });
@@ -484,12 +522,12 @@ export const api = {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-lead-changed', {
-          detail: { action: 'status', leadId, status: formattedStatus, lead: mapped },
+          detail: { action: 'status', leadId: normalizedLeadId, status: formattedStatus, lead: mapped },
         })
       );
       window.dispatchEvent(
         new CustomEvent('tirth-inquiry-changed', {
-          detail: { action: 'update', id: leadId, inquiry: mapped },
+          detail: { action: 'update', id: normalizedLeadId, inquiry: mapped },
         })
       );
     }
@@ -497,8 +535,13 @@ export const api = {
     return mapped;
   },
 
-  async updateInquiryStatus(id: string, status: Inquiry['status']): Promise<Inquiry> {
-    return this.updateLeadStatus(id, status);
+  async updateInquiryStatus(
+    id: string | number,
+    status: Inquiry['status'] | string,
+    staffId?: string,
+    staffName?: string
+  ): Promise<Inquiry> {
+    return this.updateLeadStatus(id, status, staffId, staffName);
   },
 
   async updateInquiry(id: string, updates: Partial<Inquiry>, _asStaff = false): Promise<Inquiry> {
@@ -512,19 +555,7 @@ export const api = {
       if (updates.specialRequests !== undefined) payload.special_requests = updates.specialRequests;
       if (updates.title !== undefined) payload.title = updates.title;
 
-      let data: any = null;
-      // Try leads table
-      try {
-        const { data: leadData } = await supabase.from('leads').update(payload).eq('id', id).select().maybeSingle();
-        if (leadData) data = leadData;
-      } catch {}
-
-      // Try inquiries table
-      if (!data) {
-        const { data: inqData, error } = await supabase.from('inquiries').update(payload).eq('id', id).select().maybeSingle();
-        if (inqData) data = inqData;
-        else if (error) throw new Error(error.message);
-      }
+      const data = await resilientPatchRecord(['leads', 'inquiries'], id, payload);
 
       const mapped = data ? mapInquiryRow(data) : localStore.updateInquiry(id, updates);
       localStore.updateInquiry(id, mapped);
