@@ -23,6 +23,74 @@ export const api = {
     }
   },
 
+  // Staff Online Presence setter
+  async setStaffOnlineStatus(userId: string, isOnline: boolean): Promise<void> {
+    if (!userId) return;
+    const nowIso = new Date().toISOString();
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    // 1. Update profiles table: .from('profiles').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', userId)
+    try {
+      const payload = {
+        is_online: isOnline,
+        last_seen: nowIso,
+      };
+      fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+
+      await supabase.from('profiles').update(payload).eq('id', userId);
+    } catch (err) {
+      console.warn('[Presence] profiles update error:', err);
+    }
+
+    // 2. Update staff_members table
+    try {
+      const staffPayload = {
+        is_online: isOnline,
+        last_active_at: nowIso,
+        is_currently_logged_in: isOnline,
+      };
+      fetch(`${SUPABASE_URL}/rest/v1/staff_members?id=eq.${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(staffPayload),
+      }).catch(() => {});
+
+      await supabase.from('staff_members').update(staffPayload).eq('id', userId);
+    } catch (err) {
+      console.warn('[Presence] staff_members update error:', err);
+    }
+
+    // 3. Update local store
+    try {
+      localStore.updateStaffMember(userId, {
+        isCurrentlyLoggedIn: isOnline,
+        isOnline,
+        lastActiveAt: nowIso,
+        lastSeen: nowIso,
+      } as any);
+    } catch {}
+
+    // 4. Dispatch custom window event
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tirth-staff-presence-changed', {
+          detail: { staffId: userId, isOnline, lastSeen: nowIso },
+        })
+      );
+    }
+  },
+
   async loginStaff(email: string, password: string): Promise<{ user: StaffMember; token: string }> {
     try {
       const { data, error } = await supabase.from('staff_members').select('*').eq('email', email).maybeSingle();
@@ -37,12 +105,23 @@ export const api = {
         last_active: new Date().toISOString(),
       }, { onConflict: 'staff_id' });
 
+      // Set online status in profiles & staff_members
+      await this.setStaffOnlineStatus(data.id, true).catch(() => {});
+
       const { password: _, ...safeStaff } = data;
-      const mapped: StaffMember = { ...safeStaff, isBlocked: safeStaff.is_blocked, isActive: safeStaff.is_active };
+      const mapped: StaffMember = {
+        ...safeStaff,
+        isBlocked: safeStaff.is_blocked,
+        isActive: safeStaff.is_active,
+        isOnline: true,
+        isCurrentlyLoggedIn: true,
+      };
       return { user: mapped, token: btoa(JSON.stringify(mapped)) };
     } catch (err: any) {
       if (err.message?.includes('Access Blocked')) throw err;
-      return localStore.loginStaff(email, password);
+      const res = localStore.loginStaff(email, password);
+      await this.setStaffOnlineStatus(res.user.id, true).catch(() => {});
+      return res;
     }
   },
 
@@ -51,6 +130,7 @@ export const api = {
       try {
         await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
       } catch {}
+      await this.setStaffOnlineStatus(staffId, false).catch(() => {});
       localStore.logoutStaff(staffId);
     }
   },
@@ -206,14 +286,225 @@ export const api = {
   async getMyInquiries(userId: string) { return this.getInquiries(userId); },
   async getAdminInquiries() { return this.getInquiries(); },
 
+  // ---------------------------------------------------------------------------
+  // Lead Assignment & Status Sync (targets 'leads' and 'inquiries' tables)
+  // ---------------------------------------------------------------------------
+  async updateLeadAssignment(leadId: string, staffId: string, staffName?: string): Promise<Inquiry> {
+    let resolvedStaffName = staffName;
+    if (!resolvedStaffName && staffId) {
+      try {
+        const staffMembers = await this.getStaffMembers();
+        const found = staffMembers.find((s) => String(s.id) === String(staffId));
+        if (found) resolvedStaffName = found.name;
+      } catch {}
+    }
+
+    const payload: Record<string, any> = {
+      assigned_staff_id: staffId || null,
+      assigned_staff_name: resolvedStaffName || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    let updatedRow: any = null;
+
+    // 1. Direct REST to 'leads' table
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${encodeURIComponent(leadId)}`, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        updatedRow = Array.isArray(data) ? data[0] : data;
+      }
+    } catch {}
+
+    // 2. Direct REST to 'inquiries' table
+    if (!updatedRow) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries?id=eq.${encodeURIComponent(leadId)}`, {
+          method: 'PATCH',
+          headers: explicitHeaders,
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          updatedRow = Array.isArray(data) ? data[0] : data;
+        }
+      } catch {}
+    }
+
+    // 3. SDK fallback
+    if (!updatedRow) {
+      try {
+        const { data } = await supabase.from('leads').update(payload).eq('id', leadId).select().maybeSingle();
+        if (data) updatedRow = data;
+      } catch {}
+    }
+    if (!updatedRow) {
+      try {
+        const { data } = await supabase.from('inquiries').update(payload).eq('id', leadId).select().maybeSingle();
+        if (data) updatedRow = data;
+      } catch {}
+    }
+
+    const mapped: Inquiry = updatedRow
+      ? mapInquiryRow(updatedRow)
+      : ({
+          ...(await this.getInquiries()).find((i) => String(i.id) === String(leadId)) || {},
+          id: leadId,
+          assignedStaffId: staffId || undefined,
+          assignedStaffName: resolvedStaffName || undefined,
+        } as Inquiry);
+
+    localStore.updateInquiry(leadId, {
+      assignedStaffId: staffId || undefined,
+      assignedStaffName: resolvedStaffName || undefined,
+    });
+
+    broadcastInquiryUpdated(mapped, { staffName: resolvedStaffName });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tirth-lead-changed', {
+          detail: { action: 'assign', leadId, staffId, staffName: resolvedStaffName, lead: mapped },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('tirth-inquiry-changed', {
+          detail: { action: 'assign', id: leadId, assignedStaffId: staffId, assignedStaffName: resolvedStaffName, inquiry: mapped },
+        })
+      );
+    }
+
+    return mapped;
+  },
+
+  async updateLeadStatus(
+    leadId: string,
+    status: string,
+    staffId?: string,
+    staffName?: string
+  ): Promise<Inquiry> {
+    const rawStatus = String(status).trim();
+    const formattedStatus = rawStatus.toLowerCase(); // e.g. 'contacted'
+    const upperStatus = rawStatus.toUpperCase();
+
+    const payload: Record<string, any> = {
+      status: formattedStatus,
+      updated_at: new Date().toISOString(),
+    };
+    if (staffId) {
+      payload.assigned_staff_id = staffId;
+      if (staffName) payload.assigned_staff_name = staffName;
+    }
+    if (upperStatus === 'CLOSED') {
+      payload.is_locked_for_staff = true;
+      payload.closed_at = new Date().toISOString();
+      if (staffName) payload.closed_by = staffName;
+    }
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    let updatedRow: any = null;
+
+    // 1. Direct REST to 'leads' table
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${encodeURIComponent(leadId)}`, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        updatedRow = Array.isArray(data) ? data[0] : data;
+      }
+    } catch {}
+
+    // 2. Direct REST to 'inquiries' table
+    if (!updatedRow) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries?id=eq.${encodeURIComponent(leadId)}`, {
+          method: 'PATCH',
+          headers: explicitHeaders,
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          updatedRow = Array.isArray(data) ? data[0] : data;
+        }
+      } catch {}
+    }
+
+    // 3. SDK fallback
+    if (!updatedRow) {
+      try {
+        const { data } = await supabase.from('leads').update(payload).eq('id', leadId).select().maybeSingle();
+        if (data) updatedRow = data;
+      } catch {}
+    }
+    if (!updatedRow) {
+      try {
+        const { data } = await supabase.from('inquiries').update(payload).eq('id', leadId).select().maybeSingle();
+        if (data) updatedRow = data;
+      } catch {}
+    }
+
+    const mapped: Inquiry = updatedRow
+      ? mapInquiryRow(updatedRow)
+      : ({
+          ...(await this.getInquiries()).find((i) => String(i.id) === String(leadId)) || {},
+          id: leadId,
+          status: upperStatus as any,
+          ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
+        } as Inquiry);
+
+    localStore.updateInquiry(leadId, {
+      status: upperStatus as any,
+      ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
+    });
+
+    broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tirth-lead-changed', {
+          detail: { action: 'status', leadId, status: formattedStatus, lead: mapped },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('tirth-inquiry-changed', {
+          detail: { action: 'update', id: leadId, inquiry: mapped },
+        })
+      );
+    }
+
+    return mapped;
+  },
+
   async updateInquiryStatus(id: string, status: Inquiry['status']): Promise<Inquiry> {
-    return this.updateInquiry(id, { status });
+    return this.updateLeadStatus(id, status);
   },
 
   async updateInquiry(id: string, updates: Partial<Inquiry>, _asStaff = false): Promise<Inquiry> {
     try {
       const payload: Record<string, any> = {};
-      if (updates.status !== undefined) payload.status = updates.status;
+      if (updates.status !== undefined) payload.status = String(updates.status).toLowerCase();
       if (updates.assignedStaffId !== undefined) payload.assigned_staff_id = updates.assignedStaffId;
       if (updates.assignedStaffName !== undefined) payload.assigned_staff_name = updates.assignedStaffName;
       if ((updates as any).isLockedForStaff !== undefined) payload.is_locked_for_staff = (updates as any).isLockedForStaff;
@@ -221,15 +512,35 @@ export const api = {
       if (updates.specialRequests !== undefined) payload.special_requests = updates.specialRequests;
       if (updates.title !== undefined) payload.title = updates.title;
 
-      const { data, error } = await supabase.from('inquiries').update(payload).eq('id', id).select().maybeSingle();
-      if (error || !data) throw new Error(error?.message || 'Update failed');
-      const mapped = mapInquiryRow(data);
+      let data: any = null;
+      // Try leads table
+      try {
+        const { data: leadData } = await supabase.from('leads').update(payload).eq('id', id).select().maybeSingle();
+        if (leadData) data = leadData;
+      } catch {}
+
+      // Try inquiries table
+      if (!data) {
+        const { data: inqData, error } = await supabase.from('inquiries').update(payload).eq('id', id).select().maybeSingle();
+        if (inqData) data = inqData;
+        else if (error) throw new Error(error.message);
+      }
+
+      const mapped = data ? mapInquiryRow(data) : localStore.updateInquiry(id, updates);
       localStore.updateInquiry(id, mapped);
       broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: mapped.assignedStaffName });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'update', lead: mapped } }));
+        window.dispatchEvent(new CustomEvent('tirth-inquiry-changed', { detail: { action: 'update', inquiry: mapped } }));
+      }
       return mapped;
     } catch {
       const updated = localStore.updateInquiry(id, updates);
       broadcastInquiryUpdated(updated, { newStatus: updated.status });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'update', lead: updated } }));
+        window.dispatchEvent(new CustomEvent('tirth-inquiry-changed', { detail: { action: 'update', inquiry: updated } }));
+      }
       return updated;
     }
   },
@@ -238,11 +549,16 @@ export const api = {
     const list = await this.getInquiries();
     const curr = list.find((i) => i.id === id);
     const next = curr?.status === 'NEW' ? 'CONTACTED' : curr?.status === 'CONTACTED' ? 'CLOSED' : 'NEW';
-    return this.updateInquiry(id, { status: next });
+    return this.updateLeadStatus(id, next);
   },
 
   async deleteInquiry(id: string): Promise<boolean> {
-    await supabase.from('inquiries').delete().eq('id', id);
+    try {
+      await supabase.from('leads').delete().eq('id', id);
+    } catch {}
+    try {
+      await supabase.from('inquiries').delete().eq('id', id);
+    } catch {}
     return localStore.deleteInquiry(id);
   },
 
@@ -252,12 +568,7 @@ export const api = {
   async emptyTrash() { return localStore.emptyTrash(); },
 
   async updateInquiryStatusByStaff(id: string, status: 'NEW' | 'CONTACTED' | 'CLOSED', staff: { id: string; name: string }) {
-    return this.updateInquiry(id, {
-      status,
-      assignedStaffId: staff.id,
-      assignedStaffName: staff.name,
-      isLockedForStaff: status === 'CLOSED',
-    }, true);
+    return this.updateLeadStatus(id, status, staff.id, staff.name);
   },
 
   async adminUnlockInquiry(id: string, newStatus: Inquiry['status'] = 'CONTACTED') {
@@ -276,13 +587,40 @@ export const api = {
   },
 
   async assignInquiryStaff(id: string, staffId: string, staffName: string) {
-    return this.updateInquiry(id, { assignedStaffId: staffId, assignedStaffName: staffName });
+    return this.updateLeadAssignment(id, staffId, staffName);
   },
 
   // Staff Mgmt & Live Session Monitor via Supabase
   async getStaffMembers(): Promise<StaffMember[]> {
-    const { data } = await supabase.from('staff_members').select('*');
-    return data && data.length ? data.map(mapStaffRow) : localStore.getStaffMembers();
+    try {
+      const { data: staffData } = await supabase.from('staff_members').select('*');
+      let profilesMap: Record<string, any> = {};
+      try {
+        const { data: profData } = await supabase.from('profiles').select('id, is_online, last_seen');
+        if (profData) {
+          profData.forEach((p: any) => {
+            profilesMap[String(p.id)] = p;
+          });
+        }
+      } catch {}
+
+      if (staffData && staffData.length) {
+        return staffData.map((s) => {
+          const prof = profilesMap[String(s.id)];
+          const isOnline = Boolean(prof?.is_online ?? s.is_online ?? s.is_currently_logged_in);
+          const lastSeen = prof?.last_seen || s.last_active_at || s.last_login;
+          return mapStaffRow({
+            ...s,
+            is_online: isOnline,
+            is_currently_logged_in: isOnline,
+            last_seen: lastSeen,
+          });
+        });
+      }
+      return localStore.getStaffMembers();
+    } catch {
+      return localStore.getStaffMembers();
+    }
   },
   async createStaffMember(staff: Partial<StaffMember>) {
     const payload = {
@@ -1457,15 +1795,23 @@ export function mapInquiryRow(row: any): Inquiry {
   };
 }
 
-function mapStaffRow(row: any): StaffMember {
+export function mapStaffRow(row: any): StaffMember {
+  const isOnline = Boolean(row.is_online ?? row.isOnline ?? row.is_currently_logged_in ?? row.isCurrentlyLoggedIn);
   return {
     ...row,
-    isBlocked: row.is_blocked ?? row.isBlocked,
+    id: String(row.id),
+    name: row.name || row.full_name || 'Staff Member',
+    email: row.email || '',
+    isBlocked: Boolean(row.is_blocked ?? row.isBlocked),
     blockedReason: row.blocked_reason ?? row.blockedReason,
-    isActive: row.is_active ?? row.isActive,
-    lastActiveAt: row.last_active_at ?? row.lastActiveAt,
-    currentIp: row.current_ip ?? row.currentIp,
-    currentDevice: row.current_device ?? row.currentDevice,
+    isActive: row.is_active !== undefined ? Boolean(row.is_active) : (row.isActive !== undefined ? Boolean(row.isActive) : true),
+    lastActiveAt: row.last_active_at || row.lastActiveAt || row.last_seen || row.lastSeen,
+    lastLogin: row.last_login || row.lastLogin,
+    lastSeen: row.last_seen || row.lastSeen || row.last_active_at || row.lastActiveAt,
+    isOnline,
+    isCurrentlyLoggedIn: isOnline,
+    currentIp: row.current_ip || row.currentIp,
+    currentDevice: row.current_device || row.currentDevice,
   };
 }
 

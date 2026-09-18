@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api } from '../../services/api.js';
 import { localStore } from '../../services/localStore.js';
+import { supabase } from '../../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor } from '../../types.js';
 import { useRouter } from '../../context/RouterContext.js';
 import {
@@ -103,6 +104,75 @@ export const AdminStaff: React.FC = () => {
 
   useEffect(() => {
     loadAllStaffData();
+
+    // Live staff presence event listener
+    const handlePresence = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.staffId) return;
+      setStaffList((prev) =>
+        prev.map((s) =>
+          String(s.id) === String(detail.staffId)
+            ? {
+                ...s,
+                isOnline: detail.isOnline,
+                isCurrentlyLoggedIn: detail.isOnline,
+                lastSeen: detail.lastSeen,
+              }
+            : s
+        )
+      );
+    };
+    window.addEventListener('tirth-staff-presence-changed', handlePresence);
+
+    // Supabase Realtime channel for profiles & staff_members
+    const channel = supabase
+      .channel('schema-db-changes-staff')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload: any) => {
+          const profile = payload.new;
+          if (!profile?.id) return;
+          setStaffList((prev) =>
+            prev.map((s) =>
+              String(s.id) === String(profile.id)
+                ? {
+                    ...s,
+                    isOnline: Boolean(profile.is_online ?? profile.is_currently_logged_in),
+                    isCurrentlyLoggedIn: Boolean(profile.is_online ?? profile.is_currently_logged_in),
+                    lastSeen: profile.last_seen || profile.last_active_at,
+                  }
+                : s
+            )
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'staff_members' },
+        (payload: any) => {
+          const staffRow = payload.new;
+          if (!staffRow?.id) return;
+          setStaffList((prev) =>
+            prev.map((s) =>
+              String(s.id) === String(staffRow.id)
+                ? {
+                    ...s,
+                    isOnline: Boolean(staffRow.is_online ?? staffRow.is_currently_logged_in),
+                    isCurrentlyLoggedIn: Boolean(staffRow.is_online ?? staffRow.is_currently_logged_in),
+                    lastSeen: staffRow.last_seen || staffRow.last_active_at,
+                  }
+                : s
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('tirth-staff-presence-changed', handlePresence);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   async function loadAllStaffData() {

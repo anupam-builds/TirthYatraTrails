@@ -165,16 +165,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await api.loginStaff(email, pass);
     localStorage.setItem('tyt_staff_token', res.token);
     setStaffUser(res.user);
+    if (res.user?.id) {
+      await api.setStaffOnlineStatus(res.user.id, true).catch(() => {});
+    }
   };
 
   // Staff Logout
   const logoutStaff = () => {
     if (staffUser?.id) {
-      api.logoutStaff(staffUser.id).catch(() => {});
+      const staffId = staffUser.id;
+      api.logoutStaff(staffId).catch(() => {});
+      api.setStaffOnlineStatus(staffId, false).catch(() => {});
     }
     localStorage.removeItem('tyt_staff_token');
     setStaffUser(null);
   };
+
+  // Presence tracking on window unload / unmount
+  useEffect(() => {
+    if (!staffUser?.id) return;
+    const staffId = staffUser.id;
+    const handleBeforeUnload = () => {
+      api.setStaffOnlineStatus(staffId, false).catch(() => {});
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [staffUser?.id]);
 
   return (
     <AuthContext.Provider

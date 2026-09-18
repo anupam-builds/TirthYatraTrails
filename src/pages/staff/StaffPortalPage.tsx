@@ -178,6 +178,25 @@ export const StaffPortalPage: React.FC = () => {
     loadInquiries();
     loadStaff();
 
+    // Live staff presence event listener
+    const handlePresence = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.staffId) return;
+      setStaffList((prev) =>
+        prev.map((s) =>
+          String(s.id) === String(detail.staffId)
+            ? {
+                ...s,
+                isOnline: detail.isOnline,
+                isCurrentlyLoggedIn: detail.isOnline,
+                lastSeen: detail.lastSeen,
+              }
+            : s
+        )
+      );
+    };
+    window.addEventListener('tirth-staff-presence-changed', handlePresence);
+
     const unsubNew = subscribeToNewInquiries((newInquiry) => {
       setInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)]);
       
@@ -196,23 +215,41 @@ export const StaffPortalPage: React.FC = () => {
     });
 
     return () => {
+      window.removeEventListener('tirth-staff-presence-changed', handlePresence);
       unsubNew();
       unsubUpdates();
     };
   }, []);
 
   // Real-time Supabase synchronization hook for staff portal lead updates/assignments/status
-  useRealtimeInquiries((updated) => {
-    setInquiries((prev) => {
-      const exists = prev.some((i) => i.id === updated.id);
-      const nextList = exists
-        ? prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
-        : [updated, ...prev];
-      return nextList;
-    });
-    if (selectedInquiryForEdit && selectedInquiryForEdit.id === updated.id) {
-      setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...updated } : null));
-    }
+  useRealtimeInquiries({
+    channelName: 'schema-db-changes',
+    onUpdate: (updated) => {
+      setInquiries((prev) => {
+        const exists = prev.some((i) => i.id === updated.id);
+        return exists
+          ? prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
+          : [updated, ...prev];
+      });
+      if (selectedInquiryForEdit && selectedInquiryForEdit.id === updated.id) {
+        setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...updated } : null));
+      }
+    },
+    onProfileUpdate: (profile) => {
+      if (!profile?.id) return;
+      setStaffList((prev) =>
+        prev.map((s) =>
+          String(s.id) === String(profile.id)
+            ? {
+                ...s,
+                isOnline: Boolean(profile.is_online ?? profile.is_currently_logged_in),
+                isCurrentlyLoggedIn: Boolean(profile.is_online ?? profile.is_currently_logged_in),
+                lastSeen: profile.last_seen || profile.last_active_at,
+              }
+            : s
+        )
+      );
+    },
   });
 
   async function loadStaff() {
@@ -262,7 +299,7 @@ export const StaffPortalPage: React.FC = () => {
     }
 
     try {
-      const updated = await api.updateInquiry(id, { status: newStatus }, true);
+      const updated = await api.updateLeadStatus(id, newStatus, staffUser.id, staffUser.name);
       setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === id) {
         setSelectedInquiryForEdit(updated);
@@ -284,7 +321,7 @@ export const StaffPortalPage: React.FC = () => {
     try {
       const selected = staffList.find((s) => s.id === staffId);
       const staffName = selected ? selected.name : '';
-      const updated = await api.assignInquiryStaff(inquiryId, staffId, staffName);
+      const updated = await api.updateLeadAssignment(inquiryId, staffId, staffName);
       setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
         setSelectedInquiryForEdit(updated);

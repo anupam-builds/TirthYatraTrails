@@ -35,7 +35,7 @@ export const AdminInquiries: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedInquiryForEdit, setSelectedInquiryForEdit] = useState<Inquiry | null>(null);
 
-  // Realtime inquiries hook using static channel public:inquiries-global-sync
+  // Realtime inquiries hook using static channel schema-db-changes
   const {
     inquiries,
     setInquiries,
@@ -44,6 +44,7 @@ export const AdminInquiries: React.FC = () => {
     loading,
     refetch: refetchInquiries,
   } = useRealtimeInquiries({
+    channelName: 'schema-db-changes',
     onInsert: (newInq) => {
       console.log('📡 [AdminInquiries] Realtime lead INSERT received:', newInq.id);
     },
@@ -51,6 +52,21 @@ export const AdminInquiries: React.FC = () => {
       console.log('🔄 [AdminInquiries] Realtime lead UPDATE received:', updatedInq.id);
       setSelectedInquiryForEdit((curr) =>
         curr && String(curr.id) === String(updatedInq.id) ? { ...curr, ...updatedInq } : curr
+      );
+    },
+    onProfileUpdate: (profile) => {
+      if (!profile?.id) return;
+      setStaffList((prev) =>
+        prev.map((s) =>
+          String(s.id) === String(profile.id)
+            ? {
+                ...s,
+                isOnline: Boolean(profile.is_online ?? profile.is_currently_logged_in),
+                isCurrentlyLoggedIn: Boolean(profile.is_online ?? profile.is_currently_logged_in),
+                lastSeen: profile.last_seen || profile.last_active_at,
+              }
+            : s
+        )
       );
     },
   });
@@ -65,6 +81,25 @@ export const AdminInquiries: React.FC = () => {
   useEffect(() => {
     loadStaff();
     loadDeletedInquiries();
+
+    // Live staff presence event listener
+    const handlePresence = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.staffId) return;
+      setStaffList((prev) =>
+        prev.map((s) =>
+          String(s.id) === String(detail.staffId)
+            ? {
+                ...s,
+                isOnline: detail.isOnline,
+                isCurrentlyLoggedIn: detail.isOnline,
+                lastSeen: detail.lastSeen,
+              }
+            : s
+        )
+      );
+    };
+    window.addEventListener('tirth-staff-presence-changed', handlePresence);
 
     // Auto prepend new incoming leads live via local BroadcastChannel as fallback
     const unsubNew = subscribeToNewInquiries((newInquiry) => {
@@ -92,6 +127,7 @@ export const AdminInquiries: React.FC = () => {
     });
 
     return () => {
+      window.removeEventListener('tirth-staff-presence-changed', handlePresence);
       unsubNew();
       unsubUpdates();
     };
@@ -135,7 +171,7 @@ export const AdminInquiries: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, status: InquiryStatus) => {
     try {
-      const updated = await api.updateInquiry(id, { status }, false);
+      const updated = await api.updateLeadStatus(id, status);
       setInquiries((prev) =>
         prev.map((i) =>
           String(i.id) === String(id)
@@ -160,7 +196,7 @@ export const AdminInquiries: React.FC = () => {
     try {
       const staffMember = staffList.find((s) => String(s.id) === String(staffId));
       const staffName = staffMember ? staffMember.name : '';
-      const updated = await api.assignInquiryStaff(inquiryId, staffId, staffName);
+      const updated = await api.updateLeadAssignment(inquiryId, staffId, staffName);
       setInquiries((prev) =>
         prev.map((i) =>
           String(i.id) === String(inquiryId)

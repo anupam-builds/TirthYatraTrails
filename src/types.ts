@@ -25,6 +25,8 @@ export interface StaffMember {
   lastLoginDevice?: string;
   lastActiveAt?: string;
   isCurrentlyLoggedIn?: boolean;
+  isOnline?: boolean;
+  lastSeen?: string;
   contactedCount?: number;
   closedCount?: number;
   notesCount?: number;
