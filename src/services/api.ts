@@ -938,56 +938,158 @@ export const api = {
   async getAdminReviews(): Promise<Review[]> { return this.getReviews(false); },
 
   async createReview(rev: Partial<Review>): Promise<Review> {
-    const payload = reviewToRow(rev);
-    if (!payload.id) {
-      payload.id = `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    }
+    const rawPayload = reviewToRow(rev);
+    const { id, ...cleanPayload } = rawPayload;
+    const isTempId = id && (String(id).startsWith('rev-') || String(id).startsWith('temp-'));
+    const insertPayload: Record<string, any> = id && String(id).trim() !== '' && !isTempId
+      ? { id: String(id).trim(), ...cleanPayload }
+      : { ...cleanPayload };
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    console.log('Sending review payload:', JSON.stringify(insertPayload, null, 2));
+
+    // 1. Direct PostgREST POST with explicit headers
     try {
-      const { data, error } = await supabase.from('reviews').insert([payload]).select().maybeSingle();
+      const restUrl = `${SUPABASE_URL}/rest/v1/reviews`;
+      const response = await fetch(restUrl, {
+        method: 'POST',
+        headers: explicitHeaders,
+        body: JSON.stringify(insertPayload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          const mapped = mapReviewRow(row);
+          localStore.createReview(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'create', review: mapped } }));
+          }
+          return mapped;
+        }
+      } else {
+        const errText = await response.text();
+        console.error(`Direct fetch createReview failed (${response.status}):`, errText);
+      }
+    } catch (fetchErr) {
+      console.warn('Direct fetch createReview network error:', fetchErr);
+    }
+
+    // 2. Secondary attempt via Supabase SDK or supabaseRest
+    try {
+      const { data, error } = await supabase.from('reviews').insert([insertPayload]).select().maybeSingle();
       if (!error && data) {
         const mapped = mapReviewRow(data);
         localStore.createReview(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'create', review: mapped } }));
+        }
         return mapped;
       }
+      if (error) {
+        console.error('Supabase SDK createReview error:', error.message, error.details);
+      }
+
       const restRes = await supabaseRest<any[]>('reviews', {
         method: 'POST',
-        body: payload,
+        headers: explicitHeaders,
+        body: insertPayload,
       });
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapReviewRow(restRes.data[0]);
         localStore.createReview(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'create', review: mapped } }));
+        }
         return mapped;
       }
     } catch (err) {
       console.warn('createReview remote error, falling back to localStore', err);
     }
-    return localStore.createReview({ ...rev, id: payload.id } as Review);
+
+    const fallbackId = (insertPayload as any).id || (id && !isTempId ? id : `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
+    const saved = localStore.createReview({ ...rev, ...insertPayload, id: fallbackId } as Review);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'create', review: saved } }));
+    }
+    return saved;
   },
 
   async updateReview(id: string, rev: Partial<Review>): Promise<Review> {
-    const payload = reviewToRow(rev);
-    delete payload.id;
+    const rawPayload = reviewToRow(rev);
+    const { id: _ignoredId, ...payload } = rawPayload;
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    try {
+      const restUrl = `${SUPABASE_URL}/rest/v1/reviews?id=eq.${encodeURIComponent(id)}`;
+      const response = await fetch(restUrl, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          const mapped = mapReviewRow(row);
+          localStore.updateReview(id, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
+          }
+          return mapped;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn('Direct fetch updateReview error:', fetchErr);
+    }
+
     try {
       const { data, error } = await supabase.from('reviews').update(payload).eq('id', id).select().maybeSingle();
       if (!error && data) {
         const mapped = mapReviewRow(data);
         localStore.updateReview(id, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
+        }
         return mapped;
       }
       const restRes = await supabaseRest<any[]>('reviews', {
         method: 'PATCH',
+        headers: explicitHeaders,
         params: { id: `eq.${id}` },
         body: payload,
       });
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapReviewRow(restRes.data[0]);
         localStore.updateReview(id, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
+        }
         return mapped;
       }
     } catch (err) {
       console.warn('updateReview remote error, falling back to localStore', err);
     }
-    return localStore.updateReview(id, rev);
+    const saved = localStore.updateReview(id, rev);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: saved } }));
+    }
+    return saved;
   },
 
   async toggleReviewFeatured(id: string): Promise<Review> {
@@ -997,10 +1099,24 @@ export const api = {
   },
 
   async deleteReview(id: string): Promise<boolean> {
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/reviews?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+          Prefer: 'return=representation',
+        },
+      });
+    } catch {}
     try {
       await supabase.from('reviews').delete().eq('id', id);
     } catch {}
     localStore.deleteReview(id);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'delete', id } }));
+    }
     return true;
   },
 
@@ -1200,8 +1316,8 @@ export const api = {
   },
 
   async createTravelStory(story: Partial<TravelStory>): Promise<TravelStory> {
-    const payload = {
-      id: story.id || `story-${Date.now()}`,
+    const isTempId = story.id && (String(story.id).startsWith('story-') || String(story.id).startsWith('temp-'));
+    const payload: Record<string, any> = {
       title: story.title,
       slug: story.slug || (story.title || 'story').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       author_name: story.authorName || 'Devotee Pilgrim',
@@ -1215,16 +1331,44 @@ export const api = {
       is_published: story.isPublished !== false,
       likes_count: story.likesCount || 0,
     };
+    if (story.id && String(story.id).trim() !== '' && !isTempId) {
+      payload.id = String(story.id).trim();
+    }
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    try {
+      const restUrl = `${SUPABASE_URL}/rest/v1/travel_stories`;
+      const response = await fetch(restUrl, {
+        method: 'POST',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) return mapTravelStoryRow(row);
+      }
+    } catch {}
+
     try {
       const { data, error } = await supabase.from('travel_stories').insert([payload]).select().maybeSingle();
       if (!error && data) return mapTravelStoryRow(data);
       const restRes = await supabaseRest<any[]>('travel_stories', {
         method: 'POST',
+        headers: explicitHeaders,
         body: payload,
       });
       if (restRes.data && restRes.data.length > 0) return mapTravelStoryRow(restRes.data[0]);
     } catch {}
-    return { ...story, id: payload.id } as TravelStory;
+    const fallbackId = payload.id || story.id || `story-${Date.now()}`;
+    return { ...story, ...payload, id: fallbackId } as TravelStory;
   },
 
   async updateTravelStory(id: string, story: Partial<TravelStory>): Promise<TravelStory> {
@@ -1485,7 +1629,13 @@ export function mapReviewRow(row: any): Review {
     googleReviewUrl: row.google_review_url || row.googleReviewUrl || '',
     isFeatured: Boolean(row.is_featured ?? row.isFeatured ?? true),
     order: Number(row.order ?? 0),
-    createdAt: row.created_at || row.createdAt,
+    audioUrl: row.audio_url || row.audioUrl || undefined,
+    audioDuration: row.audio_duration !== undefined && row.audio_duration !== null
+      ? Number(row.audio_duration)
+      : (row.audioDuration !== undefined && row.audioDuration !== null ? Number(row.audioDuration) : undefined),
+    audioTitle: row.audio_title || row.audioTitle || undefined,
+    language: row.language || undefined,
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
     updatedAt: row.updated_at || row.updatedAt,
   };
 }
@@ -1648,6 +1798,16 @@ export function reviewToRow(rev: Partial<Review>): Record<string, any> {
     row.is_featured = Boolean(rev.isFeatured ?? (rev as any).is_featured);
   }
   if (rev.order !== undefined) row.order = Number(rev.order);
+  if (rev.audioUrl !== undefined || (rev as any).audio_url !== undefined) {
+    row.audio_url = rev.audioUrl ?? (rev as any).audio_url;
+  }
+  if (rev.audioDuration !== undefined || (rev as any).audio_duration !== undefined) {
+    row.audio_duration = Number(rev.audioDuration ?? (rev as any).audio_duration ?? 0);
+  }
+  if (rev.audioTitle !== undefined || (rev as any).audio_title !== undefined) {
+    row.audio_title = rev.audioTitle ?? (rev as any).audio_title;
+  }
+  if (rev.language !== undefined) row.language = rev.language;
   return row;
 }
 
