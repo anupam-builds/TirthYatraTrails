@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api } from '../../services/api.js';
+import { api, mapReviewRow } from '../../services/api.js';
 import { Review } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
+import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
+import { supabase } from '../../lib/supabase.js';
 import {
   Quote,
   Plus,
@@ -81,6 +83,35 @@ export const AdminReviews: React.FC = () => {
 
   useEffect(() => {
     loadReviews();
+  }, []);
+
+  // Real-time subscription on public:content-sync-channel
+  useEffect(() => {
+    const channelName = 'public:content-sync-channel';
+    const channel = supabase.channel(channelName);
+
+    const handlePayload = (payload: any) => {
+      const eventType = payload.eventType || payload.event || 'UPDATE';
+      if (eventType === 'DELETE') {
+        const id = String(payload.old?.id || payload.new?.id);
+        setReviews((prev) => prev.filter((r) => r.id !== id));
+      } else {
+        const raw = payload.new || payload.old;
+        if (raw) {
+          const mapped = mapReviewRow(raw);
+          setReviews((prev) => reconcileRealtimeList(prev, eventType, mapped));
+        }
+      }
+    };
+
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_stories' }, handlePayload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, handlePayload)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const showNotification = (text: string, type: 'success' | 'error' = 'success') => {
@@ -219,11 +250,11 @@ export const AdminReviews: React.FC = () => {
 
       if (editingReview) {
         const updated = await api.updateReview(editingReview.id, payload);
-        setReviews((prev) => prev.map((r) => (r.id === editingReview.id ? updated : r)));
+        setReviews((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
         showNotification(`Review by "${formData.authorName}" updated successfully`);
       } else {
         const created = await api.createReview(payload);
-        setReviews((prev) => [created, ...prev]);
+        setReviews((prev) => reconcileRealtimeList(prev, 'INSERT', created));
         showNotification(`New review by "${formData.authorName}" published successfully`);
       }
       setIsModalOpen(false);
@@ -257,6 +288,10 @@ export const AdminReviews: React.FC = () => {
               <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight font-serif">
                 Traveller Stories &amp; Google Reviews
               </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Live Sync
+              </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Manage pilgrim testimonials, destination images, star ratings, and homepage featured carousel stories.

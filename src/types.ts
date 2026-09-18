@@ -111,6 +111,8 @@ export interface City {
   hotelCount: number;
   popularFor?: string;
   state?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Room {
@@ -143,6 +145,8 @@ export interface Hotel {
   rooms: Room[];
   distanceToTemple?: string;
   darshanType?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PackageItineraryItem {
@@ -169,6 +173,63 @@ export interface Package {
   hotelsLevel?: string; // "3 & 4 Star Deluxe"
   transfers?: string; // "AC Private Vehicle & Flights Included"
   itinerary?: PackageItineraryItem[];
+  isPublished?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type HubType = 'AIRPORT' | 'RAILWAY_STATION' | 'BUS_TERMINAL' | 'HELIPAD';
+
+export interface TransitHub {
+  id: string;
+  cityId: string;
+  cityName?: string;
+  name: string;
+  hubType: HubType;
+  code?: string; // e.g. "AYJ", "VNS", "DED"
+  distanceToTempleKm?: number;
+  isPrimary: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type InventoryStatus = 'AVAILABLE' | 'FAST_FILLING' | 'SOLD_OUT' | 'BLOCKED';
+
+export interface HotelInventory {
+  id: string;
+  hotelId: string;
+  hotelName?: string;
+  roomId?: string;
+  roomType: string;
+  date: string; // YYYY-MM-DD
+  totalInventory: number;
+  bookedCount: number;
+  blockedCount: number;
+  availableCount: number;
+  priceOverride?: number;
+  status: InventoryStatus;
+  updatedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TravelStory {
+  id: string;
+  title: string;
+  slug: string;
+  authorName: string;
+  authorRole?: string;
+  excerpt?: string;
+  content: string;
+  destination?: string;
+  coverImage?: string;
+  tags?: string[];
+  readTimeMinutes?: number;
+  isPublished: boolean;
+  publishedAt?: string;
+  likesCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type InquiryStatus =

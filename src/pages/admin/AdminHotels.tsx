@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api } from '../../services/api.js';
+import { api, mapHotelRow } from '../../services/api.js';
 import { Hotel, City, Room } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { useCitiesMaster } from '../../context/CitiesContext.js';
 import { SacredCityHybridSelector } from '../../components/admin/SacredCityHybridSelector.js';
+import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
+import { supabase } from '../../lib/supabase.js';
+import { HotelInventoryGrid } from '../../components/admin/HotelInventoryGrid.js';
 import {
   Building,
   Plus,
@@ -20,6 +23,8 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  Calendar,
+  Radio,
 } from 'lucide-react';
 
 interface ToastAlert {
@@ -36,6 +41,7 @@ export const AdminHotels: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('');
+  const [selectedInventoryHotel, setSelectedInventoryHotel] = useState<Hotel | null>(null);
 
   // Floating confirmation toast alert
   const [toast, setToast] = useState<ToastAlert | null>(null);
@@ -79,6 +85,32 @@ export const AdminHotels: React.FC = () => {
       window.removeEventListener('storage', handleDataChange);
     };
   }, [selectedCityId, searchQuery]);
+
+  // Real-time multi-admin synchronization via static channel
+  useEffect(() => {
+    const channelName = 'public:content-sync-channel';
+    const channel = supabase.channel(channelName);
+
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, (payload: any) => {
+        const eventType = payload.eventType || payload.event || 'UPDATE';
+        if (eventType === 'DELETE') {
+          const id = String(payload.old?.id || payload.new?.id);
+          setHotels((prev) => prev.filter((h) => h.id !== id));
+        } else {
+          const raw = payload.new || payload.old;
+          if (raw) {
+            const mapped = mapHotelRow(raw);
+            setHotels((prev) => reconcileRealtimeList(prev, eventType, mapped));
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -257,7 +289,7 @@ export const AdminHotels: React.FC = () => {
     try {
       if (editingHotel) {
         const updated = await api.updateHotel(editingHotel.id, hotelData);
-        setHotels((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+        setHotels((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
         await refreshCities();
         setToast({
           id: String(Date.now()),
@@ -267,7 +299,7 @@ export const AdminHotels: React.FC = () => {
         });
       } else {
         const created = await api.createHotel(hotelData);
-        setHotels((prev) => [created, ...prev]);
+        setHotels((prev) => reconcileRealtimeList(prev, 'INSERT', created));
         await refreshCities();
         setToast({
           id: String(Date.now()),
@@ -295,12 +327,18 @@ export const AdminHotels: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif">
-              <Building className="w-6 h-6 text-orange-500 dark:text-orange-400" />
-              <span>Hotels &amp; Sacred Accommodations Inventory</span>
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif">
+                <Building className="w-6 h-6 text-orange-500 dark:text-orange-400" />
+                <span>Hotels &amp; Sacred Accommodations Inventory</span>
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Realtime Multi-Admin Sync
+              </span>
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Manage pilgrim stays, pricing tiers, photos, and darshan proximity.
+              Manage pilgrim stays, pricing tiers, photos, and live room allotment delta tracking.
             </p>
           </div>
 
@@ -431,6 +469,15 @@ export const AdminHotels: React.FC = () => {
                         {hotel.distanceToTemple || 'Steps from temple'}
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-2 whitespace-nowrap">
+                        <button
+                          id={`btn-inventory-hotel-${hotel.id}`}
+                          onClick={() => setSelectedInventoryHotel(hotel)}
+                          className="px-2.5 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:hover:bg-orange-900/60 dark:text-orange-300 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                          title="Live Room Inventory & Allocation Grid"
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Allocations</span>
+                        </button>
                         <button
                           id={`btn-edit-hotel-${hotel.id}`}
                           onClick={() => handleOpenEdit(hotel)}
@@ -686,6 +733,18 @@ export const AdminHotels: React.FC = () => {
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* LIVE HOTEL INVENTORY & ALLOCATION GRID MODAL */}
+      {selectedInventoryHotel && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            <HotelInventoryGrid
+              hotel={selectedInventoryHotel}
+              onClose={() => setSelectedInventoryHotel(null)}
+            />
+          </div>
         </div>
       )}
     </AdminLayout>

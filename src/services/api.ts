@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, CompanionProfile, CompanionConnection, CompanionSearchFilters } from '../types.js';
+import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
 import { supabase } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
@@ -336,6 +336,123 @@ export const api = {
   async updateCompanionConnectionStatus(cid: string, status: any) { return localStore.updateCompanionConnectionStatus(cid, status); },
   async getCompanionProfiles() { return this.getCompanions(); },
   async createCompanionProfile(p: any) { return this.createCompanion(p); },
+
+  // Transit Hubs (Airports, Railway Stations, Helipads)
+  async getHubs(cityId?: string): Promise<TransitHub[]> {
+    try {
+      let q = supabase.from('hubs').select('*');
+      if (cityId) q = q.eq('city_id', cityId);
+      const { data } = await q;
+      if (data && data.length) return data.map(mapHubRow);
+      return getFallbackHubs(cityId);
+    } catch {
+      return getFallbackHubs(cityId);
+    }
+  },
+  async createHub(hub: Partial<TransitHub>): Promise<TransitHub> {
+    const payload = {
+      id: hub.id || `hub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      city_id: hub.cityId,
+      name: hub.name,
+      hub_type: hub.hubType || 'AIRPORT',
+      code: hub.code || '',
+      distance_to_temple_km: hub.distanceToTempleKm || 0,
+      is_primary: Boolean(hub.isPrimary),
+    };
+    const { data } = await supabase.from('hubs').insert([payload]).select().maybeSingle();
+    return data ? mapHubRow(data) : { ...hub, id: payload.id } as TransitHub;
+  },
+  async updateHub(id: string, hub: Partial<TransitHub>): Promise<TransitHub> {
+    const payload: Record<string, any> = {};
+    if (hub.name !== undefined) payload.name = hub.name;
+    if (hub.hubType !== undefined) payload.hub_type = hub.hubType;
+    if (hub.code !== undefined) payload.code = hub.code;
+    if (hub.distanceToTempleKm !== undefined) payload.distance_to_temple_km = hub.distanceToTempleKm;
+    if (hub.isPrimary !== undefined) payload.is_primary = hub.isPrimary;
+    const { data } = await supabase.from('hubs').update(payload).eq('id', id).select().maybeSingle();
+    return data ? mapHubRow(data) : { ...hub, id } as TransitHub;
+  },
+  async deleteHub(id: string): Promise<boolean> {
+    await supabase.from('hubs').delete().eq('id', id);
+    return true;
+  },
+
+  // Hotel Inventory & Realtime Allocations
+  async getHotelInventory(hotelId?: string): Promise<HotelInventory[]> {
+    try {
+      let q = supabase.from('hotel_inventory').select('*').order('date', { ascending: true });
+      if (hotelId) q = q.eq('hotel_id', hotelId);
+      const { data } = await q;
+      if (data && data.length) return data.map(mapHotelInventoryRow);
+      return getFallbackInventory(hotelId);
+    } catch {
+      return getFallbackInventory(hotelId);
+    }
+  },
+  async updateHotelInventory(id: string, updates: Partial<HotelInventory>): Promise<HotelInventory> {
+    const payload: Record<string, any> = {};
+    if (updates.totalInventory !== undefined) payload.total_inventory = updates.totalInventory;
+    if (updates.bookedCount !== undefined) payload.booked_count = updates.bookedCount;
+    if (updates.blockedCount !== undefined) payload.blocked_count = updates.blockedCount;
+    if (updates.priceOverride !== undefined) payload.price_override = updates.priceOverride;
+    if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.updatedBy !== undefined) payload.updated_by = updates.updatedBy;
+    const { data } = await supabase.from('hotel_inventory').update(payload).eq('id', id).select().maybeSingle();
+    return data ? mapHotelInventoryRow(data) : { ...updates, id } as HotelInventory;
+  },
+  async batchUpdateHotelInventory(updates: Array<Partial<HotelInventory>>): Promise<boolean> {
+    for (const item of updates) {
+      if (item.id) {
+        await this.updateHotelInventory(item.id, item);
+      }
+    }
+    return true;
+  },
+
+  // Travel Stories & Temple Blogs
+  async getTravelStories(): Promise<TravelStory[]> {
+    try {
+      const { data } = await supabase.from('travel_stories').select('*').order('created_at', { ascending: false });
+      if (data && data.length) return data.map(mapTravelStoryRow);
+      return getFallbackStories();
+    } catch {
+      return getFallbackStories();
+    }
+  },
+  async createTravelStory(story: Partial<TravelStory>): Promise<TravelStory> {
+    const payload = {
+      id: story.id || `story-${Date.now()}`,
+      title: story.title,
+      slug: story.slug || (story.title || 'story').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      author_name: story.authorName || 'Devotee Pilgrim',
+      author_role: story.authorRole || 'Spiritual Pilgrim',
+      excerpt: story.excerpt || '',
+      content: story.content || '',
+      destination: story.destination || 'Holy Base',
+      cover_image: story.coverImage || 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80',
+      tags: story.tags || ['Pilgrimage', 'Darshan'],
+      read_time_minutes: story.readTimeMinutes || 5,
+      is_published: story.isPublished !== false,
+      likes_count: story.likesCount || 0,
+    };
+    const { data } = await supabase.from('travel_stories').insert([payload]).select().maybeSingle();
+    return data ? mapTravelStoryRow(data) : { ...story, id: payload.id } as TravelStory;
+  },
+  async updateTravelStory(id: string, story: Partial<TravelStory>): Promise<TravelStory> {
+    const payload: Record<string, any> = {};
+    if (story.title !== undefined) payload.title = story.title;
+    if (story.content !== undefined) payload.content = story.content;
+    if (story.excerpt !== undefined) payload.excerpt = story.excerpt;
+    if (story.isPublished !== undefined) payload.is_published = story.isPublished;
+    if (story.likesCount !== undefined) payload.likes_count = story.likesCount;
+    const { data } = await supabase.from('travel_stories').update(payload).eq('id', id).select().maybeSingle();
+    return data ? mapTravelStoryRow(data) : { ...story, id } as TravelStory;
+  },
+  async deleteTravelStory(id: string): Promise<boolean> {
+    await supabase.from('travel_stories').delete().eq('id', id);
+    return true;
+  },
+
   async resetData() { localStore.resetData(); },
 };
 
@@ -405,6 +522,236 @@ function mapStaffRow(row: any): StaffMember {
     currentIp: row.current_ip ?? row.currentIp,
     currentDevice: row.current_device ?? row.currentDevice,
   };
+}
+
+export function mapCityRow(row: any): City {
+  if (!row) return {} as City;
+  return {
+    id: String(row.id),
+    name: row.name || 'Sacred Destination',
+    state: row.state || 'India',
+    imageUrl: row.image_url || row.imageUrl || 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
+    hotelCount: Number(row.hotel_count ?? row.hotelCount ?? 0),
+    popularFor: row.popular_for || row.popularFor || 'Sacred Temple Darshan',
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+  };
+}
+
+export function mapHubRow(row: any): TransitHub {
+  if (!row) return {} as TransitHub;
+  return {
+    id: String(row.id),
+    cityId: row.city_id || row.cityId,
+    name: row.name || 'Transit Hub',
+    hubType: row.hub_type || row.hubType || 'AIRPORT',
+    code: row.code,
+    distanceToTempleKm: Number(row.distance_to_temple_km ?? row.distanceToTempleKm ?? 0),
+    isPrimary: Boolean(row.is_primary ?? row.isPrimary),
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+  };
+}
+
+export function mapHotelRow(row: any): Hotel {
+  if (!row) return {} as Hotel;
+  return {
+    id: String(row.id),
+    cityId: row.city_id || row.cityId,
+    cityName: row.city_name || row.cityName || 'Holy Base',
+    name: row.name || 'Sacred Hotel',
+    starRating: Number(row.star_rating ?? row.starRating ?? 3),
+    googleRating: Number(row.google_rating ?? row.googleRating ?? 4.5),
+    reviewCount: Number(row.review_count ?? row.reviewCount ?? 0),
+    address: row.address || '',
+    description: row.description || '',
+    images: Array.isArray(row.images) ? row.images : [],
+    amenities: Array.isArray(row.amenities) ? row.amenities : [],
+    basePrice: Number(row.base_price ?? row.basePrice ?? 3500),
+    isTopRated: Boolean(row.is_top_rated ?? row.isTopRated),
+    distanceToTemple: row.distance_to_temple || row.distanceToTemple,
+    darshanType: row.darshan_type || row.darshanType,
+    rooms: Array.isArray(row.rooms) ? row.rooms : [],
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+  };
+}
+
+export function mapHotelInventoryRow(row: any): HotelInventory {
+  if (!row) return {} as HotelInventory;
+  const total = Number(row.total_inventory ?? row.totalInventory ?? 10);
+  const booked = Number(row.booked_count ?? row.bookedCount ?? 0);
+  const blocked = Number(row.blocked_count ?? row.blockedCount ?? 0);
+  const available = Math.max(0, total - booked - blocked);
+
+  let status: HotelInventory['status'] = row.status || 'AVAILABLE';
+  if (available === 0) status = 'SOLD_OUT';
+  else if (status !== 'BLOCKED' && available <= 2) status = 'FAST_FILLING';
+
+  return {
+    id: String(row.id),
+    hotelId: row.hotel_id || row.hotelId,
+    hotelName: row.hotel_name || row.hotelName,
+    roomId: row.room_id || row.roomId,
+    roomType: row.room_type || row.roomType || 'Deluxe Room',
+    date: row.date || new Date().toISOString().split('T')[0],
+    totalInventory: total,
+    bookedCount: booked,
+    blockedCount: blocked,
+    availableCount: available,
+    priceOverride: row.price_override !== undefined && row.price_override !== null ? Number(row.price_override) : undefined,
+    status,
+    updatedBy: row.updated_by || row.updatedBy,
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+  };
+}
+
+export function mapPackageRow(row: any): Package {
+  if (!row) return {} as Package;
+  return {
+    id: String(row.id),
+    title: row.title || 'Sacred Pilgrimage Circuit',
+    location: row.location || 'Holy Himalayas',
+    duration: row.duration || '6 Days / 5 Nights',
+    bookedRank: row.booked_rank || row.bookedRank,
+    imageUrl: row.image_url || row.imageUrl || 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80',
+    galleryImages: Array.isArray(row.gallery_images) ? row.gallery_images : (Array.isArray(row.galleryImages) ? row.galleryImages : []),
+    startingPrice: Number(row.starting_price ?? row.startingPrice ?? 24000),
+    overview: row.overview || '',
+    highlights: Array.isArray(row.highlights) ? row.highlights : [],
+    cancellationPolicy: row.cancellation_policy || row.cancellationPolicy || '',
+    category: row.category || 'Char Dham',
+    packageType: row.package_type || row.packageType || 'All-Inclusive Guided Yatra',
+    experienceLevel: row.experience_level || row.experienceLevel || 'Comfortable • Senior Friendly',
+    hotelsLevel: row.hotels_level || row.hotelsLevel || '3 & 4 Star Deluxe Stays',
+    transfers: row.transfers || 'Private AC Coach',
+    itinerary: Array.isArray(row.itinerary) ? row.itinerary : [],
+    isPublished: Boolean(row.is_published ?? row.isPublished ?? true),
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+  };
+}
+
+export function mapTravelStoryRow(row: any): TravelStory {
+  if (!row) return {} as TravelStory;
+  return {
+    id: String(row.id),
+    title: row.title || 'Sacred Pilgrim Journey',
+    slug: row.slug || 'sacred-pilgrim-journey',
+    authorName: row.author_name || row.authorName || 'Devotee Pilgrim',
+    authorRole: row.author_role || row.authorRole || 'Spiritual Pilgrim',
+    excerpt: row.excerpt || '',
+    content: row.content || '',
+    destination: row.destination || 'Ayodhya Dham',
+    coverImage: row.cover_image || row.coverImage || 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80',
+    tags: Array.isArray(row.tags) ? row.tags : ['Pilgrimage', 'Darshan'],
+    readTimeMinutes: Number(row.read_time_minutes ?? row.readTimeMinutes ?? 5),
+    isPublished: Boolean(row.is_published ?? row.isPublished ?? true),
+    publishedAt: row.published_at || row.publishedAt,
+    likesCount: Number(row.likes_count ?? row.likesCount ?? 0),
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+  };
+}
+
+export function mapReviewRow(row: any): Review {
+  if (!row) return {} as Review;
+  return {
+    id: String(row.id),
+    authorName: row.author_name || row.authorName || 'Pilgrim',
+    authorLocation: row.author_location || row.authorLocation || 'India',
+    authorInitials: row.author_initials || row.authorInitials || 'P',
+    rating: Number(row.rating ?? 5.0),
+    reviewText: row.review_text || row.reviewText || '',
+    destinationImage: row.destination_image || row.destinationImage || '',
+    isVerified: Boolean(row.is_verified ?? row.isVerified ?? true),
+    googleReviewUrl: row.google_review_url || row.googleReviewUrl || '',
+    isFeatured: Boolean(row.is_featured ?? row.isFeatured ?? true),
+    order: Number(row.order ?? 0),
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+  };
+}
+
+// Fallback seed generators
+function getFallbackHubs(cityId?: string): TransitHub[] {
+  const all: TransitHub[] = [
+    { id: 'hub-ayj-air', cityId: 'ayodhya', cityName: 'Ayodhya', name: 'Maharishi Valmiki International Airport (AYJ)', hubType: 'AIRPORT', code: 'AYJ', distanceToTempleKm: 9.5, isPrimary: true },
+    { id: 'hub-ayj-rail', cityId: 'ayodhya', cityName: 'Ayodhya', name: 'Ayodhya Dham Junction (AY)', hubType: 'RAILWAY_STATION', code: 'AY', distanceToTempleKm: 1.2, isPrimary: false },
+    { id: 'hub-vns-air', cityId: 'varanasi', cityName: 'Varanasi', name: 'Lal Bahadur Shastri International Airport (VNS)', hubType: 'AIRPORT', code: 'VNS', distanceToTempleKm: 24.0, isPrimary: true },
+    { id: 'hub-vns-rail', cityId: 'varanasi', cityName: 'Varanasi', name: 'Varanasi Cantt Station (BSB)', hubType: 'RAILWAY_STATION', code: 'BSB', distanceToTempleKm: 4.5, isPrimary: false },
+    { id: 'hub-keda-heli', cityId: 'kedarnath', cityName: 'Kedarnath', name: 'Guptkashi & Phata Helipad Base', hubType: 'HELIPAD', code: 'GPK', distanceToTempleKm: 14.0, isPrimary: true },
+    { id: 'hub-puri-rail', cityId: 'puri', cityName: 'Puri', name: 'Puri Railway Station (PURI)', hubType: 'RAILWAY_STATION', code: 'PURI', distanceToTempleKm: 2.1, isPrimary: true },
+  ];
+  if (cityId) return all.filter((h) => h.cityId.toLowerCase() === cityId.toLowerCase());
+  return all;
+}
+
+function getFallbackInventory(hotelId?: string): HotelInventory[] {
+  const dates = [
+    '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24'
+  ];
+  const items: HotelInventory[] = [];
+  const targetHotelId = hotelId || 'htl-ayodhya-ramayana';
+  dates.forEach((d, idx) => {
+    const total = 12;
+    const booked = idx === 1 ? 11 : idx === 3 ? 6 : 4;
+    const blocked = idx === 5 ? 2 : 0;
+    const avail = Math.max(0, total - booked - blocked);
+    items.push({
+      id: `inv-${targetHotelId}-deluxe-${d}`,
+      hotelId: targetHotelId,
+      hotelName: 'The Ramayana Heritage & Suites',
+      roomType: 'Deluxe Temple View Room',
+      date: d,
+      totalInventory: total,
+      bookedCount: booked,
+      blockedCount: blocked,
+      availableCount: avail,
+      priceOverride: idx % 2 === 0 ? 5200 : 4800,
+      status: avail === 0 ? 'SOLD_OUT' : avail <= 2 ? 'FAST_FILLING' : 'AVAILABLE',
+      updatedBy: 'Lead Operator',
+    });
+  });
+  return items;
+}
+
+function getFallbackStories(): TravelStory[] {
+  return [
+    {
+      id: 'story-1',
+      title: 'A Devotee’s Awakening at Ayodhya Ram Janmabhoomi: Complete Darshan Guide',
+      slug: 'ayodhya-ram-janmabhoomi-darshan-guide',
+      authorName: 'Pandit Rameshwar Shastri',
+      authorRole: 'Spiritual Guide & Author',
+      excerpt: 'Experiencing the sacred divine sanctum of Shri Ram Lalla with seamless wheel-chair access and VIP morning Aarti passes.',
+      content: 'The morning chants echo across the holy Sarayu banks as millions of pilgrims gather with folded hands...',
+      destination: 'Ayodhya Dham',
+      coverImage: 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=1200&q=80',
+      tags: ['Ayodhya', 'Ram Mandir', 'Darshan Guide'],
+      readTimeMinutes: 6,
+      isPublished: true,
+      publishedAt: '2026-09-15T08:00:00Z',
+      likesCount: 142,
+    },
+    {
+      id: 'story-2',
+      title: 'Himalayan Bliss: Helicopter Yatra to Kedarnath and Badrinath Sanctums',
+      slug: 'kedarnath-badrinath-helicopter-yatra-experience',
+      authorName: 'Dr. Meenakshi Sundaram',
+      authorRole: 'Senior Pilgrim Traveler',
+      excerpt: 'How our family arranged senior-friendly helicopter transfers, medical oxygen escorts, and VIP priests for Kedarnath.',
+      content: 'Flying above the snow-clad peaks of Rudraprayag into the sacred valley of Baba Kedar was nothing short of a divine blessing...',
+      destination: 'Kedarnath & Badrinath',
+      coverImage: 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80',
+      tags: ['Char Dham', 'Kedarnath', 'Helicopter Yatra'],
+      readTimeMinutes: 8,
+      isPublished: true,
+      publishedAt: '2026-09-12T10:30:00Z',
+      likesCount: 238,
+    }
+  ];
 }
 
 export function generateWhatsAppLink(details: any) {

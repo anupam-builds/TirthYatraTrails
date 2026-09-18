@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api } from '../../services/api.js';
+import { api, mapPackageRow } from '../../services/api.js';
 import { Package } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
+import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
+import { supabase } from '../../lib/supabase.js';
 import {
   Compass,
   Plus,
@@ -16,6 +18,7 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  Radio,
 } from 'lucide-react';
 
 const CATEGORIES = ['Pilgrimage', 'Char Dham', 'Varanasi Ayodhya', 'South India', 'Jyotirlinga'];
@@ -25,6 +28,8 @@ export const AdminPackages: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [isRealtimeActive, setIsRealtimeActive] = useState(true);
+  const [lastSyncEvent, setLastSyncEvent] = useState<string | null>(null);
 
   // Toast Notification State
   const [toast, setToast] = useState<{
@@ -57,6 +62,36 @@ export const AdminPackages: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [selectedCategory, searchQuery]);
+
+  // Real-time multi-admin synchronization via static channel
+  useEffect(() => {
+    const channelName = 'public:content-sync-channel';
+    const channel = supabase.channel(channelName);
+
+    const handlePayload = (payload: any) => {
+      const eventType = payload.eventType || payload.event || 'UPDATE';
+      const raw = payload.new || payload.old;
+      if (!raw) return;
+
+      const mapped = mapPackageRow(raw);
+      setPackages((prev) => reconcileRealtimeList(prev, eventType, mapped));
+      setLastSyncEvent(`Realtime ${eventType}: "${mapped.title || mapped.id}" synced`);
+      setTimeout(() => setLastSyncEvent(null), 4000);
+    };
+
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'yatra_packages' }, handlePayload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, handlePayload)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsRealtimeActive(true);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -209,10 +244,10 @@ export const AdminPackages: React.FC = () => {
     try {
       if (editingPackage) {
         const updated = await api.updatePackage(editingPackage.id, packageData);
-        setPackages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        setPackages((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
       } else {
         const created = await api.createPackage(packageData);
-        setPackages((prev) => [created, ...prev]);
+        setPackages((prev) => reconcileRealtimeList(prev, 'INSERT', created));
       }
       setIsModalOpen(false);
     } catch (err) {
@@ -227,12 +262,23 @@ export const AdminPackages: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif">
-              <Compass className="w-6 h-6 text-orange-500 dark:text-orange-400" />
-              <span>Sacred Pilgrimage Packages Manager</span>
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Create, edit, and publish all-inclusive yatra itineraries.
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-serif">
+                <Compass className="w-6 h-6 text-orange-500 dark:text-orange-400" />
+                <span>Sacred Pilgrimage Packages Manager</span>
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Live Sync Active (Postgres WAL)
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
+              <span>Create, edit, and publish all-inclusive yatra itineraries. Multiplexed cross-admin sync.</span>
+              {lastSyncEvent && (
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium animate-fade-in">
+                  • {lastSyncEvent}
+                </span>
+              )}
             </p>
           </div>
 
