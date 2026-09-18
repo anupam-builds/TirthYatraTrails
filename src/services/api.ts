@@ -1,5 +1,5 @@
 import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 
@@ -531,6 +531,43 @@ export const api = {
       payload.transit_hubs = city.transitHubs || [];
     }
 
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    // 1. First attempt direct PostgREST REST fetch with explicit headers to eliminate 400 Bad Request
+    try {
+      const restUrl = `${SUPABASE_URL}/rest/v1/cities`;
+      const response = await fetch(restUrl, {
+        method: 'POST',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+          const mapped = mapCityRow(row);
+          localStore.createCity(mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+      } else {
+        const errText = await response.text();
+        console.warn(`Direct fetch createCity failed (${response.status}):`, errText);
+      }
+    } catch (fetchErr) {
+      console.warn('Direct fetch createCity network error:', fetchErr);
+    }
+
+    // 2. Secondary attempt via supabase-js insert with explicit header overrides
     try {
       const { data, error } = await supabase.from('cities').insert([payload]).select().maybeSingle();
       if (!error && data) {
@@ -541,8 +578,10 @@ export const api = {
         }
         return mapped;
       }
+
       const restRes = await supabaseRest<any[]>('cities', {
         method: 'POST',
+        headers: explicitHeaders,
         body: payload,
       });
       if (restRes.data && restRes.data.length > 0) {
