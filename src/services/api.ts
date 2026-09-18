@@ -36,9 +36,9 @@ export function getCandidateLeadIds(rawId: string | number): string[] {
     }
   } catch {}
 
-  // Strip prefixes like "inq-", "lead-", or "ttt-"
-  if (/^(inq|lead|ttt)[-_]/i.test(trimmed)) {
-    const stripped = trimmed.replace(/^(inq|lead|ttt)[-_]/i, '');
+  // Strip prefixes like "inq-", "lead-", "ttt-", or "htl-"
+  if (/^(inq|lead|ttt|htl)[-_]/i.test(trimmed)) {
+    const stripped = trimmed.replace(/^(inq|lead|ttt|htl)[-_]/i, '');
     if (stripped) candidates.add(stripped);
   }
 
@@ -52,15 +52,25 @@ export function getCandidateLeadIds(rawId: string | number): string[] {
 }
 
 /**
- * Resilient PATCH executor for Supabase tables ('leads' and 'inquiries').
- * Dynamically routes 'inq-*' IDs to 'inquiries' and 'TTT*' (or other) IDs to 'leads',
+ * Dynamic prefix router for table resolution based on entity ID prefix.
+ */
+export const getTargetTable = (id: string | number): 'inquiries' | 'hotels' | 'leads' => {
+  const str = String(id || '');
+  if (str.startsWith('inq')) return 'inquiries';
+  if (str.startsWith('htl')) return 'hotels';
+  return 'leads';
+};
+
+/**
+ * Resilient PATCH executor for Supabase tables ('leads', 'inquiries', and 'hotels').
+ * Dynamically routes IDs to target tables based on ID prefix ('inq' -> inquiries, 'htl' -> hotels, other -> leads),
  * strips malformed requests (invalid IDs or empty payloads),
  * tries candidate IDs across common ID columns ('id', 'lead_id', 'reference_id'),
  * logs exact Supabase/PostgREST error details on non-2xx responses,
  * and recovers gracefully.
  */
 export async function resilientPatchRecord(
-  tablesOrTarget: Array<'leads' | 'inquiries'> | 'leads' | 'inquiries' | undefined,
+  tablesOrTarget: Array<'leads' | 'inquiries' | 'hotels'> | 'leads' | 'inquiries' | 'hotels' | undefined,
   rawId: string | number,
   payload: Record<string, any>
 ): Promise<any | null> {
@@ -74,7 +84,7 @@ export async function resilientPatchRecord(
   }
 
   // Dynamic Table Resolver
-  const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+  const targetTable = getTargetTable(cleanId);
 
   // Sanitize payload: strip keys with undefined values or empty names
   const cleanPayload: Record<string, any> = {};
@@ -89,11 +99,12 @@ export async function resilientPatchRecord(
     return null;
   }
 
-  const tables: Array<'leads' | 'inquiries'> = Array.isArray(tablesOrTarget)
+  const allKnownTables: Array<'leads' | 'inquiries' | 'hotels'> = ['inquiries', 'hotels', 'leads'];
+  const tables: Array<'leads' | 'inquiries' | 'hotels'> = Array.isArray(tablesOrTarget)
     ? [targetTable, ...tablesOrTarget.filter((t) => t !== targetTable)]
     : tablesOrTarget
-    ? [tablesOrTarget, tablesOrTarget === 'inquiries' ? 'leads' : 'inquiries']
-    : [targetTable, targetTable === 'inquiries' ? 'leads' : 'inquiries'];
+    ? [tablesOrTarget, ...allKnownTables.filter((t) => t !== tablesOrTarget)]
+    : [targetTable, ...allKnownTables.filter((t) => t !== targetTable)];
 
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
   const explicitHeaders = {
@@ -466,7 +477,7 @@ export const api = {
       throw new Error('Invalid lead ID for assignment');
     }
 
-    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+    const targetTable = getTargetTable(id);
 
     let resolvedStaffName = staffName;
     if (!resolvedStaffName && staffId) {
@@ -530,7 +541,7 @@ export const api = {
       throw new Error('Invalid lead ID for status update');
     }
 
-    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+    const targetTable = getTargetTable(id);
 
     const rawStatus = String(status || '').trim();
     const formattedStatus = rawStatus.toLowerCase(); // e.g. 'contacted'
@@ -590,7 +601,7 @@ export const api = {
     staffId?: string,
     staffName?: string
   ): Promise<Inquiry> {
-    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+    const targetTable = getTargetTable(id);
     return this.updateLeadStatus(id, status, staffId, staffName);
   },
 
@@ -601,7 +612,7 @@ export const api = {
       throw new Error('Invalid inquiry ID');
     }
 
-    const targetTable = String(id).startsWith('inq') ? 'inquiries' : 'leads';
+    const targetTable = getTargetTable(id);
 
     try {
       const payload: Record<string, any> = {};
