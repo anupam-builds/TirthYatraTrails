@@ -290,6 +290,14 @@ export async function updateLeadOrInquiryStatus(
       payload.assigned_staff_name = (status as any).assignedStaffName;
       delete payload.assignedStaffName;
     }
+    if ('whatsapp_number' in status || 'whatsappNumber' in status || 'phone' in status || 'customerPhone' in status) {
+      const ph = (status as any).whatsapp_number || (status as any).phone || (status as any).whatsappNumber || (status as any).customerPhone || '';
+      payload.phone = ph;
+      payload.whatsapp_number = ph;
+    }
+    if ('metadata' in status) {
+      payload.metadata = (status as any).metadata;
+    }
   }
 
   if (actualAssignedStaffId !== undefined) {
@@ -565,27 +573,72 @@ export const api = {
 
   // Inquiries
   async submitInquiry(inquiryData: Partial<Inquiry>): Promise<Inquiry> {
+    const rawPhone =
+      (inquiryData as any).whatsapp_number ||
+      inquiryData.phone ||
+      (inquiryData as any).metadata?.whatsapp_number ||
+      inquiryData.whatsappNumber ||
+      inquiryData.customerPhone ||
+      '';
+
+    const customerName =
+      (inquiryData as any).fullName ||
+      (inquiryData as any).full_name ||
+      (inquiryData as any).customerName ||
+      'Pilgrim Devotee';
+
+    const customerEmail =
+      inquiryData.email ||
+      (inquiryData as any).customerEmail ||
+      '';
+
+    const checkInDate =
+      (inquiryData as any).checkInDate ||
+      (inquiryData as any).check_in_date ||
+      (inquiryData as any).startDate ||
+      new Date().toISOString().split('T')[0];
+
+    const structuredMetadata = {
+      whatsapp_number: rawPhone,
+      phone: rawPhone,
+      full_name: customerName,
+      email: customerEmail,
+      resident_state: (inquiryData as any).resident_state || (inquiryData as any).residentState || (inquiryData as any).userCity || inquiryData.userCity || '',
+      package_interest: inquiryData.title || (inquiryData as any).packageName || (inquiryData as any).referenceName || '',
+      start_date: checkInDate,
+      duration: (inquiryData as any).tourDuration || (inquiryData as any).duration || '',
+      adults: inquiryData.adults ?? inquiryData.guests ?? 1,
+      children: inquiryData.children ?? 0,
+      pickup_city: (inquiryData as any).pickupLocation || (inquiryData as any).pickup_city || (inquiryData as any).pickup_location || '',
+      drop_city: (inquiryData as any).dropoffLocation || (inquiryData as any).drop_city || (inquiryData as any).dropoff_location || '',
+      accommodation_tier: inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || (inquiryData as any).accommodationTier || '',
+      special_requests: (inquiryData as any).specialRequests || (inquiryData as any).special_requests || '',
+      ...((inquiryData as any).metadata || {}),
+    };
+
     try {
       const payload = {
-        title: inquiryData.title,
-        type: inquiryData.type,
-        full_name: (inquiryData as any).fullName || (inquiryData as any).full_name,
-        phone: inquiryData.phone,
-        email: inquiryData.email,
-        check_in_date: (inquiryData as any).checkInDate || (inquiryData as any).check_in_date,
-        guests: inquiryData.guests,
-        adults: inquiryData.adults,
-        children: inquiryData.children,
+        title: inquiryData.title || 'Pilgrimage Inquiry',
+        type: inquiryData.type || 'PACKAGE',
+        full_name: customerName,
+        phone: rawPhone,
+        whatsapp_number: rawPhone,
+        email: customerEmail,
+        check_in_date: checkInDate,
+        guests: inquiryData.guests ?? 1,
+        adults: inquiryData.adults ?? 1,
+        children: inquiryData.children ?? 0,
         child_ages: (inquiryData as any).childAges || (inquiryData as any).child_ages,
-        plan: inquiryData.plan,
+        plan: inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan,
         special_requests: (inquiryData as any).specialRequests || (inquiryData as any).special_requests,
         pickup_location: (inquiryData as any).pickupLocation || (inquiryData as any).pickup_location,
         dropoff_location: (inquiryData as any).dropoffLocation || (inquiryData as any).dropoff_location,
         user_id: (inquiryData as any).userId || (inquiryData as any).user_id,
-        status: inquiryData.status || 'NEW',
+        status: inquiryData.status || 'new',
         assigned_staff_id: (inquiryData as any).assignedStaffId,
         assigned_staff_name: (inquiryData as any).assignedStaffName,
         is_locked_for_staff: Boolean((inquiryData as any).isLockedForStaff),
+        metadata: structuredMetadata,
       };
       const { data, error } = await supabase.from('inquiries').insert([payload]).select().single();
       if (error) throw new Error(error.message);
@@ -593,7 +646,15 @@ export const api = {
       broadcastNewInquiry(mapped);
       return mapped;
     } catch {
-      const fb = localStore.submitInquiry(inquiryData);
+      const fb = localStore.submitInquiry({
+        ...inquiryData,
+        fullName: customerName,
+        phone: rawPhone,
+        whatsapp_number: rawPhone,
+        whatsappNumber: rawPhone,
+        customerPhone: rawPhone,
+        metadata: structuredMetadata,
+      });
       broadcastNewInquiry(fb);
       return fb;
     }
@@ -790,6 +851,14 @@ export const api = {
       if (updates.notes !== undefined) payload.notes = updates.notes;
       if (updates.specialRequests !== undefined) payload.special_requests = updates.specialRequests;
       if (updates.title !== undefined) payload.title = updates.title;
+      if (updates.phone !== undefined || (updates as any).whatsapp_number !== undefined || updates.whatsappNumber !== undefined || updates.customerPhone !== undefined) {
+        const ph = (updates as any).whatsapp_number || updates.phone || updates.whatsappNumber || updates.customerPhone || '';
+        payload.phone = ph;
+        payload.whatsapp_number = ph;
+      }
+      if ((updates as any).metadata !== undefined) {
+        payload.metadata = (updates as any).metadata;
+      }
 
       const data = await resilientPatchRecord(targetTable, cleanId, payload);
 
@@ -2029,6 +2098,8 @@ export function mapInquiryRow(row: any): Inquiry {
     whatsappNumber: row.whatsapp_number || row.whatsappNumber || phone,
     customerPhone: phone,
     phone: phone,
+    whatsapp_number: row.whatsapp_number || row.whatsappNumber || phone,
+    metadata: row.metadata ? (typeof row.metadata === 'string' ? (() => { try { return JSON.parse(row.metadata); } catch { return row.metadata; } })() : row.metadata) : undefined,
     userCity: row.user_city || row.userCity,
     checkInDate: row.check_in_date || row.checkInDate || new Date().toISOString().split('T')[0],
     guests: Number(row.guests ?? 1),
@@ -2042,7 +2113,7 @@ export function mapInquiryRow(row: any): Inquiry {
     pickupLocation: row.pickup_location || row.pickupLocation,
     dropoffLocation: row.dropoff_location || row.dropoffLocation,
     specialRequests: row.special_requests || row.specialRequests,
-    status: row.status || 'NEW',
+    status: (row.status ? (row.status.toUpperCase() as any) : 'NEW'),
     isResolved: Boolean(row.is_resolved ?? row.isResolved ?? (row.status === 'CLOSED' || row.status === 'CONFIRMED')),
     assignedStaffId: row.assigned_staff_id || row.assignedStaffId || undefined,
     assignedStaffName: row.assigned_staff_name || row.assignedStaffName || undefined,

@@ -126,26 +126,78 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
 
     try {
       const totalGuests = adults + childAges.length;
+      const chosenPlan = planChosen || defaultPlan;
 
-      // 1. Submit to database store
+      const formData = {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        whatsappNumber: whatsappNumber.trim(),
+        phone: whatsappNumber.trim(),
+        residentState: userCity.trim(),
+        packageInterest: title,
+        startDate: checkInDate,
+        duration: '',
+        adults: adults,
+        children: childAges.length,
+        pickupCity: pickupLocation.trim(),
+        dropCity: dropoffLocation.trim(),
+        sameAsPickup: false,
+        accommodationTier: chosenPlan,
+        specialRequests: specialRequests.trim(),
+      };
+
+      const phoneVal = formData.whatsappNumber || formData.phone || '';
+
+      const submissionPayload = {
+        full_name: formData.fullName,
+        email: formData.email,
+        phone: phoneVal,
+        whatsapp_number: phoneVal,
+        status: 'new',
+        metadata: {
+          whatsapp_number: phoneVal,
+          resident_state: formData.residentState,
+          package_interest: formData.packageInterest,
+          start_date: formData.startDate,
+          duration: formData.duration,
+          adults: Number(formData.adults) || 1,
+          children: Number(formData.children) || 0,
+          pickup_city: formData.pickupCity,
+          drop_city: formData.sameAsPickup ? formData.pickupCity : formData.dropCity,
+          accommodation_tier: formData.accommodationTier,
+          special_requests: formData.specialRequests
+        }
+      };
+
+      // 1. Submit to database store with explicit whatsapp_number, phone, and metadata
       await api.submitInquiry({
+        ...submissionPayload,
         userId: customerUser?.id,
         type,
         referenceId,
         referenceName: title,
-        fullName: fullName.trim(),
-        email: email.trim(),
-        whatsappNumber: whatsappNumber.trim(),
-        userCity: userCity.trim(),
-        pickupLocation: pickupLocation.trim(),
-        dropoffLocation: dropoffLocation.trim(),
-        checkInDate,
+        title,
+        fullName: submissionPayload.full_name,
+        customerName: submissionPayload.full_name,
+        email: submissionPayload.email,
+        customerEmail: submissionPayload.email,
+        phone: submissionPayload.phone,
+        whatsapp_number: submissionPayload.whatsapp_number,
+        whatsappNumber: submissionPayload.whatsapp_number,
+        customerPhone: submissionPayload.phone,
+        userCity: submissionPayload.metadata.resident_state,
+        pickupLocation: submissionPayload.metadata.pickup_city,
+        dropoffLocation: submissionPayload.metadata.drop_city,
+        checkInDate: submissionPayload.metadata.start_date,
         guests: totalGuests,
-        adults: adults,
-        children: childAges.length,
+        adults: submissionPayload.metadata.adults,
+        children: submissionPayload.metadata.children,
         childAges: JSON.stringify(childAges),
-        planChosen: planChosen || defaultPlan,
-        specialRequests: specialRequests.trim(),
+        planChosen: chosenPlan,
+        selectedPlan: chosenPlan,
+        plan: chosenPlan,
+        accommodationTier: chosenPlan,
+        specialRequests: submissionPayload.metadata.special_requests,
       });
 
       // 2. Generate WhatsApp link with child ages

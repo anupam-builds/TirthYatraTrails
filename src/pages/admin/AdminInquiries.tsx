@@ -663,8 +663,9 @@ export const AdminInquiries: React.FC = () => {
                                   {inq.customerName || inq.fullName}
                                 </div>
                                 <div className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
-                                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                                  <span>{inq.customerPhone || inq.whatsappNumber}</span>
+                                  <span>
+                                    📞 {(inq as any).whatsapp_number || inq.phone || (inq as any).metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || 'No phone'}
+                                  </span>
                                 </div>
                                 {inq.customerEmail && (
                                   <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[170px]">

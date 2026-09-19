@@ -38,7 +38,9 @@ import {
   ChevronUp,
   Send,
   Building,
+  Eye,
 } from 'lucide-react';
+import { LeadDetailsModal } from '../LeadDetailsModal.js';
 
 interface LeadTableViewProps {
   inquiries: Inquiry[];
@@ -75,6 +77,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [staffFilter, setStaffFilter] = useState<string>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedDetailedLead, setSelectedDetailedLead] = useState<Inquiry | null>(null);
 
   // Accordion for inline notes
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
@@ -196,9 +199,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     // Search query matching Lead ID, name, phone, or city
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
+      const lead = inq as any;
       const leadId = getLeadId(inq).toLowerCase();
       const name = (inq.customerName || inq.fullName || '').toLowerCase();
-      const phone = (inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
+      const phone = (lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
       const city = (inq.userCity || '').toLowerCase();
       const title = (inq.title || inq.referenceName || '').toLowerCase();
       const tagsStr = (inq.tags || []).join(' ').toLowerCase();
@@ -476,13 +480,21 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                 </tr>
               ) : (
                 filteredInquiries.map((inq) => {
+                  const lead = inq as any;
                   const leadId = getLeadId(inq);
                   const paxStr = formatPaxCount(inq);
                   const statusCfg = CRM_STATUS_CONFIG[inq.status as InquiryStatus] || CRM_STATUS_CONFIG.NEW;
                   const isLocked = Boolean(inq.isLockedForStaff || inq.status === 'CLOSED');
                   const isNotesExpanded = expandedNotes[inq.id] || false;
                   const notesCount = inq.followUpNotes?.length || 0;
-                  const hasPhone = Boolean(inq.customerPhone || inq.whatsappNumber);
+                  const phoneCandidate =
+                    lead.whatsapp_number ||
+                    lead.phone ||
+                    lead.metadata?.whatsapp_number ||
+                    inq.customerPhone ||
+                    inq.whatsappNumber ||
+                    '';
+                  const hasPhone = Boolean(phoneCandidate && phoneCandidate !== 'No phone');
 
                   return (
                     <React.Fragment key={inq.id}>
@@ -490,7 +502,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         {/* 1. Lead ID & Date */}
                         <td className="py-4 px-4 align-top">
                           <div className="space-y-1">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-mono font-black text-orange-600 dark:text-orange-400 text-xs tracking-tight bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800/80">
                                 {leadId}
                               </span>
@@ -504,6 +516,15 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 ) : (
                                   <Copy className="w-3 h-3" />
                                 )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDetailedLead(inq)}
+                                title="Inspect Detailed Lead Profile"
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-100 hover:bg-orange-600 hover:text-white dark:bg-orange-950/60 dark:hover:bg-orange-600 text-orange-700 dark:text-orange-400 text-[10px] font-bold border border-orange-300 dark:border-orange-800/80 transition-all cursor-pointer shadow-2xs"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Detailed</span>
                               </button>
                             </div>
                             <div className="text-[11px] text-slate-400 dark:text-slate-500 font-medium whitespace-nowrap">
@@ -561,9 +582,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               )}
                             </div>
                             <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
-                              <span className="flex items-center gap-1">
-                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{inq.customerPhone || inq.whatsappNumber || 'No phone'}</span>
+                              <span>
+                                📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || 'No phone'}
                               </span>
                               {hasPhone && (
                                 <button
@@ -670,6 +690,17 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         {/* 9. Actions */}
                         <td className="py-4 px-4 align-top text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Detailed Inspection Drawer */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDetailedLead(inq)}
+                              title="Detailed Yatra Lead Inspection"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100/80 dark:bg-orange-950/60 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white border border-orange-300 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Detailed</span>
+                            </button>
+
                             {/* Quick Edit modal */}
                             <button
                               onClick={() => onEditInquiry(inq)}
@@ -809,6 +840,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Slide-over Detailed Drawer / Modal */}
+      <LeadDetailsModal
+        lead={selectedDetailedLead}
+        onClose={() => setSelectedDetailedLead(null)}
+      />
     </div>
   );
 };

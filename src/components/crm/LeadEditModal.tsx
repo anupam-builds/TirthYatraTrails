@@ -176,14 +176,37 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
       const adultsCount = Number(formData.adults || 2);
       const childrenCount = Number(formData.children || 0);
 
+      const rawPhone = (formData.customerPhone || formData.whatsappNumber || (formData as any).phone || '').trim();
+      const existingMeta = (inquiry as any).metadata || {};
+
       const updates: Partial<Inquiry> = {
         ...formData,
         fullName: formData.customerName,
+        customerName: formData.customerName,
         email: formData.customerEmail,
-        whatsappNumber: formData.customerPhone,
+        customerEmail: formData.customerEmail,
+        phone: rawPhone,
+        whatsapp_number: rawPhone,
+        whatsappNumber: rawPhone,
+        customerPhone: rawPhone,
         guests: adultsCount + childrenCount,
         adults: adultsCount,
         children: childrenCount,
+        metadata: {
+          ...existingMeta,
+          whatsapp_number: rawPhone,
+          phone: rawPhone,
+          full_name: formData.customerName,
+          email: formData.customerEmail,
+          package_interest: formData.title,
+          start_date: formData.checkInDate,
+          adults: adultsCount,
+          children: childrenCount,
+          pickup_city: formData.pickupLocation,
+          drop_city: formData.dropoffLocation,
+          accommodation_tier: formData.plan || formData.selectedPlan,
+          special_requests: formData.specialRequests,
+        },
       };
 
       // Ensure staff members cannot modify staff assignment fields

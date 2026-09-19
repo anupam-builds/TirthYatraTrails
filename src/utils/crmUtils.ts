@@ -209,7 +209,14 @@ export function generateCustomerWhatsAppLink(
   inquiry: Partial<Inquiry>,
   staffName?: string
 ): { url: string; phone: string; message: string } | null {
-  const rawPhone = inquiry.customerPhone || inquiry.whatsappNumber || (inquiry as any).phone || '';
+  const lead = inquiry as any;
+  const rawPhone =
+    lead.whatsapp_number ||
+    lead.phone ||
+    lead.metadata?.whatsapp_number ||
+    inquiry.customerPhone ||
+    inquiry.whatsappNumber ||
+    '';
   const cleanedPhone = cleanPhoneNumberForWhatsApp(rawPhone);
   if (!cleanedPhone) return null;
 

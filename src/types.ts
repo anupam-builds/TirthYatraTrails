@@ -261,6 +261,8 @@ export interface Inquiry {
   whatsappNumber: string;
   customerPhone: string;
   phone?: string;
+  whatsapp_number?: string;
+  metadata?: Record<string, any>;
   userCity?: string;
   checkInDate: string;
   guests: number;
@@ -274,7 +276,7 @@ export interface Inquiry {
   pickupLocation?: string;
   dropoffLocation?: string;
   specialRequests?: string;
-  status: InquiryStatus;
+  status: InquiryStatus | string;
   isResolved: boolean;
   assignedStaffId?: string;
   assignedStaffName?: string;

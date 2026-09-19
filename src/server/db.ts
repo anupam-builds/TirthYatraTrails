@@ -700,7 +700,13 @@ class DatabaseStore {
   public createInquiry(inquiryData: any) {
     const fullName = inquiryData.fullName || inquiryData.customerName || 'Devotee';
     const email = inquiryData.email || inquiryData.customerEmail || '';
-    const phone = inquiryData.whatsappNumber || inquiryData.customerPhone || '';
+    const phone =
+      inquiryData.whatsapp_number ||
+      inquiryData.phone ||
+      inquiryData.metadata?.whatsapp_number ||
+      inquiryData.whatsappNumber ||
+      inquiryData.customerPhone ||
+      '';
     const title = inquiryData.referenceName || inquiryData.title || 'Divine Yatra Stay';
 
     let childAgesStr = '';
@@ -747,6 +753,25 @@ class DatabaseStore {
       customerEmail: email,
       whatsappNumber: phone,
       customerPhone: phone,
+      phone: phone,
+      whatsapp_number: phone,
+      metadata: {
+        whatsapp_number: phone,
+        phone: phone,
+        full_name: fullName,
+        email: email,
+        resident_state: inquiryData.resident_state || inquiryData.residentState || inquiryData.userCity || 'New Delhi',
+        package_interest: title,
+        start_date: inquiryData.checkInDate || '',
+        duration: inquiryData.tourDuration || '',
+        adults: adultsCount,
+        children: childrenCount,
+        pickup_city: inquiryData.pickupLocation || '',
+        drop_city: inquiryData.dropoffLocation || '',
+        accommodation_tier: inquiryData.planChosen || inquiryData.selectedPlan || inquiryData.accommodationTier || '3 Star Hotel',
+        special_requests: inquiryData.specialRequests || '',
+        ...(inquiryData.metadata || {}),
+      },
       userCity: inquiryData.userCity || 'New Delhi',
       checkInDate: inquiryData.checkInDate || '',
       guests: totalGuests,

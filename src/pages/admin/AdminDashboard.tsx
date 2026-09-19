@@ -21,7 +21,9 @@ import {
   ChevronRight,
   ShieldCheck,
   ExternalLink,
+  Eye,
 } from 'lucide-react';
+import { LeadDetailsModal } from '../../components/LeadDetailsModal.js';
 
 export const AdminDashboard: React.FC = () => {
   const { navigate } = useRouter();
@@ -33,6 +35,7 @@ export const AdminDashboard: React.FC = () => {
     newInquiries: 0,
   });
   const [recentInquiries, setRecentInquiries] = useState<Inquiry[]>([]);
+  const [selectedDetailedLead, setSelectedDetailedLead] = useState<Inquiry | null>(null);
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -279,8 +282,9 @@ export const AdminDashboard: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {recentInquiries.map((inq) => {
+                  const lead = inq as any;
                   const custName = inq.fullName || inq.customerName || 'Devotee';
-                  const custPhone = inq.phone || inq.customerPhone || '';
+                  const custPhone = lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || '';
                   const custEmail = inq.email || inq.customerEmail || '';
                   const selPlan = inq.plan || inq.selectedPlan || 'Standard';
 
@@ -294,8 +298,10 @@ export const AdminDashboard: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
-                          <span>{custPhone}</span>
-                          {Boolean(custPhone) && (
+                          <span>
+                            📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || 'No phone'}
+                          </span>
+                          {Boolean(custPhone && custPhone !== 'No phone') && (
                             <button
                               type="button"
                               onClick={() => handleOpenWhatsApp(inq)}
@@ -348,14 +354,25 @@ export const AdminDashboard: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3.5 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenWhatsApp(inq)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs cursor-pointer"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          <span>WhatsApp</span>
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDetailedLead(inq)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-orange-100 hover:bg-orange-600 hover:text-white dark:bg-orange-950/60 dark:hover:bg-orange-600 text-orange-700 dark:text-orange-300 rounded-lg text-[11px] font-bold border border-orange-300 dark:border-orange-800 transition-colors shadow-2xs cursor-pointer"
+                            title="View Full Lead Details"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Detailed</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWhatsApp(inq)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs cursor-pointer"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>WhatsApp</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -424,6 +441,12 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Detailed Lead Drawer */}
+      <LeadDetailsModal
+        lead={selectedDetailedLead}
+        onClose={() => setSelectedDetailedLead(null)}
+      />
     </AdminLayout>
   );
 };

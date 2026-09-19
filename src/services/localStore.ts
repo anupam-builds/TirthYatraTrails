@@ -471,7 +471,13 @@ export const localStore = {
     const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
     const fullName = inquiryData.fullName || inquiryData.customerName || 'Devotee';
     const email = inquiryData.email || inquiryData.customerEmail || '';
-    const phone = inquiryData.whatsappNumber || inquiryData.customerPhone || '';
+    const phone =
+      (inquiryData as any).whatsapp_number ||
+      inquiryData.phone ||
+      (inquiryData as any).metadata?.whatsapp_number ||
+      inquiryData.whatsappNumber ||
+      inquiryData.customerPhone ||
+      '';
     const title = inquiryData.referenceName || inquiryData.title || 'Divine Yatra Stay';
 
     const existingNums = inquiries
@@ -492,6 +498,28 @@ export const localStore = {
     const assignedStaffId = inquiryData.assignedStaffId || defaultStaff?.id || 'stf-1';
     const assignedStaffName = inquiryData.assignedStaffName || defaultStaff?.name || 'Priya Sharma';
 
+    const adultsCount = Number(inquiryData.adults) || 2;
+    const childrenCount = Number(inquiryData.children) || 0;
+    const totalGuests = Number(inquiryData.guests) || (adultsCount + childrenCount);
+
+    const structuredMetadata = {
+      whatsapp_number: phone,
+      phone: phone,
+      full_name: fullName,
+      email: email,
+      resident_state: (inquiryData as any).resident_state || (inquiryData as any).residentState || inquiryData.userCity || 'New Delhi',
+      package_interest: title,
+      start_date: inquiryData.checkInDate || '',
+      duration: inquiryData.tourDuration || '',
+      adults: adultsCount,
+      children: childrenCount,
+      pickup_city: inquiryData.pickupLocation || '',
+      drop_city: inquiryData.dropoffLocation || '',
+      accommodation_tier: inquiryData.planChosen || inquiryData.selectedPlan || inquiryData.accommodationTier || '3 Star Hotel',
+      special_requests: inquiryData.specialRequests || '',
+      ...((inquiryData as any).metadata || {}),
+    };
+
     const newInquiry: Inquiry = {
       id: `inq-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       leadId: nextLeadId,
@@ -506,11 +534,14 @@ export const localStore = {
       customerEmail: email,
       whatsappNumber: phone,
       customerPhone: phone,
+      phone: phone,
+      whatsapp_number: phone,
+      metadata: structuredMetadata,
       userCity: inquiryData.userCity || 'New Delhi',
       checkInDate: inquiryData.checkInDate || '',
-      guests: Number(inquiryData.guests) || 2,
-      adults: Number(inquiryData.adults) || 2,
-      children: Number(inquiryData.children) || 0,
+      guests: totalGuests,
+      adults: adultsCount,
+      children: childrenCount,
       childAges: inquiryData.childAges ? String(inquiryData.childAges) : undefined,
       planChosen: inquiryData.planChosen || inquiryData.selectedPlan || '',
       selectedPlan: inquiryData.selectedPlan || inquiryData.planChosen || '',
@@ -553,6 +584,25 @@ export const localStore = {
       isResolved,
       updatedAt: new Date().toISOString(),
     };
+
+    if (updates.phone !== undefined || (updates as any).whatsapp_number !== undefined || updates.whatsappNumber !== undefined || updates.customerPhone !== undefined) {
+      const ph = (updates as any).whatsapp_number || updates.phone || updates.whatsappNumber || updates.customerPhone || '';
+      merged.phone = ph;
+      merged.whatsappNumber = ph;
+      merged.customerPhone = ph;
+      merged.whatsapp_number = ph;
+    }
+
+    if ((updates as any).metadata !== undefined || (current as any).metadata !== undefined) {
+      merged.metadata = {
+        ...((current as any).metadata || {}),
+        ...((updates as any).metadata || {}),
+      };
+      if (merged.phone) {
+        merged.metadata.phone = merged.phone;
+        merged.metadata.whatsapp_number = merged.phone;
+      }
+    }
 
     if (newStatus === 'CLOSED') {
       merged.isLockedForStaff = true;

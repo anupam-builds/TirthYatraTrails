@@ -263,30 +263,76 @@ export const EnquiryPage: React.FC = () => {
         specialRequests ? `Special Requests: ${specialRequests}` : '',
       ].filter(Boolean).join(' | ');
 
+      const formData = {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        whatsappNumber: whatsappNumber.trim(),
+        phone: whatsappNumber.trim(),
+        residentState: userCity.trim(),
+        packageInterest: yatraTitle,
+        startDate: tourStartDate,
+        duration: tourDuration,
+        adults: adults,
+        children: children,
+        pickupCity: pickupCity.trim(),
+        dropCity: dropCity.trim(),
+        sameAsPickup: sameDropCity,
+        accommodationTier: accommodationTier,
+        specialRequests: fullNotes,
+      };
+
+      const phoneVal = formData.whatsappNumber || formData.phone || '';
+
+      const submissionPayload = {
+        full_name: formData.fullName,
+        email: formData.email,
+        phone: phoneVal,
+        whatsapp_number: phoneVal,
+        status: 'new',
+        metadata: {
+          whatsapp_number: phoneVal,
+          resident_state: formData.residentState,
+          package_interest: formData.packageInterest,
+          start_date: formData.startDate,
+          duration: formData.duration,
+          adults: Number(formData.adults) || 1,
+          children: Number(formData.children) || 0,
+          pickup_city: formData.pickupCity,
+          drop_city: formData.sameAsPickup ? formData.pickupCity : formData.dropCity,
+          accommodation_tier: formData.accommodationTier,
+          special_requests: formData.specialRequests
+        }
+      };
+
       // 1. Submit to API backend and persistent store
       const createdInquiry = await api.submitInquiry({
+        ...submissionPayload,
         userId: customerUser?.id,
         type: 'PACKAGE',
         referenceId: selectedPackageId || 'custom-pkg',
         referenceName: yatraTitle,
         title: yatraTitle,
-        fullName: fullName.trim(),
-        customerName: fullName.trim(),
-        email: email.trim(),
-        customerEmail: email.trim(),
-        whatsappNumber: whatsappNumber.trim(),
-        customerPhone: whatsappNumber.trim(),
-        userCity: userCity.trim(),
-        pickupLocation: pickupCity.trim(),
-        dropoffLocation: dropCity.trim(),
-        checkInDate: tourStartDate,
-        guests: totalGuests,
-        adults: adults,
-        children: children,
+        fullName: submissionPayload.full_name,
+        customerName: submissionPayload.full_name,
+        email: submissionPayload.email,
+        customerEmail: submissionPayload.email,
+        phone: submissionPayload.phone,
+        whatsapp_number: submissionPayload.whatsapp_number,
+        whatsappNumber: submissionPayload.whatsapp_number,
+        customerPhone: submissionPayload.phone,
+        userCity: submissionPayload.metadata.resident_state,
+        pickupLocation: submissionPayload.metadata.pickup_city,
+        dropoffLocation: submissionPayload.metadata.drop_city,
+        checkInDate: submissionPayload.metadata.start_date,
+        guests: submissionPayload.metadata.adults + submissionPayload.metadata.children,
+        adults: submissionPayload.metadata.adults,
+        children: submissionPayload.metadata.children,
         childAges: JSON.stringify(childAges),
-        planChosen: accommodationTier,
-        selectedPlan: accommodationTier,
-        specialRequests: fullNotes,
+        plan: submissionPayload.metadata.accommodation_tier,
+        planChosen: submissionPayload.metadata.accommodation_tier,
+        selectedPlan: submissionPayload.metadata.accommodation_tier,
+        accommodationTier: submissionPayload.metadata.accommodation_tier,
+        specialRequests: submissionPayload.metadata.special_requests,
       });
 
       // 2. Generate WhatsApp direct message link
