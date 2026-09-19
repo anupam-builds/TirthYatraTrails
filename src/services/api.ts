@@ -418,6 +418,77 @@ export async function setStaffOnlineStatus(id: string, online: boolean): Promise
   }
 }
 
+/**
+ * Submits a customer inquiry to the Supabase 'inquiries' table with top-level
+ * contact fields ('full_name', 'email', 'phone', 'whatsapp_number', 'status: new')
+ * and rich JSON 'metadata'.
+ */
+export async function submitCustomerInquiry(formData: any) {
+  const phoneVal = formData.whatsappNumber || formData.phone || formData.whatsapp_number || '';
+  const fullNameVal = formData.fullName || formData.full_name || formData.customerName || '';
+  const emailVal = formData.email || formData.customerEmail || '';
+  const pickupCityVal = formData.pickupCity || formData.pickup_city || formData.pickupLocation || '';
+  const dropCityVal = formData.sameAsPickup
+    ? pickupCityVal
+    : (formData.dropCity || formData.drop_city || formData.dropoffLocation || '');
+  const packageInterestVal = formData.packageInterest || formData.package_interest || formData.title || formData.packageName || '';
+  const startDateVal = formData.startDate || formData.start_date || formData.checkInDate || '';
+  const durationVal = formData.duration || formData.tourDuration || '';
+  const adultsVal = Number(formData.adults) || 1;
+  const childrenVal = Number(formData.children) || 0;
+  const accommodationTierVal = formData.accommodationTier || formData.accommodation_tier || formData.plan || formData.planChosen || '';
+  const specialRequestsVal = formData.specialRequests || formData.special_requests || '';
+
+  const payload = {
+    full_name: fullNameVal,
+    email: emailVal,
+    phone: phoneVal,
+    whatsapp_number: phoneVal,
+    status: 'new',
+    metadata: {
+      whatsapp_number: phoneVal,
+      resident_state: formData.residentState || formData.resident_state || formData.userCity || '',
+      package_interest: packageInterestVal,
+      start_date: startDateVal,
+      duration: durationVal,
+      adults: adultsVal,
+      children: childrenVal,
+      pickup_city: pickupCityVal,
+      drop_city: dropCityVal,
+      accommodation_tier: accommodationTierVal,
+      special_requests: specialRequestsVal,
+    },
+  };
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`POST inquiries failed (${res.status}):`, errText);
+    throw new Error(`Inquiry submission failed: ${res.status}`);
+  }
+
+  const result = await res.json();
+  const createdRow = Array.isArray(result) ? result[0] : result;
+  if (createdRow) {
+    try {
+      const mapped = mapInquiryRow(createdRow);
+      broadcastNewInquiry(mapped);
+      localStore.submitInquiry(mapped);
+    } catch {}
+  }
+  return result;
+}
+
 export const api = {
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
@@ -582,12 +653,16 @@ export const api = {
   },
 
   // Inquiries
+  async submitCustomerInquiry(formData: any) {
+    return submitCustomerInquiry(formData);
+  },
+
   async submitInquiry(inquiryData: Partial<Inquiry>): Promise<Inquiry> {
-    const rawPhone =
+    const phoneVal =
+      (inquiryData as any).whatsappNumber ||
       (inquiryData as any).whatsapp_number ||
       inquiryData.phone ||
       (inquiryData as any).metadata?.whatsapp_number ||
-      inquiryData.whatsappNumber ||
       inquiryData.customerPhone ||
       '';
 
@@ -603,66 +678,85 @@ export const api = {
       '';
 
     const checkInDate =
+      (inquiryData as any).startDate ||
       (inquiryData as any).checkInDate ||
       (inquiryData as any).check_in_date ||
-      (inquiryData as any).startDate ||
       new Date().toISOString().split('T')[0];
 
     const structuredMetadata = {
-      whatsapp_number: rawPhone,
-      phone: rawPhone,
-      full_name: customerName,
-      email: customerEmail,
-      resident_state: (inquiryData as any).resident_state || (inquiryData as any).residentState || (inquiryData as any).userCity || inquiryData.userCity || '',
-      package_interest: inquiryData.title || (inquiryData as any).packageName || (inquiryData as any).referenceName || '',
+      whatsapp_number: phoneVal,
+      resident_state: (inquiryData as any).residentState || (inquiryData as any).resident_state || (inquiryData as any).userCity || inquiryData.userCity || '',
+      package_interest: (inquiryData as any).packageInterest || (inquiryData as any).package_interest || inquiryData.title || (inquiryData as any).packageName || (inquiryData as any).referenceName || '',
       start_date: checkInDate,
-      duration: (inquiryData as any).tourDuration || (inquiryData as any).duration || '',
-      adults: inquiryData.adults ?? inquiryData.guests ?? 1,
-      children: inquiryData.children ?? 0,
-      pickup_city: (inquiryData as any).pickupLocation || (inquiryData as any).pickup_city || (inquiryData as any).pickup_location || '',
-      drop_city: (inquiryData as any).dropoffLocation || (inquiryData as any).drop_city || (inquiryData as any).dropoff_location || '',
-      accommodation_tier: inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || (inquiryData as any).accommodationTier || '',
+      duration: (inquiryData as any).duration || (inquiryData as any).tourDuration || '',
+      adults: Number(inquiryData.adults ?? (inquiryData as any).metadata?.adults ?? inquiryData.guests ?? 1) || 1,
+      children: Number(inquiryData.children ?? (inquiryData as any).metadata?.children ?? 0) || 0,
+      pickup_city: (inquiryData as any).pickupCity || (inquiryData as any).pickupLocation || (inquiryData as any).pickup_city || (inquiryData as any).pickup_location || '',
+      drop_city: (inquiryData as any).sameAsPickup
+        ? ((inquiryData as any).pickupCity || (inquiryData as any).pickupLocation || '')
+        : ((inquiryData as any).dropCity || (inquiryData as any).dropoffLocation || (inquiryData as any).drop_city || (inquiryData as any).dropoff_location || ''),
+      accommodation_tier: (inquiryData as any).accommodationTier || (inquiryData as any).accommodation_tier || inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || '',
       special_requests: (inquiryData as any).specialRequests || (inquiryData as any).special_requests || '',
       ...((inquiryData as any).metadata || {}),
     };
 
     try {
       const payload = {
-        title: inquiryData.title || 'Pilgrimage Inquiry',
+        title: inquiryData.title || structuredMetadata.package_interest || 'Pilgrimage Inquiry',
         type: inquiryData.type || 'PACKAGE',
         full_name: customerName,
-        phone: rawPhone,
-        whatsapp_number: rawPhone,
+        phone: phoneVal,
+        whatsapp_number: phoneVal,
         email: customerEmail,
         check_in_date: checkInDate,
-        guests: inquiryData.guests ?? 1,
-        adults: inquiryData.adults ?? 1,
-        children: inquiryData.children ?? 0,
+        guests: structuredMetadata.adults + structuredMetadata.children,
+        adults: structuredMetadata.adults,
+        children: structuredMetadata.children,
         child_ages: (inquiryData as any).childAges || (inquiryData as any).child_ages,
-        plan: inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan,
-        special_requests: (inquiryData as any).specialRequests || (inquiryData as any).special_requests,
-        pickup_location: (inquiryData as any).pickupLocation || (inquiryData as any).pickup_location,
-        dropoff_location: (inquiryData as any).dropoffLocation || (inquiryData as any).dropoff_location,
+        plan: structuredMetadata.accommodation_tier,
+        special_requests: structuredMetadata.special_requests,
+        pickup_location: structuredMetadata.pickup_city,
+        dropoff_location: structuredMetadata.drop_city,
         user_id: (inquiryData as any).userId || (inquiryData as any).user_id,
-        status: inquiryData.status || 'new',
+        status: 'new',
         assigned_staff_id: (inquiryData as any).assignedStaffId,
         assigned_staff_name: (inquiryData as any).assignedStaffName,
         is_locked_for_staff: Boolean((inquiryData as any).isLockedForStaff),
         metadata: structuredMetadata,
       };
-      const { data, error } = await supabase.from('inquiries').insert([payload]).select().single();
-      if (error) throw new Error(error.message);
-      const mapped = mapInquiryRow(data);
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`POST inquiries failed (${res.status}):`, errText);
+        throw new Error(`Inquiry submission failed: ${res.status}`);
+      }
+
+      const resJson = await res.json();
+      const createdRow = Array.isArray(resJson) ? resJson[0] : resJson;
+      const mapped = mapInquiryRow(createdRow);
       broadcastNewInquiry(mapped);
+      localStore.submitInquiry(mapped);
       return mapped;
-    } catch {
+    } catch (err: any) {
+      console.error('⚠️ [submitInquiry] Supabase insert failed, falling back to localStore:', err);
       const fb = localStore.submitInquiry({
         ...inquiryData,
         fullName: customerName,
-        phone: rawPhone,
-        whatsapp_number: rawPhone,
-        whatsappNumber: rawPhone,
-        customerPhone: rawPhone,
+        phone: phoneVal,
+        whatsapp_number: phoneVal,
+        whatsappNumber: phoneVal,
+        customerPhone: phoneVal,
         metadata: structuredMetadata,
       });
       broadcastNewInquiry(fb);
