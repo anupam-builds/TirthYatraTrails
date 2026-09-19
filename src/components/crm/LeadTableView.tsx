@@ -202,7 +202,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       const lead = inq as any;
       const leadId = getLeadId(inq).toLowerCase();
       const name = (inq.customerName || inq.fullName || '').toLowerCase();
-      const phone = (lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
+      const phone = (lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
       const city = (inq.userCity || '').toLowerCase();
       const title = (inq.title || inq.referenceName || '').toLowerCase();
       const tagsStr = (inq.tags || []).join(' ').toLowerCase();
@@ -491,6 +491,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     lead.whatsapp_number ||
                     lead.phone ||
                     lead.metadata?.whatsapp_number ||
+                    lead.metadata?.phone ||
                     inq.customerPhone ||
                     inq.whatsappNumber ||
                     '';
@@ -540,13 +541,23 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               value={inq.assignedStaffId || ''}
                               onChange={async (e) => {
                                 const rawVal = e.target.value;
+                                console.log('🎯 [LeadTableView] Assignment dropdown changed:', {
+                                  leadId: inq.id,
+                                  selectedValue: rawVal,
+                                  previousAssigned: inq.assignedStaffId,
+                                });
                                 const cleaned = cleanUnassignedValue(rawVal) || '';
-                                if (onAssignStaff) {
-                                  await onAssignStaff(inq.id, cleaned);
-                                } else {
-                                  await updateLeadOrInquiryStatus(inq.id, {
-                                    assignedStaffId: cleaned || undefined,
-                                  });
+                                try {
+                                  if (onAssignStaff) {
+                                    console.log('🎯 [LeadTableView] Calling onAssignStaff with:', { leadId: inq.id, staffId: cleaned });
+                                    await onAssignStaff(inq.id, cleaned);
+                                  } else {
+                                    console.log('🎯 [LeadTableView] Calling updateLeadOrInquiryStatus with:', { leadId: inq.id, status: inq.status, assignedStaffId: cleaned });
+                                    await updateLeadOrInquiryStatus(inq.id, inq.status || 'NEW', cleaned || undefined);
+                                  }
+                                  console.log('✅ [LeadTableView] Staff assigned successfully for lead:', inq.id, { staffId: cleaned });
+                                } catch (err) {
+                                  console.error('❌ [LeadTableView] Failed assigning staff for lead:', inq.id, err);
                                 }
                               }}
                               className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
@@ -583,7 +594,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             </div>
                             <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
                               <span>
-                                📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || 'No phone'}
+                                📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || 'No phone'}
                               </span>
                               {hasPhone && (
                                 <button

@@ -11,7 +11,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
   const meta = lead.metadata || {};
 
   const fullName = lead.full_name || lead.name || lead.fullName || lead.customerName || 'N/A';
-  const whatsappNum = lead.whatsapp_number || lead.phone || lead.whatsappNumber || lead.customerPhone || meta.whatsapp_number || '';
+  const whatsappNum = lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || lead.whatsappNumber || lead.customerPhone || meta.whatsapp_number || meta.phone || '';
   const email = lead.email || lead.customerEmail || 'N/A';
   const residentStateCity = meta.resident_state || lead.resident_state || lead.city || lead.userCity || 'N/A';
 

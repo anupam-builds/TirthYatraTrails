@@ -193,22 +193,25 @@ export const AdminInquiries: React.FC = () => {
   };
 
   const handleAssignStaff = async (inquiryId: string, staffId: string) => {
+    console.log('🎯 [AdminInquiries] handleAssignStaff called with:', { inquiryId, staffId });
     try {
       const cleanedStaffId = cleanUnassignedValue(staffId);
       const staffMember = cleanedStaffId ? staffList.find((s) => String(s.id) === String(cleanedStaffId)) : null;
       const staffName = staffMember ? staffMember.name : '';
+      console.log('🎯 [AdminInquiries] Dispatching updateLeadOrInquiryStatus:', { inquiryId, cleanedStaffId, staffName });
       const updated = await updateLeadOrInquiryStatus(inquiryId, {
         assignedStaffId: cleanedStaffId || undefined,
         assignedStaffName: staffName || undefined,
       });
+      console.log('✅ [AdminInquiries] Staff assigned successfully:', { inquiryId, updated });
       setInquiries((prev) =>
         prev.map((i) =>
           String(i.id) === String(inquiryId)
             ? {
                 ...i,
                 ...updated,
-                assignedStaffId: updated.assignedStaffId,
-                assignedStaffName: updated.assignedStaffName,
+                assignedStaffId: updated.assignedStaffId ?? updated.assigned_staff_id ?? cleanedStaffId ?? undefined,
+                assignedStaffName: updated.assignedStaffName ?? updated.assigned_staff_name ?? staffName ?? undefined,
               }
             : i
         )
@@ -217,6 +220,7 @@ export const AdminInquiries: React.FC = () => {
         setSelectedInquiryForEdit((curr) => (curr ? { ...curr, ...updated } : null));
       }
     } catch (err: any) {
+      console.error('❌ [AdminInquiries] handleAssignStaff failed:', err);
       alert(err.message || 'Failed assigning staff');
     }
   };
@@ -664,7 +668,7 @@ export const AdminInquiries: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
                                   <span>
-                                    📞 {(inq as any).whatsapp_number || inq.phone || (inq as any).metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || 'No phone'}
+                                    📞 {(inq as any).whatsapp_number || inq.phone || (inq as any).metadata?.whatsapp_number || (inq as any).metadata?.phone || inq.customerPhone || inq.whatsappNumber || 'No phone'}
                                   </span>
                                 </div>
                                 {inq.customerEmail && (
@@ -714,12 +718,16 @@ export const AdminInquiries: React.FC = () => {
                                 </label>
                                 <select
                                   value={assignedStaffId}
-                                  onChange={(e) =>
+                                  onChange={(e) => {
+                                    console.log('🎯 [AdminInquiries] Restore staff select changed:', {
+                                      inquiryId: inq.id,
+                                      selectedStaffId: e.target.value,
+                                    });
                                     setSelectedRestoreStaff({
                                       ...selectedRestoreStaff,
                                       [inq.id]: e.target.value,
-                                    })
-                                  }
+                                    });
+                                  }}
                                   className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
                                 >
                                   {staffList.map((s) => (

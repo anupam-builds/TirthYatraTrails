@@ -284,7 +284,7 @@ export const AdminDashboard: React.FC = () => {
                 {recentInquiries.map((inq) => {
                   const lead = inq as any;
                   const custName = inq.fullName || inq.customerName || 'Devotee';
-                  const custPhone = lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || '';
+                  const custPhone = lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || '';
                   const custEmail = inq.email || inq.customerEmail || '';
                   const selPlan = inq.plan || inq.selectedPlan || 'Standard';
 
@@ -299,7 +299,7 @@ export const AdminDashboard: React.FC = () => {
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
                           <span>
-                            📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || inq.customerPhone || inq.whatsappNumber || 'No phone'}
+                            📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || 'No phone'}
                           </span>
                           {Boolean(custPhone && custPhone !== 'No phone') && (
                             <button

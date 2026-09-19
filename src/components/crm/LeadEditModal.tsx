@@ -61,11 +61,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
   useEffect(() => {
     if (inquiry) {
+      const phoneVal = (inquiry as any).whatsapp_number || inquiry.phone || (inquiry as any).metadata?.whatsapp_number || (inquiry as any).metadata?.phone || inquiry.customerPhone || inquiry.whatsappNumber || '';
       setFormData({
         customerName: inquiry.customerName || inquiry.fullName || '',
         fullName: inquiry.customerName || inquiry.fullName || '',
-        customerPhone: inquiry.customerPhone || inquiry.whatsappNumber || '',
-        whatsappNumber: inquiry.customerPhone || inquiry.whatsappNumber || '',
+        customerPhone: phoneVal,
+        whatsappNumber: phoneVal,
         customerEmail: inquiry.customerEmail || inquiry.email || '',
         email: inquiry.customerEmail || inquiry.email || '',
         userCity: inquiry.userCity || '',
@@ -99,6 +100,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
   };
 
   const handleStaffChange = (staffId: string) => {
+    console.log('🎯 [LeadEditModal] handleStaffChange called with:', staffId);
     if (!staffId) {
       setFormData((prev) => ({
         ...prev,
@@ -107,6 +109,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
       }));
     } else {
       const selected = staffList.find((s) => s.id === staffId);
+      console.log('🎯 [LeadEditModal] Selected staff member:', selected);
       setFormData((prev) => ({
         ...prev,
         assignedStaffId: staffId,
@@ -445,7 +448,10 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                 ) : (
                   <select
                     value={formData.assignedStaffId || ''}
-                    onChange={(e) => handleStaffChange(e.target.value)}
+                    onChange={(e) => {
+                      console.log('🎯 [LeadEditModal] Assignment select changed:', e.target.value);
+                      handleStaffChange(e.target.value);
+                    }}
                     className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
                   >
                     <option value="">-- Unassigned (Available in Pool) --</option>

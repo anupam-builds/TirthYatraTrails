@@ -325,19 +325,23 @@ export const StaffPortalPage: React.FC = () => {
   };
 
   const handleAssignStaff = async (inquiryId: string, staffId: string) => {
+    console.log('🎯 [StaffPortalPage] handleAssignStaff called with:', { inquiryId, staffId });
     try {
       const cleanedStaffId = cleanUnassignedValue(staffId);
       const selected = cleanedStaffId ? staffList.find((s) => s.id === cleanedStaffId) : null;
       const staffName = selected ? selected.name : '';
+      console.log('🎯 [StaffPortalPage] Calling updateLeadOrInquiryStatus:', { inquiryId, cleanedStaffId, staffName });
       const updated = await updateLeadOrInquiryStatus(inquiryId, {
         assignedStaffId: cleanedStaffId || undefined,
         assignedStaffName: staffName || undefined,
       });
+      console.log('✅ [StaffPortalPage] Assigned staff result:', updated);
       setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
         setSelectedInquiryForEdit(updated);
       }
     } catch (err: any) {
+      console.error('❌ [StaffPortalPage] handleAssignStaff failed:', err);
       alert(err.message || 'Failed assigning staff');
     }
   };

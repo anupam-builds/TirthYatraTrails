@@ -214,6 +214,7 @@ export function generateCustomerWhatsAppLink(
     lead.whatsapp_number ||
     lead.phone ||
     lead.metadata?.whatsapp_number ||
+    lead.metadata?.phone ||
     inquiry.customerPhone ||
     inquiry.whatsappNumber ||
     '';

@@ -246,6 +246,7 @@ export async function updateLeadOrInquiryStatus(
   staffNameOrOptions?: string | { userRole?: string; currentStatus?: string },
   options?: { userRole?: string; currentStatus?: string }
 ): Promise<any> {
+  console.log('🚀 [API] updateLeadOrInquiryStatus called with:', { id, status, assignedStaffId });
   const resolvedOptions =
     (typeof options === 'object' && options !== null)
       ? options
@@ -272,7 +273,7 @@ export async function updateLeadOrInquiryStatus(
   const targetTable = cleanId.startsWith('inq') ? 'inquiries' : 'leads';
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
 
-  let actualAssignedStaffId = typeof assignedStaffId === 'string' ? assignedStaffId : undefined;
+  let actualAssignedStaffId: any = typeof assignedStaffId === 'string' ? assignedStaffId : undefined;
   const actualStaffName = typeof staffNameOrOptions === 'string' ? staffNameOrOptions : undefined;
 
   if (typeof status === 'string') {
@@ -315,26 +316,30 @@ export async function updateLeadOrInquiryStatus(
     payload.assigned_staff_name = payload.assigned_staff_id ? actualStaffName : null;
   }
 
-  const targetUrl = `${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(cleanId)}`;
-  const res = await fetch(targetUrl, {
+  const url = `${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(cleanId)}`;
+  console.log('🌐 [API] Fetching PATCH:', url, payload);
+
+  const res = await fetch(url, {
     method: 'PATCH',
     headers: {
       'apikey': SUPABASE_ANON_KEY,
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       'Content-Type': 'application/json',
-      'Prefer': 'return=representation',
+      'Prefer': 'return=representation'
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload)
   });
 
+  const responseText = await res.text();
+  console.log(`📥 [API] Response status ${res.status}:`, responseText);
+
   if (!res.ok) {
-    const errText = await res.text();
-    console.error(`PATCH ${targetTable} failed (${res.status}):`, errText);
-    throw new Error(`Update failed: ${res.status}`);
+    console.error(`❌ [API] Update failed (${res.status}):`, responseText);
+    throw new Error(`Update failed (${res.status}): ${responseText}`);
   }
 
-  const data = await res.json();
-  const rawRow = Array.isArray(data) ? (data[0] || {}) : (data || {});
+  const parsed = responseText ? JSON.parse(responseText) : {};
+  const rawRow = Array.isArray(parsed) ? (parsed[0] || {}) : (parsed || {});
 
   const mapped: Inquiry = {
     ...rawRow,
@@ -350,7 +355,12 @@ export async function updateLeadOrInquiryStatus(
     broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: mapped.assignedStaffName });
   } catch {}
 
-  return mapped;
+  return {
+    ...rawRow,
+    ...mapped,
+    assignedStaffId: mapped.assignedStaffId,
+    assignedStaffName: mapped.assignedStaffName,
+  };
 }
 
 /**
