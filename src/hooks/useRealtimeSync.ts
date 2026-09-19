@@ -435,3 +435,107 @@ export function useRealtimeTravelStories() {
     }),
   });
 }
+
+// ==============================================================================
+// 5. ISOLATED REALTIME CHANNELS FOR LEADS AND STAFF / PROFILES
+// ==============================================================================
+
+/**
+ * Dedicated Supabase channel for `leads` ('public:leads-realtime') that updates
+ * local lead table state on INSERT, UPDATE, DELETE without coupling to staff or profile channels.
+ */
+export function useIsolatedLeadsRealtime<T extends Record<string, any> = any>(
+  initialLeads: T[] = [],
+  options?: {
+    channelName?: string;
+    onInsert?: (lead: T) => void;
+    onUpdate?: (lead: T) => void;
+    onDelete?: (id: string) => void;
+  }
+) {
+  const [leads, setLeads] = useState<T[]>(initialLeads);
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  });
+
+  useEffect(() => {
+    const channelName = options?.channelName || 'public:leads-realtime';
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        (payload) => {
+          setLeads((currentLeads) => {
+            if (payload.eventType === 'INSERT') {
+              const inserted = payload.new as T;
+              optionsRef.current?.onInsert?.(inserted);
+              return [inserted, ...currentLeads];
+            }
+            if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as T;
+              optionsRef.current?.onUpdate?.(updated);
+              return currentLeads.map((item) =>
+                item.id === (payload.new as any).id ? { ...item, ...payload.new } : item
+              );
+            }
+            if (payload.eventType === 'DELETE') {
+              const deletedId = (payload.old as any)?.id;
+              optionsRef.current?.onDelete?.(deletedId);
+              return currentLeads.filter((item) => item.id !== deletedId);
+            }
+            return currentLeads;
+          });
+        }
+      )
+      .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [options?.channelName]);
+
+  return { leads, setLeads };
+}
+
+/**
+ * Dedicated Supabase channel for staff presence and profile updates ('public:staff-presence-realtime').
+ * Strictly bound to staff/presence state without triggering full lead re-fetches.
+ */
+export function useStaffPresenceRealtime(onProfileUpdate?: (profile: any) => void) {
+  const onUpdateRef = useRef(onProfileUpdate);
+  useEffect(() => {
+    onUpdateRef.current = onProfileUpdate;
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:staff-presence-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const profileRow = payload.new || payload.old;
+          if (profileRow) {
+            onUpdateRef.current?.(profileRow);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'staff_members' },
+        (payload) => {
+          const staffRow = payload.new || payload.old;
+          if (staffRow) {
+            onUpdateRef.current?.(staffRow);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+}

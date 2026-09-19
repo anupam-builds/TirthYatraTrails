@@ -137,11 +137,13 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
 
   // Realtime Supabase Channel Subscription
   useEffect(() => {
-    const channelName = options.channelName || 'schema-db-changes';
+    const leadsChannelName = options.channelName || 'public:leads-realtime';
+    const presenceChannelName = 'public:staff-presence-realtime';
     setConnectionStatus('CONNECTING');
 
-    const channel = supabase
-      .channel(channelName)
+    // 1. Dedicated isolated channel for leads/inquiries
+    const leadsChannel = supabase
+      .channel(leadsChannelName)
       // Listen to 'leads' table changes (INSERT/UPDATE/DELETE)
       .on(
         'postgres_changes',
@@ -158,6 +160,21 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
           handleLeadChange(payload);
         }
       )
+      .subscribe((status, err) => {
+        setConnectionStatus(status);
+        if (err) {
+          console.error(`[Realtime Sync] Subscription error on ${leadsChannelName}:`, err);
+          setIsConnected(false);
+        } else {
+          console.log(`[Realtime Sync] Leads channel ${leadsChannelName} status:`, status);
+          setIsConnected(status === 'SUBSCRIBED');
+        }
+      });
+
+    // 2. Separate dedicated channel for staff & profile updates (presence / online status)
+    // Kept strictly bound to staff/presence state without triggering lead table re-fetches
+    const presenceChannel = supabase
+      .channel(presenceChannelName)
       // Listen to 'profiles' table changes (UPDATE) to refresh online staff indicators
       .on(
         'postgres_changes',
@@ -175,13 +192,10 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
         }
       )
       .subscribe((status, err) => {
-        setConnectionStatus(status);
         if (err) {
-          console.error(`[Realtime Sync] Subscription error on ${channelName}:`, err);
-          setIsConnected(false);
+          console.error(`[Realtime Sync] Subscription error on ${presenceChannelName}:`, err);
         } else {
-          console.log(`[Realtime Sync] Channel ${channelName} status:`, status);
-          setIsConnected(status === 'SUBSCRIBED');
+          console.log(`[Realtime Sync] Presence channel ${presenceChannelName} status:`, status);
         }
       });
 
@@ -202,14 +216,15 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
       window.addEventListener('tirth-inquiry-changed', handleLocalLeadChange);
     }
 
-    // Cleanup channel on unmount
+    // Cleanup channels on unmount
     return () => {
-      console.log(`[Realtime Sync] Cleaning up channel ${channelName}`);
+      console.log(`[Realtime Sync] Cleaning up channels ${leadsChannelName} & ${presenceChannelName}`);
       if (typeof window !== 'undefined') {
         window.removeEventListener('tirth-lead-changed', handleLocalLeadChange);
         window.removeEventListener('tirth-inquiry-changed', handleLocalLeadChange);
       }
-      supabase.removeChannel(channel);
+      supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(presenceChannel);
     };
   }, [handleLeadChange, handleProfileChange, options.channelName]);
 

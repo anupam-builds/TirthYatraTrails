@@ -244,7 +244,7 @@ export const StaffPortalPage: React.FC = () => {
 
   // Real-time Supabase synchronization hook for staff portal lead updates/assignments/status
   useRealtimeInquiries({
-    channelName: 'schema-db-changes',
+    channelName: 'public:leads-realtime',
     onUpdate: (updated) => {
       setInquiries((prev) => {
         const exists = prev.some((i) => i.id === updated.id);

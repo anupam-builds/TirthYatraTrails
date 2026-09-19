@@ -35,7 +35,7 @@ export const AdminInquiries: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedInquiryForEdit, setSelectedInquiryForEdit] = useState<Inquiry | null>(null);
 
-  // Realtime inquiries hook using static channel schema-db-changes
+  // Realtime inquiries hook using isolated channel public:leads-realtime
   const {
     inquiries,
     setInquiries,
@@ -44,7 +44,7 @@ export const AdminInquiries: React.FC = () => {
     loading,
     refetch: refetchInquiries,
   } = useRealtimeInquiries({
-    channelName: 'schema-db-changes',
+    channelName: 'public:leads-realtime',
     onInsert: (newInq) => {
       console.log('📡 [AdminInquiries] Realtime lead INSERT received:', newInq.id);
     },
