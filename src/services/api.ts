@@ -345,6 +345,61 @@ export async function updateLeadOrInquiryStatus(
   return mapped;
 }
 
+/**
+ * Presence status updater targeting staff_members (for stf-* IDs) or profiles.
+ * Ignores admin/user IDs (usr-*) and safely updates schema fields.
+ */
+export async function setStaffOnlineStatus(id: string, online: boolean): Promise<void> {
+  if (!id || id.startsWith('usr-')) return;
+  const targetTable = id.startsWith('stf-') ? 'staff_members' : 'profiles';
+  const timestamp = new Date().toISOString();
+
+  try {
+    const updatePayload: Record<string, any> = {
+      is_online: online,
+      last_active_at: timestamp,
+    };
+    if (targetTable === 'profiles') {
+      updatePayload.last_seen = timestamp;
+    } else {
+      updatePayload.is_currently_logged_in = online;
+    }
+
+    const { error } = await supabase.from(targetTable)
+      .update(updatePayload)
+      .eq('id', id);
+
+    if (error && targetTable === 'profiles') {
+      await supabase.from('profiles')
+        .update({
+          is_online: online,
+          last_seen: timestamp,
+        })
+        .eq('id', id);
+    }
+  } catch (err) {
+    console.warn(`[Presence] update failed on ${targetTable}:`, err);
+  }
+
+  // Sync local store and window event for responsive UI feedback
+  try {
+    localStore.updateStaffMember(id, {
+      isCurrentlyLoggedIn: online,
+      isOnline: online,
+      lastActiveAt: timestamp,
+      lastSeen: timestamp,
+    } as any);
+  } catch {}
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('tirth-staff-presence-changed', {
+        detail: { staffId: id, isOnline: online, lastSeen: timestamp },
+      })
+    );
+  }
+}
+
 export const api = {
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
@@ -360,71 +415,8 @@ export const api = {
   },
 
   // Staff Online Presence setter
-  async setStaffOnlineStatus(userId: string, isOnline: boolean): Promise<void> {
-    if (!userId) return;
-    const nowIso = new Date().toISOString();
-
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
-
-    // 1. Update profiles table: .from('profiles').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', userId)
-    try {
-      const payload = {
-        is_online: isOnline,
-        last_seen: nowIso,
-      };
-      fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
-        method: 'PATCH',
-        headers: explicitHeaders,
-        body: JSON.stringify(payload),
-      }).catch(() => {});
-
-      await supabase.from('profiles').update(payload).eq('id', userId);
-    } catch (err) {
-      console.warn('[Presence] profiles update error:', err);
-    }
-
-    // 2. Update staff_members table
-    try {
-      const staffPayload = {
-        is_online: isOnline,
-        last_active_at: nowIso,
-        is_currently_logged_in: isOnline,
-      };
-      fetch(`${SUPABASE_URL}/rest/v1/staff_members?id=eq.${encodeURIComponent(userId)}`, {
-        method: 'PATCH',
-        headers: explicitHeaders,
-        body: JSON.stringify(staffPayload),
-      }).catch(() => {});
-
-      await supabase.from('staff_members').update(staffPayload).eq('id', userId);
-    } catch (err) {
-      console.warn('[Presence] staff_members update error:', err);
-    }
-
-    // 3. Update local store
-    try {
-      localStore.updateStaffMember(userId, {
-        isCurrentlyLoggedIn: isOnline,
-        isOnline,
-        lastActiveAt: nowIso,
-        lastSeen: nowIso,
-      } as any);
-    } catch {}
-
-    // 4. Dispatch custom window event
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('tirth-staff-presence-changed', {
-          detail: { staffId: userId, isOnline, lastSeen: nowIso },
-        })
-      );
-    }
+  async setStaffOnlineStatus(id: string, online: boolean): Promise<void> {
+    return setStaffOnlineStatus(id, online);
   },
 
   async loginStaff(email: string, password: string): Promise<{ user: StaffMember; token: string }> {
