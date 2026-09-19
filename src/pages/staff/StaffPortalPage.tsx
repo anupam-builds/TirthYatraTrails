@@ -382,13 +382,14 @@ export const StaffPortalPage: React.FC = () => {
     }
 
     try {
-      const updated = await updateLeadOrInquiryStatus(id, newStatus, staffUser.id, staffUser.name, {
+      const res = await updateLeadOrInquiryStatus(id, newStatus, staffUser.id, staffUser.name, {
         userRole: 'staff',
         currentStatus: inquiry?.status,
       });
-      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+      setInquiries((prev) => prev.map((i) => (i.id === id ? { ...i, ...updated } : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === id) {
-        setSelectedInquiryForEdit(updated);
+        setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...updated } : null));
       }
     } catch (err: any) {
       if (err.message && (err.message.includes('Blocked') || err.message.includes('revoked'))) {
@@ -410,14 +411,15 @@ export const StaffPortalPage: React.FC = () => {
       const selected = cleanedStaffId ? staffList.find((s) => s.id === cleanedStaffId) : null;
       const staffName = selected ? selected.name : '';
       console.log('🎯 [StaffPortalPage] Calling updateLeadOrInquiryStatus:', { inquiryId, cleanedStaffId, staffName });
-      const updated = await updateLeadOrInquiryStatus(inquiryId, {
+      const res = await updateLeadOrInquiryStatus(inquiryId, {
         assignedStaffId: cleanedStaffId || undefined,
         assignedStaffName: staffName || undefined,
       });
+      const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       console.log('✅ [StaffPortalPage] Assigned staff result:', updated);
-      setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
+      setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? { ...i, ...updated } : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
-        setSelectedInquiryForEdit(updated);
+        setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...updated } : null));
       }
     } catch (err: any) {
       console.error('❌ [StaffPortalPage] handleAssignStaff failed:', err);
@@ -427,8 +429,9 @@ export const StaffPortalPage: React.FC = () => {
 
   const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
     try {
-      const updated = await updateLeadOrInquiryStatus(id, updates);
-      setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      const res = await updateLeadOrInquiryStatus(id, updates);
+      const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+      setInquiries((prev) => prev.map((i) => (i.id === id ? { ...i, ...updated } : i)));
       setSelectedInquiryForEdit(null);
     } catch (err: any) {
       throw new Error(err.message || 'Failed to update lead');

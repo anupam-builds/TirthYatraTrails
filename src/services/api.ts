@@ -330,16 +330,15 @@ export async function updateLeadOrInquiryStatus(
     body: JSON.stringify(payload)
   });
 
-  const responseText = await res.text();
-  console.log(`📥 [API] Response status ${res.status}:`, responseText);
-
   if (!res.ok) {
-    console.error(`❌ [API] Update failed (${res.status}):`, responseText);
-    throw new Error(`Update failed (${res.status}): ${responseText}`);
+    const errText = await res.text();
+    console.error(`PATCH ${targetTable} failed (${res.status}):`, errText);
+    throw new Error(`Update failed: ${res.status}`);
   }
 
-  const parsed = responseText ? JSON.parse(responseText) : {};
-  const rawRow = Array.isArray(parsed) ? (parsed[0] || {}) : (parsed || {});
+  const data = await res.json();
+  // PostgREST return=representation returns an array; extract first item if array
+  const rawRow = Array.isArray(data) ? (data[0] || { id: cleanId, status: payload.status, ...payload }) : (data || { id: cleanId, status: payload.status, ...payload });
 
   const mapped: Inquiry = {
     ...rawRow,
