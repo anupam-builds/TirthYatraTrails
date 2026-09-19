@@ -278,33 +278,51 @@ export const StaffPortalPage: React.FC = () => {
     if (!currentStaffId) return;
 
     const channel = supabase
-      .channel('staff-leads-sync')
+      .channel('staff-leads-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
-          console.log('📡 [Staff Realtime] Leads updated:', payload);
-          const updatedRow = payload.new as any;
-          if (updatedRow && updatedRow.assigned_staff_id === currentStaffId) {
-            // Merge or prepend into local staff leads state
-            setStaffLeads((prev) => {
-              const exists = prev.some((l) => l.id === updatedRow.id);
-              if (exists) {
-                return prev.map((l) => (l.id === updatedRow.id ? updatedRow : l));
-              }
-              return [updatedRow, ...prev];
-            });
+          console.log('📡 [Leads Realtime Event]:', payload);
+          const newRow = payload.new as any;
+          const oldRow = payload.old as any;
 
-            // Synchronize mapped record into inquiries state
-            const mapped = mapInquiryRow(updatedRow);
+          setStaffLeads((prevLeads) => {
+            // If deleted
+            if (payload.eventType === 'DELETE') {
+              return prevLeads.filter((l) => l.id !== oldRow?.id);
+            }
+
+            // Check if this lead belongs to current staff or was newly assigned/unassigned
+            const isForThisStaff = newRow?.assigned_staff_id === currentStaffId;
+            const existsInState = prevLeads.some((l) => l.id === newRow?.id);
+
+            if (existsInState) {
+              // Update existing row
+              return prevLeads.map((l) => (l.id === newRow.id ? newRow : l));
+            } else if (isForThisStaff) {
+              // Prepend new row assigned to this staff
+              return [newRow, ...prevLeads];
+            }
+            return prevLeads;
+          });
+
+          // Also synchronize mapped record into inquiries state
+          if (payload.eventType === 'DELETE') {
+            setInquiries((prev) => prev.filter((i) => i.id !== oldRow?.id && (i as any).id !== String(oldRow?.id)));
+          } else if (newRow) {
+            const mapped = mapInquiryRow(newRow);
+            const isForThisStaff = newRow.assigned_staff_id === currentStaffId;
             setInquiries((prev) => {
-              const exists = prev.some((i) => i.id === mapped.id || (updatedRow.id && i.id === String(updatedRow.id)));
+              const exists = prev.some((i) => i.id === mapped.id || (newRow.id && i.id === String(newRow.id)));
               if (exists) {
-                return prev.map((i) => (i.id === mapped.id || (updatedRow.id && i.id === String(updatedRow.id)) ? { ...i, ...mapped } : i));
+                return prev.map((i) => (i.id === mapped.id || (newRow.id && i.id === String(newRow.id)) ? { ...i, ...mapped } : i));
+              } else if (isForThisStaff) {
+                return [mapped, ...prev];
               }
-              return [mapped, ...prev];
+              return prev;
             });
-            if (selectedInquiryForEdit && (selectedInquiryForEdit.id === mapped.id || selectedInquiryForEdit.id === String(updatedRow.id))) {
+            if (selectedInquiryForEdit && (selectedInquiryForEdit.id === mapped.id || selectedInquiryForEdit.id === String(newRow.id))) {
               setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...mapped } : null));
             }
           }
