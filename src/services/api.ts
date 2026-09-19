@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
+import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
 import { supabase, supabaseRest, getSupabaseHeaders, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
@@ -187,6 +187,117 @@ export async function resilientPatchRecord(
   }
 
   return null;
+}
+
+/**
+ * Strips and cleans sentinel strings representing unassigned states (e.g. '--Unassigned--', 'UNASSIGNED', etc.)
+ * returning null for unassigned or a valid trimmed string.
+ */
+export function cleanUnassignedValue(val?: string | null): string | null {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (
+    !s ||
+    s === 'undefined' ||
+    s === 'null' ||
+    s === 'UNASSIGNED' ||
+    s.toLowerCase() === 'unassigned' ||
+    s.startsWith('--') ||
+    s.includes('Unassigned')
+  ) {
+    return null;
+  }
+  return s;
+}
+
+/**
+ * Universal safeguarded status and assignment updater for leads and inquiries.
+ * Targets 'inquiries' (if ID starts with 'inq') or 'leads', cleans '--Unassigned--'
+ * staff IDs into null, and writes proper timestamps using PostgREST.
+ */
+export async function updateLeadOrInquiryStatus(
+  id: string | number,
+  status: InquiryStatus | string | Partial<Inquiry>,
+  assignedStaffId?: string,
+  staffName?: string
+): Promise<any> {
+  const cleanId = String(id || '').trim();
+  if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+    console.warn('[updateLeadOrInquiryStatus] Stripped malformed lead/inquiry id:', id);
+    throw new Error('Invalid lead/inquiry ID');
+  }
+
+  const targetTable = cleanId.startsWith('inq') ? 'inquiries' : 'leads';
+  const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+
+  if (typeof status === 'string') {
+    payload.status = status;
+  } else if (typeof status === 'object' && status !== null) {
+    Object.assign(payload, status);
+    if ('status' in status && status.status) {
+      payload.status = status.status;
+    }
+    if ('assignedStaffId' in status) {
+      assignedStaffId = (status as any).assignedStaffId;
+      delete payload.assignedStaffId;
+    }
+    if ('assignedStaffName' in status) {
+      payload.assigned_staff_name = (status as any).assignedStaffName;
+      delete payload.assignedStaffName;
+    }
+  }
+
+  if (assignedStaffId !== undefined) {
+    payload.assigned_staff_id =
+      assignedStaffId === '--Unassigned--' ||
+      assignedStaffId === 'UNASSIGNED' ||
+      !assignedStaffId ||
+      assignedStaffId === 'undefined' ||
+      assignedStaffId === 'null'
+        ? null
+        : assignedStaffId;
+  }
+
+  if (staffName) {
+    payload.assigned_staff_name = payload.assigned_staff_id ? staffName : null;
+  }
+
+  const targetUrl = `${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(cleanId)}`;
+  const res = await fetch(targetUrl, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`PATCH ${targetTable} failed (${res.status}):`, errText);
+    throw new Error(`Update failed: ${res.status}`);
+  }
+
+  const data = await res.json();
+  const rawRow = Array.isArray(data) ? (data[0] || {}) : (data || {});
+
+  const mapped: Inquiry = {
+    ...rawRow,
+    id: rawRow.id || cleanId,
+    status: (rawRow.status || payload.status || 'NEW') as any,
+    assignedStaffId: rawRow.assigned_staff_id !== undefined ? rawRow.assigned_staff_id : payload.assigned_staff_id,
+    assignedStaffName: rawRow.assigned_staff_name !== undefined ? rawRow.assigned_staff_name : payload.assigned_staff_name,
+    updatedAt: rawRow.updated_at || payload.updated_at,
+  } as Inquiry;
+
+  try {
+    localStore.updateInquiry(cleanId, mapped);
+    broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: mapped.assignedStaffName });
+  } catch {}
+
+  return mapped;
 }
 
 export const api = {
@@ -478,18 +589,19 @@ export const api = {
     }
 
     const targetTable = getTargetTable(id);
+    const cleanedStaffId = cleanUnassignedValue(staffId);
 
-    let resolvedStaffName = staffName;
-    if (!resolvedStaffName && staffId) {
+    let resolvedStaffName = cleanedStaffId ? staffName : null;
+    if (!resolvedStaffName && cleanedStaffId) {
       try {
         const staffMembers = await this.getStaffMembers();
-        const found = staffMembers.find((s) => String(s.id) === String(staffId));
+        const found = staffMembers.find((s) => String(s.id) === String(cleanedStaffId));
         if (found) resolvedStaffName = found.name;
       } catch {}
     }
 
     const payload: Record<string, any> = {
-      assigned_staff_id: staffId || null,
+      assigned_staff_id: cleanedStaffId || null,
       assigned_staff_name: resolvedStaffName || null,
       updated_at: new Date().toISOString(),
     };
@@ -501,26 +613,26 @@ export const api = {
       : ({
           ...(await this.getInquiries()).find((i) => String(i.id) === cleanId) || {},
           id: cleanId,
-          assignedStaffId: staffId || undefined,
+          assignedStaffId: cleanedStaffId || undefined,
           assignedStaffName: resolvedStaffName || undefined,
         } as Inquiry);
 
     localStore.updateInquiry(cleanId, {
-      assignedStaffId: staffId || undefined,
+      assignedStaffId: cleanedStaffId || undefined,
       assignedStaffName: resolvedStaffName || undefined,
     });
 
-    broadcastInquiryUpdated(mapped, { staffName: resolvedStaffName });
+    broadcastInquiryUpdated(mapped, { staffName: resolvedStaffName || undefined });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-lead-changed', {
-          detail: { action: 'assign', leadId: cleanId, staffId, staffName: resolvedStaffName, lead: mapped },
+          detail: { action: 'assign', leadId: cleanId, staffId: cleanedStaffId || undefined, staffName: resolvedStaffName, lead: mapped },
         })
       );
       window.dispatchEvent(
         new CustomEvent('tirth-inquiry-changed', {
-          detail: { action: 'assign', id: cleanId, assignedStaffId: staffId, assignedStaffName: resolvedStaffName, inquiry: mapped },
+          detail: { action: 'assign', id: cleanId, assignedStaffId: cleanedStaffId || undefined, assignedStaffName: resolvedStaffName, inquiry: mapped },
         })
       );
     }
@@ -547,13 +659,16 @@ export const api = {
     const formattedStatus = rawStatus.toLowerCase(); // e.g. 'contacted'
     const upperStatus = rawStatus.toUpperCase();
 
+    const cleanedStaffId = staffId !== undefined ? cleanUnassignedValue(staffId) : undefined;
+    const resolvedStaffName = cleanedStaffId ? staffName : null;
+
     const payload: Record<string, any> = {
       status: formattedStatus,
       updated_at: new Date().toISOString(),
     };
-    if (staffId) {
-      payload.assigned_staff_id = staffId;
-      if (staffName) payload.assigned_staff_name = staffName;
+    if (staffId !== undefined) {
+      payload.assigned_staff_id = cleanedStaffId || null;
+      payload.assigned_staff_name = resolvedStaffName || null;
     }
     if (upperStatus === 'CLOSED') {
       payload.is_locked_for_staff = true;
@@ -569,15 +684,19 @@ export const api = {
           ...(await this.getInquiries()).find((i) => String(i.id) === cleanId) || {},
           id: cleanId,
           status: upperStatus as any,
-          ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
+          ...(cleanedStaffId !== undefined
+            ? { assignedStaffId: cleanedStaffId || undefined, assignedStaffName: resolvedStaffName || undefined }
+            : {}),
         } as Inquiry);
 
     localStore.updateInquiry(cleanId, {
       status: upperStatus as any,
-      ...(staffId ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
+      ...(cleanedStaffId !== undefined
+        ? { assignedStaffId: cleanedStaffId || undefined, assignedStaffName: resolvedStaffName || undefined }
+        : {}),
     });
 
-    broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName });
+    broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: resolvedStaffName || undefined });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -595,14 +714,22 @@ export const api = {
     return mapped;
   },
 
+  async updateLeadOrInquiryStatus(
+    leadOrInquiryId: string | number,
+    statusOrUpdates: InquiryStatus | string | Partial<Inquiry>,
+    staffId?: string,
+    staffName?: string
+  ): Promise<Inquiry> {
+    return updateLeadOrInquiryStatus(leadOrInquiryId, statusOrUpdates, staffId, staffName);
+  },
+
   async updateInquiryStatus(
     id: string | number,
     status: Inquiry['status'] | string,
     staffId?: string,
     staffName?: string
   ): Promise<Inquiry> {
-    const targetTable = getTargetTable(id);
-    return this.updateLeadStatus(id, status, staffId, staffName);
+    return this.updateLeadOrInquiryStatus(id, status, staffId, staffName);
   },
 
   async updateInquiry(id: string | number, updates: Partial<Inquiry>, _asStaff = false): Promise<Inquiry> {
@@ -617,8 +744,11 @@ export const api = {
     try {
       const payload: Record<string, any> = {};
       if (updates.status !== undefined) payload.status = String(updates.status).toLowerCase();
-      if (updates.assignedStaffId !== undefined) payload.assigned_staff_id = updates.assignedStaffId;
-      if (updates.assignedStaffName !== undefined) payload.assigned_staff_name = updates.assignedStaffName;
+      if (updates.assignedStaffId !== undefined) {
+        const cleaned = cleanUnassignedValue(updates.assignedStaffId);
+        payload.assigned_staff_id = cleaned || null;
+        payload.assigned_staff_name = cleaned ? (updates.assignedStaffName || null) : null;
+      }
       if ((updates as any).isLockedForStaff !== undefined) payload.is_locked_for_staff = (updates as any).isLockedForStaff;
       if (updates.notes !== undefined) payload.notes = updates.notes;
       if (updates.specialRequests !== undefined) payload.special_requests = updates.specialRequests;

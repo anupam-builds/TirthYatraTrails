@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
+import { updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
 import {
   getLeadId,
   CRM_STATUS_CONFIG,
@@ -151,7 +152,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     }
 
     // If status is NEW, prompt to optionally mark as CONTACTED
-    if ((!inq.status || inq.status === 'NEW') && onUpdateStatus) {
+    if (!inq.status || inq.status === 'NEW') {
       const shouldUpdate = window.confirm(
         `Open WhatsApp chat with ${inq.customerName || inq.fullName} (${waData.phone})?\n\n` +
         `• Click "OK" to update this lead's status to CONTACTED and launch WhatsApp.\n` +
@@ -159,7 +160,11 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       );
       if (shouldUpdate) {
         try {
-          await onUpdateStatus(inq.id, 'CONTACTED');
+          if (onUpdateStatus) {
+            await onUpdateStatus(inq.id, 'CONTACTED');
+          } else {
+            await updateLeadOrInquiryStatus(inq.id, 'CONTACTED');
+          }
         } catch (err: any) {
           console.error('Failed to update status to CONTACTED:', err);
         }
@@ -512,7 +517,17 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           {isAdmin && onAssignStaff ? (
                             <select
                               value={inq.assignedStaffId || ''}
-                              onChange={(e) => onAssignStaff(inq.id, e.target.value)}
+                              onChange={async (e) => {
+                                const rawVal = e.target.value;
+                                const cleaned = cleanUnassignedValue(rawVal) || '';
+                                if (onAssignStaff) {
+                                  await onAssignStaff(inq.id, cleaned);
+                                } else {
+                                  await updateLeadOrInquiryStatus(inq.id, {
+                                    assignedStaffId: cleaned || undefined,
+                                  });
+                                }
+                              }}
                               className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
                             >
                               <option value="">-- Unassigned --</option>
@@ -625,7 +640,11 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   );
                                   if (!proceed) return;
                                 }
-                                await onUpdateStatus(inq.id, newStatus);
+                                if (onUpdateStatus) {
+                                  await onUpdateStatus(inq.id, newStatus);
+                                } else {
+                                  await updateLeadOrInquiryStatus(inq.id, newStatus);
+                                }
                               }}
                               className={`text-xs font-extrabold rounded-xl px-3 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${
                                 statusCfg.badgeClass

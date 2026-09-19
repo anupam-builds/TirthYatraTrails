@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { useRouter } from '../../context/RouterContext.js';
-import { api } from '../../services/api.js';
+import { api, updateLeadOrInquiryStatus } from '../../services/api.js';
 import { City, Hotel, Package, Inquiry } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
 import { generateCustomerWhatsAppLink } from '../../utils/crmUtils.js';
@@ -124,7 +124,7 @@ export const AdminDashboard: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, status: Inquiry['status']) => {
     try {
-      await api.updateInquiryStatus(id, status);
+      await updateLeadOrInquiryStatus(id, status);
       setRecentInquiries((prev) =>
         prev.map((item) => (item.id === id ? { ...item, status } : item))
       );

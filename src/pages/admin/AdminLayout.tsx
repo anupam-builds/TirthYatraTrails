@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 
 import { AdminLoginPage } from './AdminLoginPage.js';
+import { useStaffPresence } from '../../hooks/useStaffPresence.js';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -45,6 +46,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
   const { navigate } = useRouter();
   const { adminUser, logoutAdmin, isAdminAuthenticated, isAdminLoading } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
+
+  // Sync admin presence
+  useStaffPresence(adminUser?.id);
   
   // Real-time Sound & Alert state
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(getNotificationSettings());

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
+import { useStaffPresence } from '../../hooks/useStaffPresence.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
-import { api, generateWhatsAppLink } from '../../services/api.js';
+import { api, generateWhatsAppLink, updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
@@ -59,6 +60,9 @@ export const StaffPortalPage: React.FC = () => {
   const { staffUser, isStaffAuthenticated, isStaffLoading, logoutStaff } = useAuth();
   const { navigate } = useRouter();
   const { theme, isDark, setTheme, toggleTheme } = useTheme();
+
+  // Sync staff presence in profiles table
+  useStaffPresence(staffUser?.id);
 
   const [activePortalTab, setActivePortalTab] = useState<'LEADS' | 'SETTINGS'>('LEADS');
   const [isPlayingTest, setIsPlayingTest] = useState(false);
@@ -299,7 +303,7 @@ export const StaffPortalPage: React.FC = () => {
     }
 
     try {
-      const updated = await api.updateLeadStatus(id, newStatus, staffUser.id, staffUser.name);
+      const updated = await updateLeadOrInquiryStatus(id, newStatus, staffUser.id, staffUser.name);
       setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === id) {
         setSelectedInquiryForEdit(updated);
@@ -319,9 +323,13 @@ export const StaffPortalPage: React.FC = () => {
 
   const handleAssignStaff = async (inquiryId: string, staffId: string) => {
     try {
-      const selected = staffList.find((s) => s.id === staffId);
+      const cleanedStaffId = cleanUnassignedValue(staffId);
+      const selected = cleanedStaffId ? staffList.find((s) => s.id === cleanedStaffId) : null;
       const staffName = selected ? selected.name : '';
-      const updated = await api.updateLeadAssignment(inquiryId, staffId, staffName);
+      const updated = await updateLeadOrInquiryStatus(inquiryId, {
+        assignedStaffId: cleanedStaffId || undefined,
+        assignedStaffName: staffName || undefined,
+      });
       setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? updated : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === inquiryId) {
         setSelectedInquiryForEdit(updated);
@@ -333,7 +341,7 @@ export const StaffPortalPage: React.FC = () => {
 
   const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
     try {
-      const updated = await api.updateInquiry(id, updates, true);
+      const updated = await updateLeadOrInquiryStatus(id, updates);
       setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
       setSelectedInquiryForEdit(null);
     } catch (err: any) {

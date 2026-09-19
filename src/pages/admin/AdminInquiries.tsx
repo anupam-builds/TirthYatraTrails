@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api } from '../../services/api.js';
+import { api, updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../services/soundNotification.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -171,7 +171,7 @@ export const AdminInquiries: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, status: InquiryStatus) => {
     try {
-      const updated = await api.updateLeadStatus(id, status);
+      const updated = await updateLeadOrInquiryStatus(id, status);
       setInquiries((prev) =>
         prev.map((i) =>
           String(i.id) === String(id)
@@ -194,17 +194,21 @@ export const AdminInquiries: React.FC = () => {
 
   const handleAssignStaff = async (inquiryId: string, staffId: string) => {
     try {
-      const staffMember = staffList.find((s) => String(s.id) === String(staffId));
+      const cleanedStaffId = cleanUnassignedValue(staffId);
+      const staffMember = cleanedStaffId ? staffList.find((s) => String(s.id) === String(cleanedStaffId)) : null;
       const staffName = staffMember ? staffMember.name : '';
-      const updated = await api.updateLeadAssignment(inquiryId, staffId, staffName);
+      const updated = await updateLeadOrInquiryStatus(inquiryId, {
+        assignedStaffId: cleanedStaffId || undefined,
+        assignedStaffName: staffName || undefined,
+      });
       setInquiries((prev) =>
         prev.map((i) =>
           String(i.id) === String(inquiryId)
             ? {
                 ...i,
                 ...updated,
-                assignedStaffId: updated.assignedStaffId ?? staffId,
-                assignedStaffName: updated.assignedStaffName ?? staffName,
+                assignedStaffId: updated.assignedStaffId,
+                assignedStaffName: updated.assignedStaffName,
               }
             : i
         )
@@ -219,7 +223,7 @@ export const AdminInquiries: React.FC = () => {
 
   const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
     try {
-      const updated = await api.updateInquiry(id, updates, false);
+      const updated = await updateLeadOrInquiryStatus(id, updates);
       setInquiries((prev) =>
         prev.map((i) =>
           String(i.id) === String(id)
