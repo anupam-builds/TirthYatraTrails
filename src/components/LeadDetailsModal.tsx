@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle } from 'lucide-react';
+import { formatLeadId } from '../utils/formatters.js';
 
 interface LeadDetailsModalProps {
   lead: any | null;
@@ -30,7 +31,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
     const rawPhone = whatsappNum.replace(/\D/g, '');
     if (!rawPhone) return;
     const formattedPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
-    const msg = `Namaste ${fullName}, regarding your sacred pilgrimage inquiry (${lead.id}) with Tirth Yatra. How may our pilgrimage desk assist you today?`;
+    const msg = `Namaste ${fullName}, regarding your sacred pilgrimage inquiry (${formatLeadId(lead.id)}) with Tirth Yatra. How may our pilgrimage desk assist you today?`;
     window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -54,7 +55,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                 <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
                 <h3 className="text-lg font-extrabold text-orange-400">Yatra Lead Details</h3>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">Reference ID: {lead.id}</p>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">Reference ID: {formatLeadId(lead.id)}</p>
             </div>
             <button
               id="close-lead-details-btn"

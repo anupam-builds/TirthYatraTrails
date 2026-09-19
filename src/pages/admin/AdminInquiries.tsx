@@ -6,7 +6,7 @@ import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../servic
 import { useAuth } from '../../context/AuthContext.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
-import { getLeadId, formatCrmTimestamp } from '../../utils/crmUtils.js';
+import { getLeadId, formatLeadId, formatCrmTimestamp } from '../../utils/crmUtils.js';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import {
   MessageSquare,
@@ -624,7 +624,8 @@ export const AdminInquiries: React.FC = () => {
                       </tr>
                     ) : (
                       filteredDeletedInquiries.map((inq) => {
-                        const leadId = getLeadId(inq);
+                        const lead = inq as any;
+                        const leadId = formatLeadId(lead.id);
                         const assignedStaffId =
                           selectedRestoreStaff[inq.id] ||
                           inq.assignedStaffId ||
@@ -640,7 +641,7 @@ export const AdminInquiries: React.FC = () => {
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-mono font-black text-rose-600 dark:text-rose-400 text-xs tracking-tight bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800">
-                                    {leadId}
+                                    {formatLeadId(lead.id)}
                                   </span>
                                   <button
                                     onClick={() => handleCopyLeadId(leadId)}

@@ -1,4 +1,7 @@
 import { Inquiry, InquiryStatus } from '../types.js';
+import { formatLeadId } from './formatters.js';
+
+export { formatLeadId };
 
 export interface StatusConfig {
   key: InquiryStatus;
@@ -113,26 +116,27 @@ export const ACCOMMODATION_TIERS = [
 export function getLeadId(inquiry: Partial<Inquiry>): string {
   if (inquiry.leadId && inquiry.leadId.trim().length > 0) {
     // Migrate any legacy TTX prefix to TTT
-    return inquiry.leadId.startsWith('TTX') ? inquiry.leadId.replace(/^TTX/, 'TTT') : inquiry.leadId;
+    const raw = inquiry.leadId.startsWith('TTX') ? inquiry.leadId.replace(/^TTX/, 'TTT') : inquiry.leadId;
+    return formatLeadId(raw);
   }
   if (!inquiry.id) {
     return 'TTT00000001';
   }
+  const idStr = String(inquiry.id);
+  if (idStr.toLowerCase().includes('e+')) {
+    return formatLeadId(idStr);
+  }
   // Try extracting numeric portion if id is like inq-101
-  const digitsMatch = inquiry.id.match(/\d+/g);
+  const digitsMatch = idStr.match(/\d+/g);
   if (digitsMatch) {
     const rawNumber = parseInt(digitsMatch.join(''), 10);
-    const padded = (rawNumber > 0 ? rawNumber : 1).toString().padStart(8, '0');
-    return `TTT${padded}`;
+    if (!isNaN(rawNumber) && !rawNumber.toString().includes('e+')) {
+      const padded = (rawNumber > 0 ? rawNumber : 1).toString().padStart(8, '0');
+      return `TTT${padded}`;
+    }
   }
 
-  // Fallback hash from string id
-  let hash = 0;
-  for (let i = 0; i < inquiry.id.length; i++) {
-    hash = (hash * 31 + inquiry.id.charCodeAt(i)) >>> 0;
-  }
-  const counter = 1 + (hash % 99999999);
-  return `TTT${counter.toString().padStart(8, '0')}`;
+  return formatLeadId(idStr);
 }
 
 /**

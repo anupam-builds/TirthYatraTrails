@@ -3,6 +3,7 @@ import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
 import {
   getLeadId,
+  formatLeadId,
   CRM_STATUS_CONFIG,
   CRM_STATUS_LIST,
   ADMIN_CRM_STATUS_LIST,
@@ -200,7 +201,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const lead = inq as any;
-      const leadId = getLeadId(inq).toLowerCase();
+      const leadId = (formatLeadId(lead.id) || getLeadId(inq)).toLowerCase();
       const name = (inq.customerName || inq.fullName || '').toLowerCase();
       const phone = (lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
       const city = (inq.userCity || '').toLowerCase();
@@ -481,7 +482,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
               ) : (
                 filteredInquiries.map((inq) => {
                   const lead = inq as any;
-                  const leadId = getLeadId(inq);
+                  const leadId = formatLeadId(lead.id);
                   const paxStr = formatPaxCount(inq);
                   const statusCfg = CRM_STATUS_CONFIG[inq.status as InquiryStatus] || CRM_STATUS_CONFIG.NEW;
                   const isLocked = Boolean(inq.isLockedForStaff || inq.status === 'CLOSED');
@@ -505,7 +506,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-mono font-black text-orange-600 dark:text-orange-400 text-xs tracking-tight bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800/80">
-                                {leadId}
+                                {formatLeadId(lead.id)}
                               </span>
                               <button
                                 onClick={() => handleCopyLeadId(leadId)}

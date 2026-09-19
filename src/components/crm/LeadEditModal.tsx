@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import {
   getLeadId,
+  formatLeadId,
   CRM_STATUS_CONFIG,
   CRM_STATUS_LIST,
   ADMIN_CRM_STATUS_LIST,
@@ -89,7 +90,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
   if (!isOpen || !inquiry) return null;
 
-  const leadId = getLeadId(inquiry);
+  const leadId = formatLeadId((inquiry as any).id);
   const isLocked = Boolean((inquiry.isLockedForStaff || inquiry.status === 'CLOSED') && isStaffMode);
   const statusOptions = isStaffMode ? STAFF_CRM_STATUS_LIST : ADMIN_CRM_STATUS_LIST;
 
