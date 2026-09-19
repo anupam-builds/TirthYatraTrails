@@ -303,7 +303,10 @@ export const StaffPortalPage: React.FC = () => {
     }
 
     try {
-      const updated = await updateLeadOrInquiryStatus(id, newStatus, staffUser.id, staffUser.name);
+      const updated = await updateLeadOrInquiryStatus(id, newStatus, staffUser.id, staffUser.name, {
+        userRole: 'staff',
+        currentStatus: inquiry?.status,
+      });
       setInquiries((prev) => prev.map((i) => (i.id === id ? updated : i)));
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === id) {
         setSelectedInquiryForEdit(updated);

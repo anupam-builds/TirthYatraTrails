@@ -211,16 +211,58 @@ export function cleanUnassignedValue(val?: string | null): string | null {
 }
 
 /**
+ * Toggle staff block/grant status across staff_members or profiles tables.
+ */
+export async function toggleStaffBlock(staffId: string, isBlocked: boolean) {
+  const targetTable = staffId.startsWith('stf-') ? 'staff_members' : 'profiles';
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(staffId)}`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify({ is_blocked: isBlocked }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`Toggle block failed (${res.status}):`, errText);
+    throw new Error(`Block/Grant toggle failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * Universal safeguarded status and assignment updater for leads and inquiries.
  * Targets 'inquiries' (if ID starts with 'inq') or 'leads', cleans '--Unassigned--'
- * staff IDs into null, and writes proper timestamps using PostgREST.
+ * staff IDs into null, enforces staff closed-status locks, and writes proper timestamps using PostgREST.
  */
 export async function updateLeadOrInquiryStatus(
   id: string | number,
   status: InquiryStatus | string | Partial<Inquiry>,
-  assignedStaffId?: string,
-  staffName?: string
+  assignedStaffId?: string | { userRole?: string; currentStatus?: string },
+  staffNameOrOptions?: string | { userRole?: string; currentStatus?: string },
+  options?: { userRole?: string; currentStatus?: string }
 ): Promise<any> {
+  const resolvedOptions =
+    (typeof options === 'object' && options !== null)
+      ? options
+      : (typeof staffNameOrOptions === 'object' && staffNameOrOptions !== null)
+      ? staffNameOrOptions
+      : (typeof assignedStaffId === 'object' && assignedStaffId !== null)
+      ? assignedStaffId
+      : undefined;
+
+  // Enforce staff closed-status lock
+  if (
+    resolvedOptions?.userRole?.toLowerCase() === 'staff' &&
+    resolvedOptions?.currentStatus?.toLowerCase() === 'closed'
+  ) {
+    throw new Error('Access denied: Closed leads can only be modified by administrators.');
+  }
+
   const cleanId = String(id || '').trim();
   if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
     console.warn('[updateLeadOrInquiryStatus] Stripped malformed lead/inquiry id:', id);
@@ -230,6 +272,9 @@ export async function updateLeadOrInquiryStatus(
   const targetTable = cleanId.startsWith('inq') ? 'inquiries' : 'leads';
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
 
+  let actualAssignedStaffId = typeof assignedStaffId === 'string' ? assignedStaffId : undefined;
+  const actualStaffName = typeof staffNameOrOptions === 'string' ? staffNameOrOptions : undefined;
+
   if (typeof status === 'string') {
     payload.status = status;
   } else if (typeof status === 'object' && status !== null) {
@@ -238,7 +283,7 @@ export async function updateLeadOrInquiryStatus(
       payload.status = status.status;
     }
     if ('assignedStaffId' in status) {
-      assignedStaffId = (status as any).assignedStaffId;
+      actualAssignedStaffId = (status as any).assignedStaffId;
       delete payload.assignedStaffId;
     }
     if ('assignedStaffName' in status) {
@@ -247,19 +292,19 @@ export async function updateLeadOrInquiryStatus(
     }
   }
 
-  if (assignedStaffId !== undefined) {
+  if (actualAssignedStaffId !== undefined) {
     payload.assigned_staff_id =
-      assignedStaffId === '--Unassigned--' ||
-      assignedStaffId === 'UNASSIGNED' ||
-      !assignedStaffId ||
-      assignedStaffId === 'undefined' ||
-      assignedStaffId === 'null'
+      actualAssignedStaffId === '--Unassigned--' ||
+      actualAssignedStaffId === 'UNASSIGNED' ||
+      !actualAssignedStaffId ||
+      actualAssignedStaffId === 'undefined' ||
+      actualAssignedStaffId === 'null'
         ? null
-        : assignedStaffId;
+        : actualAssignedStaffId;
   }
 
-  if (staffName) {
-    payload.assigned_staff_name = payload.assigned_staff_id ? staffName : null;
+  if (actualStaffName) {
+    payload.assigned_staff_name = payload.assigned_staff_id ? actualStaffName : null;
   }
 
   const targetUrl = `${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(cleanId)}`;
@@ -890,6 +935,9 @@ export const api = {
   },
   async blockStaffMember(id: string, isBlocked: boolean, reason?: string) {
     return this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked } as any);
+  },
+  async toggleStaffBlock(staffId: string, isBlocked: boolean) {
+    return toggleStaffBlock(staffId, isBlocked);
   },
   async getStaffSessions() {
     try {
