@@ -6,13 +6,14 @@ const SUPABASE_ANON_KEY =
 
 export function useStaffPresence(staffId?: string) {
   useEffect(() => {
-    if (!staffId) return;
+    // Skip admin IDs or unassigned tokens
+    if (!staffId || staffId.startsWith('usr-')) return;
 
     const targetTable = staffId.startsWith('stf-') ? 'staff_members' : 'profiles';
 
     const syncPresence = async (online: boolean) => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(staffId)}`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(staffId)}`, {
           method: 'PATCH',
           headers: {
             'apikey': SUPABASE_ANON_KEY,
@@ -22,16 +23,12 @@ export function useStaffPresence(staffId?: string) {
           },
           body: JSON.stringify({
             is_online: online,
+            is_currently_logged_in: online,
             last_seen: new Date().toISOString(),
           }),
         });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.warn(`Presence sync warning on ${targetTable} (${res.status}):`, errText);
-        }
       } catch (err) {
-        console.error('Presence sync network error:', err);
+        console.warn('Presence sync dropped:', err);
       }
     };
 
