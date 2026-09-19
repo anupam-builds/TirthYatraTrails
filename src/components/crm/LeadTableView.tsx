@@ -164,10 +164,11 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       );
       if (shouldUpdate) {
         try {
+          const exactId = (inq as any).id || inq.id;
           if (onUpdateStatus) {
-            await onUpdateStatus(inq.id, 'CONTACTED');
+            await onUpdateStatus(exactId, 'CONTACTED');
           } else {
-            await updateLeadOrInquiryStatus(inq.id, 'CONTACTED');
+            await updateLeadOrInquiryStatus(exactId, 'CONTACTED');
           }
         } catch (err: any) {
           console.error('Failed to update status to CONTACTED:', err);
@@ -543,22 +544,22 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               onChange={async (e) => {
                                 const rawVal = e.target.value;
                                 console.log('🎯 [LeadTableView] Assignment dropdown changed:', {
-                                  leadId: inq.id,
+                                  leadId: lead.id,
                                   selectedValue: rawVal,
                                   previousAssigned: inq.assignedStaffId,
                                 });
                                 const cleaned = cleanUnassignedValue(rawVal) || '';
                                 try {
                                   if (onAssignStaff) {
-                                    console.log('🎯 [LeadTableView] Calling onAssignStaff with:', { leadId: inq.id, staffId: cleaned });
-                                    await onAssignStaff(inq.id, cleaned);
+                                    console.log('🎯 [LeadTableView] Calling onAssignStaff with lead.id:', { leadId: lead.id, staffId: cleaned });
+                                    await onAssignStaff(lead.id, cleaned);
                                   } else {
-                                    console.log('🎯 [LeadTableView] Calling updateLeadOrInquiryStatus with:', { leadId: inq.id, status: inq.status, assignedStaffId: cleaned });
-                                    await updateLeadOrInquiryStatus(inq.id, inq.status || 'NEW', cleaned || undefined);
+                                    console.log('🎯 [LeadTableView] Calling updateLeadOrInquiryStatus with lead.id:', { leadId: lead.id, status: inq.status, assignedStaffId: cleaned });
+                                    await updateLeadOrInquiryStatus(lead.id, inq.status || 'NEW', cleaned || undefined);
                                   }
-                                  console.log('✅ [LeadTableView] Staff assigned successfully for lead:', inq.id, { staffId: cleaned });
+                                  console.log('✅ [LeadTableView] Staff assigned successfully for lead:', lead.id, { staffId: cleaned });
                                 } catch (err) {
-                                  console.error('❌ [LeadTableView] Failed assigning staff for lead:', inq.id, err);
+                                  console.error('❌ [LeadTableView] Failed assigning staff for lead:', lead.id, err);
                                 }
                               }}
                               className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
@@ -673,9 +674,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   if (!proceed) return;
                                 }
                                 if (onUpdateStatus) {
-                                  await onUpdateStatus(inq.id, newStatus);
+                                  await onUpdateStatus(lead.id, newStatus);
                                 } else {
-                                  await updateLeadOrInquiryStatus(inq.id, newStatus);
+                                  await updateLeadOrInquiryStatus(lead.id, newStatus);
                                 }
                               }}
                               className={`text-xs font-extrabold rounded-xl px-3 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${

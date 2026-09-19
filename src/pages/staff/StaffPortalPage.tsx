@@ -4,7 +4,8 @@ import { useStaffPresence } from '../../hooks/useStaffPresence.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
-import { api, generateWhatsAppLink, updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
+import { supabase } from '../../lib/supabase.js';
+import { api, generateWhatsAppLink, updateLeadOrInquiryStatus, cleanUnassignedValue, mapInquiryRow } from '../../services/api.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
@@ -58,6 +59,7 @@ import {
 
 export const StaffPortalPage: React.FC = () => {
   const { staffUser, isStaffAuthenticated, isStaffLoading, logoutStaff } = useAuth();
+  const currentStaffId = staffUser?.id;
   const { navigate } = useRouter();
   const { theme, isDark, setTheme, toggleTheme } = useTheme();
 
@@ -69,6 +71,7 @@ export const StaffPortalPage: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [staffLeads, setStaffLeads] = useState<any[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [selectedInquiryForEdit, setSelectedInquiryForEdit] = useState<Inquiry | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +94,7 @@ export const StaffPortalPage: React.FC = () => {
   // Staff members can view inquiries assigned explicitly OR matching name/ID fallback (case-insensitive trim check)
   const staffAssignedInquiries = useMemo(() => {
     if (!staffUser) return [];
-    return inquiries.filter((inq) => {
+    const baseList = inquiries.filter((inq) => {
       const matchId = Boolean(inq.assignedStaffId && inq.assignedStaffId === staffUser.id);
       const matchName = Boolean(
         inq.assignedStaffName &&
@@ -101,7 +104,21 @@ export const StaffPortalPage: React.FC = () => {
       // Fallback or explicit check: also allow unassigned if testing or map broader if needed, but strictly check assigned id/name
       return matchId || matchName;
     });
-  }, [inquiries, staffUser]);
+
+    if (!staffLeads.length) return baseList;
+
+    const combined = [...baseList];
+    for (const rawLead of staffLeads) {
+      const mapped = mapInquiryRow(rawLead);
+      const idx = combined.findIndex((i) => i.id === mapped.id || (rawLead.id && i.id === String(rawLead.id)));
+      if (idx >= 0) {
+        combined[idx] = { ...combined[idx], ...mapped };
+      } else {
+        combined.unshift(mapped);
+      }
+    }
+    return combined;
+  }, [inquiries, staffLeads, staffUser]);
 
   const toneOptions: { id: NotificationTone; name: string; desc: string; icon: string }[] = [
     {
@@ -255,6 +272,50 @@ export const StaffPortalPage: React.FC = () => {
       );
     },
   });
+
+  // Dedicated Staff Leads Realtime Subscription for 'leads' table
+  useEffect(() => {
+    if (!currentStaffId) return;
+
+    const channel = supabase
+      .channel('staff-leads-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        (payload) => {
+          console.log('📡 [Staff Realtime] Leads updated:', payload);
+          const updatedRow = payload.new as any;
+          if (updatedRow && updatedRow.assigned_staff_id === currentStaffId) {
+            // Merge or prepend into local staff leads state
+            setStaffLeads((prev) => {
+              const exists = prev.some((l) => l.id === updatedRow.id);
+              if (exists) {
+                return prev.map((l) => (l.id === updatedRow.id ? updatedRow : l));
+              }
+              return [updatedRow, ...prev];
+            });
+
+            // Synchronize mapped record into inquiries state
+            const mapped = mapInquiryRow(updatedRow);
+            setInquiries((prev) => {
+              const exists = prev.some((i) => i.id === mapped.id || (updatedRow.id && i.id === String(updatedRow.id)));
+              if (exists) {
+                return prev.map((i) => (i.id === mapped.id || (updatedRow.id && i.id === String(updatedRow.id)) ? { ...i, ...mapped } : i));
+              }
+              return [mapped, ...prev];
+            });
+            if (selectedInquiryForEdit && (selectedInquiryForEdit.id === mapped.id || selectedInquiryForEdit.id === String(updatedRow.id))) {
+              setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...mapped } : null));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentStaffId]);
 
   async function loadStaff() {
     try {
