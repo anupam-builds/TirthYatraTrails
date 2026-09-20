@@ -20,31 +20,32 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
   const { staffUser } = useAuth();
   const currentStaffId = propStaffId || staffUser?.id;
 
-  const [leads, setLeads] = useState<any[]>([]);
+  const [staffLeads, setStaffLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Dedicated fetch function for staff leads
   const fetchStaffLeads = useCallback(async () => {
-    if (!currentStaffId) return;
+    const targetStaffId = currentStaffId || 'stf-1789834704496-07kq';
+    if (!targetStaffId) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('leads')
         .select('*')
-        .eq('assigned_staff_id', currentStaffId)
+        .eq('assigned_staff_id', targetStaffId)
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        setLeads(data);
+        setStaffLeads(data);
       } else {
         if (error) {
           console.warn('⚠️ [StaffLeadsView] Initial leads query fallback to inquiries:', error.message);
         }
         const allInquiries = await api.getInquiries();
         const filtered = allInquiries.filter(
-          (i) => i.assignedStaffId === currentStaffId || i.assignedStaffName?.toLowerCase() === staffUser?.name?.toLowerCase()
+          (i) => i.assignedStaffId === targetStaffId || (staffUser?.name && i.assignedStaffName?.toLowerCase() === staffUser.name.toLowerCase())
         );
-        setLeads(filtered);
+        setStaffLeads(filtered);
       }
     } catch (err) {
       console.error('❌ [StaffLeadsView] Failed to load leads:', err);
@@ -58,45 +59,61 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     fetchStaffLeads();
   }, [fetchStaffLeads]);
 
-  // Raw Debug Lead Realtime Channel & State Merger
+  // Public Leads Realtime Channel with raw comparison & prefix matching
   useEffect(() => {
-    const staffId = currentStaffId || 'stf-1789834704496-07kq';
-    console.log('📡 [StaffRealtime] Mounting leads listener for staffId:', staffId);
+    const targetStaffId = currentStaffId || 'stf-1789834704496-07kq';
+    console.log('📡 [StaffRealtime] Subscribing to public:leads-realtime for targetStaffId:', targetStaffId);
 
     const channel = supabase
-      .channel('staff-leads-live-debug')
+      .channel('public:leads-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
-          console.log('🔥 RAW LEAD CHANGE RECEIVED:', payload.eventType, payload.new || payload.old);
-
-          const newRow = payload.new as any;
+          console.log('⚡ Realtime event payload:', payload);
+          const incoming = payload.new as any;
           const oldRow = payload.old as any;
 
-          setLeads((prevLeads) => {
-            if (payload.eventType === 'DELETE') {
-              return prevLeads.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id));
-            }
+          if (payload.eventType === 'DELETE') {
+            setStaffLeads((prev) => prev.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id)));
+            return;
+          }
 
-            const targetId = newRow?.assigned_staff_id;
-            const belongsToStaff = targetId === staffId;
-            const exists = prevLeads.some((l) => l.id === newRow?.id || String(l.id) === String(newRow?.id));
-
-            if (exists) {
-              if (!belongsToStaff) {
-                return prevLeads.filter((l) => l.id !== newRow?.id && String(l.id) !== String(newRow?.id));
-              }
-              return prevLeads.map((l) => (l.id === newRow.id || String(l.id) === String(newRow.id) ? { ...l, ...newRow } : l));
-            } else if (belongsToStaff) {
-              return [newRow, ...prevLeads];
-            }
-            return prevLeads;
+          const incomingStaffId = incoming?.assigned_staff_id;
+          console.log('🔎 [StaffLeads Sync] payload.new.assigned_staff_id vs targetStaffId:', {
+            rawAssigned: incomingStaffId,
+            targetStaffId,
+            matchesExact: incomingStaffId === targetStaffId,
+            matchesPrefix: Boolean(
+              incomingStaffId &&
+              targetStaffId &&
+              (incomingStaffId.startsWith(targetStaffId) || targetStaffId.startsWith(incomingStaffId))
+            ),
           });
+
+          const isMatchingStaff = Boolean(
+            incomingStaffId &&
+            (incomingStaffId === targetStaffId ||
+              incomingStaffId.startsWith(targetStaffId) ||
+              targetStaffId.startsWith(incomingStaffId))
+          );
+
+          if (incoming && isMatchingStaff) {
+            setStaffLeads((prev) => {
+              const exists = prev.some((l) => l.id === incoming.id || String(l.id) === String(incoming.id));
+              if (exists) {
+                return prev.map((l) => (l.id === incoming.id || String(l.id) === String(incoming.id) ? incoming : l));
+              }
+              return [incoming, ...prev];
+            });
+          } else if (incoming && !isMatchingStaff) {
+            // If reassigned away from this staff, remove from list
+            setStaffLeads((prev) => prev.filter((l) => l.id !== incoming.id && String(l.id) !== String(incoming.id)));
+          }
         }
       )
-      .subscribe((status, err) => {
-        console.log('📡 [StaffRealtime] Subscription status:', status, err);
+      .subscribe((status) => {
+        console.log('Staff leads channel status:', status);
       });
 
     return () => {
@@ -116,7 +133,7 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     );
   }
 
-  const mappedInquiries: Inquiry[] = leads.map((l) => {
+  const mappedInquiries: Inquiry[] = staffLeads.map((l) => {
     if (l.title !== undefined && l.type !== undefined) return l as Inquiry;
     return mapInquiryRow(l);
   });
