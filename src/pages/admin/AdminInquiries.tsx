@@ -194,17 +194,30 @@ export const AdminInquiries: React.FC = () => {
     }
   };
 
-  const handleAssignStaff = async (inquiryId: string, staffId: string) => {
+  const handleAssignStaff = async (inquiryId: string, staffId: any, e?: any) => {
     console.log('🎯 [AdminInquiries] handleAssignStaff called with:', { inquiryId, staffId });
     try {
-      const cleanedStaffId = cleanUnassignedValue(staffId);
+      // If value passed from dropdown event might be an event object or wrapped object:
+      const rawStaffId = e?.target
+        ? e.target.value
+        : (staffId && typeof staffId === 'object'
+            ? (staffId?.target?.value || staffId?.assignedStaffId || staffId?.id || staffId?.value || '')
+            : staffId);
+
+      const cleanedStaffId = cleanUnassignedValue(rawStaffId ? String(rawStaffId) : '') || '';
       const staffMember = cleanedStaffId ? staffList.find((s) => String(s.id) === String(cleanedStaffId)) : null;
       const staffName = staffMember ? staffMember.name : '';
-      console.log('🎯 [AdminInquiries] Dispatching updateLeadOrInquiryStatus:', { inquiryId, cleanedStaffId, staffName });
-      const res = await updateLeadOrInquiryStatus(inquiryId, {
-        assignedStaffId: cleanedStaffId || undefined,
-        assignedStaffName: staffName || undefined,
-      });
+      console.log('🎯 [AdminInquiries] Dispatching updateLeadOrInquiryStatus:', { inquiryId, rawStaffId, cleanedStaffId, staffName });
+      
+      const res = await updateLeadOrInquiryStatus(
+        inquiryId,
+        {
+          assignedStaffId: cleanedStaffId || undefined,
+          assignedStaffName: staffName || undefined,
+        },
+        cleanedStaffId ? String(cleanedStaffId) : undefined,
+        staffName || undefined
+      );
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       console.log('✅ [AdminInquiries] Staff assigned successfully:', { inquiryId, updated });
       setInquiries((prev) =>

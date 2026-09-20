@@ -549,20 +549,25 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               name={`row-assigned-staff-${lead.id}`}
                               value={inq.assignedStaffId || ''}
                               onChange={async (e) => {
-                                const rawVal = e.target.value;
+                                const rawVal = e?.target ? e.target.value : ((e as any)?.assignedStaffId || e);
+                                const rawStaffId = typeof rawVal === 'object' && rawVal !== null
+                                  ? ((rawVal as any)?.target?.value || (rawVal as any)?.assignedStaffId || (rawVal as any)?.id || (rawVal as any)?.value || '')
+                                  : rawVal;
                                 console.log('🎯 [LeadTableView] Assignment dropdown changed:', {
                                   leadId: lead.id,
-                                  selectedValue: rawVal,
+                                  selectedValue: rawStaffId,
                                   previousAssigned: inq.assignedStaffId,
                                 });
-                                const cleaned = cleanUnassignedValue(rawVal) || '';
+                                const cleaned = cleanUnassignedValue(String(rawStaffId || '')) || '';
+                                const staffMember = cleaned ? staffList.find((s) => String(s.id) === String(cleaned)) : null;
+                                const staffName = staffMember ? staffMember.name : '';
                                 try {
                                   if (onAssignStaff) {
                                     console.log('🎯 [LeadTableView] Calling onAssignStaff with lead.id:', { leadId: lead.id, staffId: cleaned });
-                                    await onAssignStaff(lead.id, cleaned);
+                                    await onAssignStaff(lead.id, String(cleaned));
                                   } else {
                                     console.log('🎯 [LeadTableView] Calling updateLeadOrInquiryStatus with lead.id:', { leadId: lead.id, status: inq.status, assignedStaffId: cleaned });
-                                    await updateLeadOrInquiryStatus(lead.id, inq.status || 'NEW', cleaned || undefined);
+                                    await updateLeadOrInquiryStatus(lead.id, inq.status || 'NEW', String(cleaned || ''), staffName);
                                   }
                                   console.log('✅ [LeadTableView] Staff assigned successfully for lead:', lead.id, { staffId: cleaned });
                                 } catch (err) {

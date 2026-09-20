@@ -273,7 +273,18 @@ export async function updateLeadOrInquiryStatus(
   const targetTable = cleanId.startsWith('inq') ? 'inquiries' : 'leads';
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
 
-  let actualAssignedStaffId: any = typeof assignedStaffId === 'string' ? assignedStaffId : undefined;
+  let actualAssignedStaffId: any = undefined;
+  if (typeof assignedStaffId === 'string') {
+    actualAssignedStaffId = assignedStaffId;
+  } else if (typeof assignedStaffId === 'object' && assignedStaffId !== null) {
+    if ('assignedStaffId' in assignedStaffId) {
+      actualAssignedStaffId = (assignedStaffId as any).assignedStaffId;
+    } else if ('id' in assignedStaffId) {
+      actualAssignedStaffId = (assignedStaffId as any).id;
+    } else if ('target' in assignedStaffId && (assignedStaffId as any).target?.value) {
+      actualAssignedStaffId = (assignedStaffId as any).target.value;
+    }
+  }
   const actualStaffName = typeof staffNameOrOptions === 'string' ? staffNameOrOptions : undefined;
 
   if (typeof status === 'string') {

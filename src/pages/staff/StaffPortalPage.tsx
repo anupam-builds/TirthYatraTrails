@@ -408,17 +408,28 @@ export const StaffPortalPage: React.FC = () => {
     }
   };
 
-  const handleAssignStaff = async (inquiryId: string, staffId: string) => {
+  const handleAssignStaff = async (inquiryId: string, staffId: any, e?: any) => {
     console.log('🎯 [StaffPortalPage] handleAssignStaff called with:', { inquiryId, staffId });
     try {
-      const cleanedStaffId = cleanUnassignedValue(staffId);
+      const rawStaffId = e?.target
+        ? e.target.value
+        : (staffId && typeof staffId === 'object'
+            ? (staffId?.target?.value || staffId?.assignedStaffId || staffId?.id || staffId?.value || '')
+            : staffId);
+
+      const cleanedStaffId = cleanUnassignedValue(rawStaffId ? String(rawStaffId) : '') || '';
       const selected = cleanedStaffId ? staffList.find((s) => s.id === cleanedStaffId) : null;
       const staffName = selected ? selected.name : '';
-      console.log('🎯 [StaffPortalPage] Calling updateLeadOrInquiryStatus:', { inquiryId, cleanedStaffId, staffName });
-      const res = await updateLeadOrInquiryStatus(inquiryId, {
-        assignedStaffId: cleanedStaffId || undefined,
-        assignedStaffName: staffName || undefined,
-      });
+      console.log('🎯 [StaffPortalPage] Calling updateLeadOrInquiryStatus:', { inquiryId, rawStaffId, cleanedStaffId, staffName });
+      const res = await updateLeadOrInquiryStatus(
+        inquiryId,
+        {
+          assignedStaffId: cleanedStaffId || undefined,
+          assignedStaffName: staffName || undefined,
+        },
+        cleanedStaffId ? String(cleanedStaffId) : undefined,
+        staffName || undefined
+      );
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       console.log('✅ [StaffPortalPage] Assigned staff result:', updated);
       setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? { ...i, ...updated } : i)));
