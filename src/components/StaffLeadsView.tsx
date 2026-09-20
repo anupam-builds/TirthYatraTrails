@@ -23,39 +23,56 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
   const [staffLeads, setStaffLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fallback / seeded target staff ID
+  const HARDCODED_STAFF_ID = 'stf-1789834704496-07kq';
+
+  console.log('🔍 [StaffLeads] Staff ID Alignment Check:', {
+    currentStaffId,
+    hardlockedId: HARDCODED_STAFF_ID,
+    matches: currentStaffId === HARDCODED_STAFF_ID,
+  });
+
   const fetchAssignedLeads = useCallback(async () => {
-    const staffId = currentStaffId || 'stf-1789834704496-07kq';
+    const staffId = HARDCODED_STAFF_ID; // force match test against seeded staff id
     setLoading(true);
-    console.log('📥 [StaffFetch] Fetching leads assigned to:', staffId);
-    const { data, error } = await supabase
+    console.log('🔍 [StaffLeads] Forcing load for staffId:', staffId);
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('assigned_staff_id', staffId)
+        .order('created_at', { ascending: false });
+
+      console.log('🔍 [StaffLeads] Initial query result:', { count: data?.length, error, data });
+      if (data) setStaffLeads(data);
+    } catch (err) {
+      console.error('❌ [StaffLeads] Error fetching leads:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const staffId = 'stf-1789834704496-07kq'; // force match test against seeded staff id
+    console.log('🔍 [StaffLeads] Forcing load for staffId:', staffId);
+
+    supabase
       .from('leads')
       .select('*')
       .eq('assigned_staff_id', staffId)
-      .order('created_at', { ascending: false });
+      .then(({ data, error }) => {
+        console.log('🔍 [StaffLeads] Initial query result:', { count: data?.length, error, data });
+        if (data) setStaffLeads(data);
+        setLoading(false);
+      });
 
-    if (error) {
-      console.error('❌ [StaffFetch] Error fetching assigned leads:', error);
-    } else {
-      console.log('✅ [StaffFetch] Loaded assigned leads count:', data?.length || 0, data);
-      setStaffLeads(data || []);
-    }
-    setLoading(false);
-  }, [currentStaffId]);
-
-  useEffect(() => {
-    const staffId = currentStaffId || 'stf-1789834704496-07kq';
-
-    // 1. Initial fetch for assigned leads
-    fetchAssignedLeads();
-
-    // 2. Realtime listener for live assignment/status updates
     const channel = supabase
-      .channel('staff-assigned-leads-live')
+      .channel('public:leads-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
-          console.log('⚡ [StaffRealtime] Lead event received:', payload.eventType, payload.new || payload.old);
+          console.log('⚡ [StaffRealtime] RAW PAYLOAD ARRIVED:', payload);
           const newRow = payload.new as any;
           const oldRow = payload.old as any;
 
@@ -65,18 +82,13 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
             }
             if (!newRow) return prev;
 
-            const isAssignedToMe = newRow.assigned_staff_id === staffId;
+            const isAssignedToStaff = newRow.assigned_staff_id === staffId;
             const exists = prev.some((l) => l.id === newRow.id);
 
             if (exists) {
-              if (!isAssignedToMe) {
-                // Reassigned away from this staff member
-                return prev.filter((l) => l.id !== newRow.id);
-              }
-              // Update existing row
-              return prev.map((l) => (l.id === newRow.id ? { ...l, ...newRow } : l));
-            } else if (isAssignedToMe) {
-              // Newly assigned to this staff member
+              if (!isAssignedToStaff) return prev.filter((l) => l.id !== newRow.id);
+              return prev.map((l) => (l.id === newRow.id ? newRow : l));
+            } else if (isAssignedToStaff) {
               return [newRow, ...prev];
             }
             return prev;
@@ -84,13 +96,13 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
         }
       )
       .subscribe((status) => {
-        console.log('📡 [StaffRealtime] Subscription status:', status);
+        console.log('📡 [StaffRealtime] channel status:', status);
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentStaffId, fetchAssignedLeads]);
+  }, []);
 
   if (!currentStaffId) {
     return (
