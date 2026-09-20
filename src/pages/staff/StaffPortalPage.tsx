@@ -20,6 +20,7 @@ import {
   DEFAULT_NOTIFICATION_SETTINGS,
 } from '../../services/soundNotification.js';
 import { StaffLoginPage } from './StaffLoginPage.js';
+import { BaseInput } from '../../components/FormField.js';
 import {
   Users,
   MessageSquare,
@@ -925,16 +926,17 @@ export const StaffPortalPage: React.FC = () => {
               <div className="bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <label htmlFor="staff-volume-slider" className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer">
                       <Volume2 className="w-3.5 h-3.5 text-slate-500" />
                       <span>Alert Volume Level</span>
-                    </span>
+                    </label>
                     <span className="font-mono text-xs font-extrabold text-orange-600 dark:text-orange-400">
                       {Math.round(notificationSettings.volume * 100)}%
                     </span>
                   </div>
-                  <input
+                  <BaseInput
                     id="staff-volume-slider"
+                    name="staff-volume-slider"
                     type="range"
                     min="0.1"
                     max="1.0"

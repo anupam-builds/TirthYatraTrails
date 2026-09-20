@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { useTheme } from '../../context/ThemeContext.js';
+import { BaseInput, BaseSelect } from '../../components/FormField.js';
 import {
   Bell,
   Volume2,
@@ -372,8 +373,9 @@ export const AdminSettings: React.FC = () => {
                   Or select tone from dropdown list:
                 </label>
                 <div className="relative">
-                  <select
+                  <BaseSelect
                     id="tone-dropdown-select"
+                    name="tone-dropdown-select"
                     value={settings.selectedTone}
                     onChange={(e) => handleToneChange(e.target.value as NotificationTone)}
                     className="w-full bg-slate-50 dark:bg-[#0f233f] border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-orange-500 focus:outline-none appearance-none cursor-pointer"
@@ -383,7 +385,7 @@ export const AdminSettings: React.FC = () => {
                         {tone.name} — {tone.desc}
                       </option>
                     ))}
-                  </select>
+                  </BaseSelect>
                   <div className="absolute right-3.5 top-3 pointer-events-none text-slate-400 text-xs">
                     ▼
                   </div>
@@ -405,10 +407,12 @@ export const AdminSettings: React.FC = () => {
                 {/* Volume Slider */}
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">Volume Level</span>
+                    <label htmlFor="admin-settings-volume-slider" className="text-slate-500 dark:text-slate-400 font-medium cursor-pointer">Volume Level</label>
                     <span className="text-orange-600 dark:text-orange-400 font-bold">{Math.round(settings.volume * 100)}%</span>
                   </div>
-                  <input
+                  <BaseInput
+                    id="admin-settings-volume-slider"
+                    name="admin-settings-volume-slider"
                     type="range"
                     min="0.1"
                     max="1"
@@ -469,10 +473,12 @@ export const AdminSettings: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              <label htmlFor="settings-desk-phone-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 Central WhatsApp Helpline
               </label>
-              <input
+              <BaseInput
+                id="settings-desk-phone-input"
+                name="settings-desk-phone-input"
                 type="text"
                 value={deskPhone}
                 onChange={(e) => setDeskPhone(e.target.value)}
@@ -485,10 +491,12 @@ export const AdminSettings: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              <label htmlFor="settings-agency-name-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 Agency / Operations Center Name
               </label>
-              <input
+              <BaseInput
+                id="settings-agency-name-input"
+                name="settings-agency-name-input"
                 type="text"
                 value={agencyName}
                 onChange={(e) => setAgencyName(e.target.value)}

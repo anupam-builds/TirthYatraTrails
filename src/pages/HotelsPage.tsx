@@ -4,6 +4,7 @@ import { useCitiesMaster } from '../context/CitiesContext.js';
 import { api } from '../services/api.js';
 import { City, Hotel } from '../types.js';
 import { HeroSearchBar } from '../components/common/HeroSearchBar.js';
+import { BaseInput } from '../components/FormField.js';
 import {
   MapPin,
   Calendar,
@@ -365,7 +366,9 @@ export const HotelsPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-              <input
+              <BaseInput
+                id="hotels-list-search-input"
+                name="hotels-list-search-input"
                 type="text"
                 placeholder="Search hotel name or ghat..."
                 value={searchQuery}

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
+import { BaseInput, BaseSelect } from '../FormField.js';
 import {
   getLeadId,
   formatLeadId,
@@ -356,7 +357,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           {/* Global Search Input */}
           <div className="relative flex-1 max-w-lg">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-            <input
+            <BaseInput
+              id="crm-leads-global-search"
+              name="crm-leads-global-search"
               type="text"
               placeholder="Search by Lead ID (e.g. TTT00000001), Customer Name, Phone, or City..."
               value={searchQuery}
@@ -376,8 +379,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           {/* Assigned Staff Filter - Admin Only */}
           {isAdmin ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500 shrink-0">Staff:</span>
-              <select
+              <label htmlFor="crm-filter-by-staff" className="text-xs font-bold text-slate-500 shrink-0">Staff:</label>
+              <BaseSelect
+                id="crm-filter-by-staff"
+                name="crm-filter-by-staff"
                 value={staffFilter}
                 onChange={(e) => setStaffFilter(e.target.value)}
                 className="px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
@@ -389,7 +394,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     {stf.name}
                   </option>
                 ))}
-              </select>
+              </BaseSelect>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
@@ -539,7 +544,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         {/* 2. Assigned Staff - Editable ONLY by Admin */}
                         <td className="py-4 px-4 align-top">
                           {isAdmin && onAssignStaff ? (
-                            <select
+                            <BaseSelect
+                              id={`row-assigned-staff-${lead.id}`}
+                              name={`row-assigned-staff-${lead.id}`}
                               value={inq.assignedStaffId || ''}
                               onChange={async (e) => {
                                 const rawVal = e.target.value;
@@ -570,7 +577,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   {s.name}
                                 </option>
                               ))}
-                            </select>
+                            </BaseSelect>
                           ) : (
                             <div className="flex items-center gap-1.5">
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
@@ -662,7 +669,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <span>Closed (Locked)</span>
                             </div>
                           ) : (
-                            <select
+                            <BaseSelect
+                              id={`row-lead-status-${lead.id}`}
+                              name={`row-lead-status-${lead.id}`}
                               value={inq.status || 'NEW'}
                               disabled={isStaffMode && (isLocked || inq.status === 'CLOSED')}
                               onChange={async (e) => {
@@ -688,7 +697,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   {CRM_STATUS_CONFIG[st]?.label || st}
                                 </option>
                               ))}
-                            </select>
+                            </BaseSelect>
                           )}
                         </td>
 
@@ -816,7 +825,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
                               {onAddNote && (
                                 <div className="flex items-center gap-2">
-                                  <input
+                                  <BaseInput
+                                    id={`lead-quick-note-input-${inq.id}`}
+                                    name={`lead-quick-note-input-${inq.id}`}
                                     type="text"
                                     placeholder="Add quick follow-up note (e.g. Called devotee; sent customized quotation)..."
                                     value={noteInputs[inq.id] || ''}

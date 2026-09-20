@@ -8,6 +8,7 @@ import { SacredCityHybridSelector } from '../../components/admin/SacredCityHybri
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
 import { supabase } from '../../lib/supabase.js';
 import { HotelInventoryGrid } from '../../components/admin/HotelInventoryGrid.js';
+import { BaseInput, BaseSelect, BaseTextarea } from '../../components/FormField.js';
 import {
   Building,
   Plus,
@@ -354,7 +355,9 @@ export const AdminHotels: React.FC = () => {
         {/* Filters */}
         <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
           <div className="flex items-center gap-3">
-            <select
+            <BaseSelect
+              id="admin-hotels-city-filter"
+              name="admin-hotels-city-filter"
               value={selectedCityId}
               onChange={(e) => setSelectedCityId(e.target.value)}
               className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
@@ -365,12 +368,14 @@ export const AdminHotels: React.FC = () => {
                   {c.name} ({c.hotelCount})
                 </option>
               ))}
-            </select>
+            </BaseSelect>
           </div>
 
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
+            <BaseInput
+              id="admin-hotels-search-input"
+              name="admin-hotels-search-input"
               type="text"
               placeholder="Search hotel name..."
               value={searchQuery}
@@ -524,8 +529,10 @@ export const AdminHotels: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-2 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Hotel Name</label>
-                  <input
+                  <label htmlFor="hotel-name-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Hotel Name</label>
+                  <BaseInput
+                    id="hotel-name-input"
+                    name="hotel-name-input"
                     type="text"
                     required
                     value={name}
@@ -547,8 +554,10 @@ export const AdminHotels: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Full Address</label>
-                <input
+                <label htmlFor="hotel-address-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Full Address</label>
+                <BaseInput
+                  id="hotel-address-input"
+                  name="hotel-address-input"
                   type="text"
                   required
                   value={address}
@@ -558,8 +567,10 @@ export const AdminHotels: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">About / Description</label>
-                <textarea
+                <label htmlFor="hotel-description-textarea" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">About / Description</label>
+                <BaseTextarea
+                  id="hotel-description-textarea"
+                  name="hotel-description-textarea"
                   rows={3}
                   required
                   value={description}
@@ -570,8 +581,10 @@ export const AdminHotels: React.FC = () => {
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Base Price (₹/night)</label>
-                  <input
+                  <label htmlFor="hotel-base-price-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Base Price (₹/night)</label>
+                  <BaseInput
+                    id="hotel-base-price-input"
+                    name="hotel-base-price-input"
                     type="number"
                     required
                     value={basePrice}
@@ -581,8 +594,10 @@ export const AdminHotels: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Star Rating (1-5)</label>
-                  <input
+                  <label htmlFor="hotel-star-rating-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Star Rating (1-5)</label>
+                  <BaseInput
+                    id="hotel-star-rating-input"
+                    name="hotel-star-rating-input"
                     type="number"
                     min={1}
                     max={5}
@@ -594,8 +609,10 @@ export const AdminHotels: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Google Rating</label>
-                  <input
+                  <label htmlFor="hotel-google-rating-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Google Rating</label>
+                  <BaseInput
+                    id="hotel-google-rating-input"
+                    name="hotel-google-rating-input"
                     type="number"
                     step="0.1"
                     min={1}
@@ -610,8 +627,10 @@ export const AdminHotels: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Distance to Temple</label>
-                  <input
+                  <label htmlFor="hotel-distance-temple-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Distance to Temple</label>
+                  <BaseInput
+                    id="hotel-distance-temple-input"
+                    name="hotel-distance-temple-input"
                     type="text"
                     value={distanceToTemple}
                     onChange={(e) => setDistanceToTemple(e.target.value)}
@@ -621,8 +640,10 @@ export const AdminHotels: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Darshan Assistance</label>
-                  <input
+                  <label htmlFor="hotel-darshan-type-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Darshan Assistance</label>
+                  <BaseInput
+                    id="hotel-darshan-type-input"
+                    name="hotel-darshan-type-input"
                     type="text"
                     value={darshanType}
                     onChange={(e) => setDarshanType(e.target.value)}
@@ -633,10 +654,12 @@ export const AdminHotels: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">
+                <label htmlFor="hotel-amenities-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">
                   Amenities (comma-separated)
                 </label>
-                <input
+                <BaseInput
+                  id="hotel-amenities-input"
+                  name="hotel-amenities-input"
                   type="text"
                   value={amenitiesString}
                   onChange={(e) => setAmenitiesString(e.target.value)}
@@ -654,9 +677,10 @@ export const AdminHotels: React.FC = () => {
               />
 
               <div className="flex items-center gap-2 pt-1">
-                <input
+                <BaseInput
                   type="checkbox"
                   id="top-rated-check"
+                  name="top-rated-check"
                   checked={isTopRated}
                   onChange={(e) => setIsTopRated(e.target.checked)}
                   className="rounded border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-orange-600 focus:ring-0"

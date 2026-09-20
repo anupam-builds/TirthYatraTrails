@@ -3,6 +3,7 @@ import { X, Star, CheckCircle2, Mic, MapPin, Sparkles, Send } from 'lucide-react
 import { api } from '../../services/api.js';
 import { Review } from '../../types.js';
 import { AudioVoiceNoteWidget } from './AudioVoiceNoteWidget.js';
+import { BaseInput, BaseTextarea } from '../FormField.js';
 import confetti from 'canvas-confetti';
 
 interface SubmitReviewModalProps {
@@ -147,10 +148,12 @@ export const SubmitReviewModal: React.FC<SubmitReviewModalProps> = ({
             {/* Author Name & Home City */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label htmlFor="submit-review-author-name" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Your Full Name *
                 </label>
-                <input
+                <BaseInput
+                  id="submit-review-author-name"
+                  name="submit-review-author-name"
                   type="text"
                   required
                   value={authorName}
@@ -161,10 +164,12 @@ export const SubmitReviewModal: React.FC<SubmitReviewModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label htmlFor="submit-review-author-city" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Your Home City / State
                 </label>
-                <input
+                <BaseInput
+                  id="submit-review-author-city"
+                  name="submit-review-author-city"
                   type="text"
                   value={authorHomeCity}
                   onChange={(e) => setAuthorHomeCity(e.target.value)}
@@ -177,12 +182,14 @@ export const SubmitReviewModal: React.FC<SubmitReviewModalProps> = ({
             {/* Sacred Destination Visited & Rating */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label htmlFor="submit-review-destination" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Sacred Destination / Yatra
                 </label>
                 <div className="relative">
                   <MapPin className="w-4 h-4 text-orange-500 absolute left-3 top-3" />
-                  <input
+                  <BaseInput
+                    id="submit-review-destination"
+                    name="submit-review-destination"
                     type="text"
                     required
                     value={authorLocation}
@@ -237,10 +244,12 @@ export const SubmitReviewModal: React.FC<SubmitReviewModalProps> = ({
 
             {/* Written Review */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label htmlFor="submit-review-story-text" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Written Reflection / Traveller Story
               </label>
-              <textarea
+              <BaseTextarea
+                id="submit-review-story-text"
+                name="submit-review-story-text"
                 rows={3}
                 value={reviewText}
                 onChange={(e) => setReviewText(e.target.value)}

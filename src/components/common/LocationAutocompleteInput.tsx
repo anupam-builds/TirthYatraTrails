@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BaseInput } from '../FormField.js';
 import {
   MapPin,
   Train,
@@ -388,8 +389,9 @@ export const LocationAutocompleteInput: React.FC<LocationAutocompleteInputProps>
         </div>
 
         {/* Input */}
-        <input
+        <BaseInput
           id={id}
+          name={id}
           type="text"
           required={required}
           value={inputValue}

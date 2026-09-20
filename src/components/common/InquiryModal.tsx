@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext.js';
 import { api, generateWhatsAppLink } from '../../services/api.js';
 import confetti from 'canvas-confetti';
 import { LocationAutocompleteInput } from './LocationAutocompleteInput.js';
+import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
 import {
   X,
   MessageCircle,
@@ -315,12 +316,14 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
               {/* Full Name & WhatsApp */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="inquiry-full-name" className="block text-xs font-bold text-slate-700 mb-1">
                     Full Name <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="inquiry-full-name"
+                      name="inquiry-full-name"
                       type="text"
                       required
                       placeholder="e.g. Ramesh Kumar"
@@ -332,12 +335,14 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="inquiry-whatsapp-number" className="block text-xs font-bold text-slate-700 mb-1">
                     WhatsApp Number <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="inquiry-whatsapp-number"
+                      name="inquiry-whatsapp-number"
                       type="text"
                       required
                       placeholder="+91 98765 43210"
@@ -352,10 +357,12 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
               {/* Email & Home City */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+                  <label htmlFor="inquiry-email" className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="inquiry-email"
+                      name="inquiry-email"
                       type="email"
                       placeholder="email@example.com"
                       value={email}
@@ -366,10 +373,12 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Your City / Origin</label>
+                  <label htmlFor="inquiry-user-city" className="block text-xs font-bold text-slate-700 mb-1">Your City / Origin</label>
                   <div className="relative">
                     <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="inquiry-user-city"
+                      name="inquiry-user-city"
                       type="text"
                       placeholder="e.g. Mumbai / Delhi"
                       value={userCity}
@@ -405,12 +414,14 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
 
               {/* Travel Date */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="inquiry-check-in-date" className="block text-xs font-bold text-slate-700 mb-1">
                   Estimated Travel / Check-in Date
                 </label>
                 <div className="relative">
                   <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                  <input
+                  <BaseInput
+                    id="inquiry-check-in-date"
+                    name="inquiry-check-in-date"
                     type="date"
                     required
                     value={checkInDate}
@@ -496,10 +507,12 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       {childAges.map((age, idx) => (
                         <div key={idx} className="space-y-1">
-                          <label className="block text-[10px] font-bold text-slate-700">
+                          <label htmlFor={`inquiry-child-${idx + 1}-age`} className="block text-[10px] font-bold text-slate-700">
                             Child {idx + 1} Age
                           </label>
-                          <select
+                          <BaseSelect
+                            id={`inquiry-child-${idx + 1}-age`}
+                            name={`inquiry-child-${idx + 1}-age`}
                             value={age}
                             onChange={(e) => handleChildAgeChange(idx, Number(e.target.value))}
                             className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:ring-2 focus:ring-orange-500 focus:outline-none"
@@ -510,7 +523,7 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
                                 {val}
                               </option>
                             ))}
-                          </select>
+                          </BaseSelect>
                         </div>
                       ))}
                     </div>
@@ -520,10 +533,12 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
 
               {/* Special Requests */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="inquiry-special-requests" className="block text-xs font-bold text-slate-700 mb-1">
                   Special Puja / Senior Citizen / Wheelchair / Meal Requests
                 </label>
-                <textarea
+                <BaseTextarea
+                  id="inquiry-special-requests"
+                  name="inquiry-special-requests"
                   rows={2}
                   placeholder="e.g. VIP darshan passes needed, senior citizens traveling, pure Jain meals..."
                   value={specialRequests}

@@ -3,6 +3,7 @@ import { Package } from '../../types.js';
 import { api, mapPackageRow } from '../../services/api.js';
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
 import { supabase } from '../../lib/supabase.js';
+import { BaseInput, BaseSelect } from '../FormField.js';
 import {
   Compass,
   Calendar,
@@ -172,20 +173,22 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
         </div>
 
         <div className="flex items-center gap-3">
-          <select
+          <BaseSelect
+            id="package-builder-sync-select"
+            name="package-builder-sync-select"
             value={activePackage?.id || ''}
             onChange={(e) => {
               const selected = packages.find((p) => p.id === e.target.value);
               if (selected) setActivePackage(selected);
             }}
-            className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
           >
             {packages.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.title}
               </option>
             ))}
-          </select>
+          </BaseSelect>
 
           <button
             onClick={handleSavePackage}
@@ -215,8 +218,10 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
             <div>
-              <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Package Title</label>
-              <input
+              <label htmlFor="package-builder-sync-title-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Package Title</label>
+              <BaseInput
+                id="package-builder-sync-title-input"
+                name="package-builder-sync-title-input"
                 type="text"
                 value={activePackage.title}
                 onChange={(e) => setActivePackage({ ...activePackage, title: e.target.value })}
@@ -225,8 +230,10 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
             </div>
 
             <div>
-              <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Starting Price (₹)</label>
-              <input
+              <label htmlFor="package-builder-sync-price-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Starting Price (₹)</label>
+              <BaseInput
+                id="package-builder-sync-price-input"
+                name="package-builder-sync-price-input"
                 type="number"
                 value={activePackage.startingPrice}
                 onChange={(e) => setActivePackage({ ...activePackage, startingPrice: Number(e.target.value) })}
@@ -235,8 +242,10 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
             </div>
 
             <div>
-              <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Circuit Duration</label>
-              <input
+              <label htmlFor="package-builder-sync-duration-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Circuit Duration</label>
+              <BaseInput
+                id="package-builder-sync-duration-input"
+                name="package-builder-sync-duration-input"
                 type="text"
                 value={activePackage.duration}
                 onChange={(e) => setActivePackage({ ...activePackage, duration: e.target.value })}

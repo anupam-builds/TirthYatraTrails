@@ -5,6 +5,7 @@ import { api, generateWhatsAppLink } from '../services/api.js';
 import { Package } from '../types.js';
 import confetti from 'canvas-confetti';
 import { LocationAutocompleteInput } from '../components/common/LocationAutocompleteInput.js';
+import { BaseInput, BaseSelect, BaseTextarea } from '../components/FormField.js';
 import {
   User as UserIcon,
   Mail,
@@ -543,13 +544,14 @@ export const EnquiryPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                   {/* Full Name */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                    <label htmlFor="enquire-full-name" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                       Full Name <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                      <input
+                      <BaseInput
                         id="enquire-full-name"
+                        name="enquire-full-name"
                         type="text"
                         required
                         placeholder="e.g. Rajesh Sharma"
@@ -562,13 +564,14 @@ export const EnquiryPage: React.FC = () => {
 
                   {/* WhatsApp Phone */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                    <label htmlFor="enquire-whatsapp-number" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                       WhatsApp Number <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <Phone className="w-4 h-4 text-emerald-600 absolute left-3.5 top-3.5" />
-                      <input
+                      <BaseInput
                         id="enquire-whatsapp-number"
+                        name="enquire-whatsapp-number"
                         type="tel"
                         required
                         placeholder="+91 98765 43210"
@@ -584,13 +587,14 @@ export const EnquiryPage: React.FC = () => {
 
                   {/* Email */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                    <label htmlFor="enquire-email" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                       Email Address <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                      <input
+                      <BaseInput
                         id="enquire-email"
+                        name="enquire-email"
                         type="email"
                         required
                         placeholder="rajesh.sharma@example.com"
@@ -603,13 +607,14 @@ export const EnquiryPage: React.FC = () => {
 
                   {/* Devotee's Resident City */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                    <label htmlFor="enquire-user-city" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                       Your Resident City / State
                     </label>
                     <div className="relative">
                       <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                      <input
+                      <BaseInput
                         id="enquire-user-city"
+                        name="enquire-user-city"
                         type="text"
                         placeholder="e.g. Mumbai, Maharashtra"
                         value={userCity}
@@ -638,13 +643,14 @@ export const EnquiryPage: React.FC = () => {
                 <div className="space-y-4 pt-1">
                   {/* Interested In: Yatra Package Dropdown */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                    <label htmlFor="enquire-package-select" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                       Interested In (Yatra Package / Sacred Circuit) <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <Compass className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5 pointer-events-none" />
-                      <select
+                      <BaseSelect
                         id="enquire-package-select"
+                        name="enquire-package-select"
                         value={selectedPackageId}
                         onChange={(e) => {
                           setSelectedPackageId(e.target.value);
@@ -666,7 +672,7 @@ export const EnquiryPage: React.FC = () => {
                             <option value="custom">★ Custom Pilgrimage Circuit / Other Sacred Destination</option>
                           </>
                         )}
-                      </select>
+                      </BaseSelect>
                       <ChevronRight className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 rotate-90 pointer-events-none" />
                     </div>
                   </div>
@@ -674,10 +680,12 @@ export const EnquiryPage: React.FC = () => {
                   {/* If custom selected, show input */}
                   {selectedPackageId === 'custom' && (
                     <div className="space-y-1.5 animate-in fade-in">
-                      <label className="block text-xs font-semibold text-slate-600">
+                      <label htmlFor="enquire-custom-package-title" className="block text-xs font-semibold text-slate-600">
                         Specify Your Desired Sacred Destination or Circuit
                       </label>
-                      <input
+                      <BaseInput
+                        id="enquire-custom-package-title"
+                        name="enquire-custom-package-title"
                         type="text"
                         placeholder="e.g. Amarnath Yatra, Ujjain Mahakaleshwar & Omkareshwar, or Rameswaram"
                         value={customPackageTitle}
@@ -691,13 +699,14 @@ export const EnquiryPage: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Tour Start Date */}
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                      <label htmlFor="enquire-start-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                         Estimated Tour Start Date <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
                         <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
-                        <input
+                        <BaseInput
                           id="enquire-start-date"
+                          name="enquire-start-date"
                           type="date"
                           required
                           value={tourStartDate}
@@ -710,13 +719,14 @@ export const EnquiryPage: React.FC = () => {
 
                     {/* Tour Duration Selector */}
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                      <label htmlFor="enquire-duration-select" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                         Desired Tour Duration
                       </label>
                       <div className="relative">
                         <Clock className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5 pointer-events-none" />
-                        <select
+                        <BaseSelect
                           id="enquire-duration-select"
+                          name="enquire-duration-select"
                           value={tourDuration}
                           onChange={(e) => setTourDuration(e.target.value)}
                           className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-8 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 appearance-none cursor-pointer"
@@ -726,7 +736,7 @@ export const EnquiryPage: React.FC = () => {
                               {opt.label}
                             </option>
                           ))}
-                        </select>
+                        </BaseSelect>
                         <ChevronRight className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 rotate-90 pointer-events-none" />
                       </div>
                     </div>
@@ -805,8 +815,12 @@ export const EnquiryPage: React.FC = () => {
                         <div className="flex flex-wrap gap-2.5">
                           {childAges.map((age, idx) => (
                             <div key={idx} className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs">
-                              <span className="text-slate-500 font-medium">Child {idx + 1}:</span>
-                              <select
+                              <label htmlFor={`enquire-child-age-${idx + 1}`} className="text-slate-500 font-medium cursor-pointer">
+                                Child {idx + 1}:
+                              </label>
+                              <BaseSelect
+                                id={`enquire-child-age-${idx + 1}`}
+                                name={`enquire-child-age-${idx + 1}`}
                                 value={age}
                                 onChange={(e) => handleChildAgeChange(idx, Number(e.target.value))}
                                 className="font-bold text-orange-600 bg-transparent focus:outline-none cursor-pointer"
@@ -821,7 +835,7 @@ export const EnquiryPage: React.FC = () => {
                                 <option value={10}>10 years</option>
                                 <option value={12}>12 years</option>
                                 <option value={15}>15 years</option>
-                              </select>
+                              </BaseSelect>
                             </div>
                           ))}
                         </div>
@@ -854,8 +868,10 @@ export const EnquiryPage: React.FC = () => {
                           <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Drop City / Airport / Station
                           </label>
-                          <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
-                            <input
+                          <label htmlFor="enquire-same-drop-city-checkbox" className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
+                            <BaseInput
+                              id="enquire-same-drop-city-checkbox"
+                              name="enquire-same-drop-city-checkbox"
                               type="checkbox"
                               checked={sameDropCity}
                               onChange={(e) => {
@@ -980,8 +996,9 @@ export const EnquiryPage: React.FC = () => {
 
                 {/* Textarea */}
                 <div className="space-y-1.5 pt-1">
-                  <textarea
+                  <BaseTextarea
                     id="enquire-special-requests"
+                    name="enquire-special-requests"
                     rows={4}
                     placeholder="e.g. My parents are 70+ and require wheelchair logistics, ground-floor rooms without steep steps, and pure satvik meals without onion/garlic..."
                     value={specialRequests}

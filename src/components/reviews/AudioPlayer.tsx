@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, RotateCcw, Mic } from 'lucide-react';
 import { formatAudioDuration } from '../../utils/audioUtils.js';
+import { BaseInput } from '../FormField.js';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -272,7 +273,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
           {/* Seek Input */}
           <div className="relative flex items-center">
-            <input
+            <BaseInput
+              id={`audio-player-scrubber-${title ? title.replace(/\s+/g, '-').toLowerCase() : 'track'}`}
+              name={`audio-player-scrubber-${title ? title.replace(/\s+/g, '-').toLowerCase() : 'track'}`}
               type="range"
               min={0}
               max={totalDuration || 100}

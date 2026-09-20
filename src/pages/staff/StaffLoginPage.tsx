@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
+import { BaseInput } from '../../components/FormField.js';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Lock,
@@ -169,12 +170,14 @@ export const StaffLoginPage: React.FC = () => {
 
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold block text-slate-700">
+                  <label htmlFor="staff-login-email" className="text-xs font-bold block text-slate-700">
                     Staff Email Address
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="staff-login-email"
+                      name="staff-login-email"
                       type="email"
                       required
                       placeholder="staff.name@tirthyatra.com"
@@ -186,12 +189,14 @@ export const StaffLoginPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold block text-slate-700">
+                  <label htmlFor="staff-login-password" className="text-xs font-bold block text-slate-700">
                     Staff Password
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="staff-login-password"
+                      name="staff-login-password"
                       type={showPassword ? 'text' : 'password'}
                       required
                       placeholder="Enter staff password"

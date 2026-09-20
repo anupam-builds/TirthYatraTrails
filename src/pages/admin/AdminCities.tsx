@@ -5,6 +5,7 @@ import { City, TransitHub, HubType } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
 import { supabase } from '../../lib/supabase.js';
+import { BaseInput, BaseSelect } from '../../components/FormField.js';
 import {
   MapPin,
   Plus,
@@ -554,8 +555,10 @@ export const AdminCities: React.FC = () => {
 
               <form onSubmit={handleCitySubmit} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">City Name</label>
-                  <input
+                  <label htmlFor="city-name-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">City Name</label>
+                  <BaseInput
+                    id="city-name-input"
+                    name="city-name-input"
                     type="text"
                     required
                     value={name}
@@ -566,8 +569,10 @@ export const AdminCities: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">State / Region</label>
-                  <input
+                  <label htmlFor="city-state-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">State / Region</label>
+                  <BaseInput
+                    id="city-state-input"
+                    name="city-state-input"
                     type="text"
                     required
                     value={state}
@@ -578,8 +583,10 @@ export const AdminCities: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Estimated Stays / Hotels</label>
-                  <input
+                  <label htmlFor="city-hotel-count-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Estimated Stays / Hotels</label>
+                  <BaseInput
+                    id="city-hotel-count-input"
+                    name="city-hotel-count-input"
                     type="number"
                     required
                     min={1}
@@ -599,8 +606,10 @@ export const AdminCities: React.FC = () => {
                 />
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Popular For / Spiritual Tagline</label>
-                  <input
+                  <label htmlFor="city-popular-for-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Popular For / Spiritual Tagline</label>
+                  <BaseInput
+                    id="city-popular-for-input"
+                    name="city-popular-for-input"
                     type="text"
                     value={popularFor}
                     onChange={(e) => setPopularFor(e.target.value)}
@@ -647,8 +656,10 @@ export const AdminCities: React.FC = () => {
 
               <form onSubmit={handleHubSubmit} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Transit Hub Name</label>
-                  <input
+                  <label htmlFor="hub-name-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Transit Hub Name</label>
+                  <BaseInput
+                    id="hub-name-input"
+                    name="hub-name-input"
                     type="text"
                     required
                     value={hubName}
@@ -660,8 +671,10 @@ export const AdminCities: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Transit Type</label>
-                    <select
+                    <label htmlFor="hub-type-select" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Transit Type</label>
+                    <BaseSelect
+                      id="hub-type-select"
+                      name="hub-type-select"
                       value={hubType}
                       onChange={(e) => setHubType(e.target.value as HubType)}
                       className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -670,12 +683,14 @@ export const AdminCities: React.FC = () => {
                       <option value="RAILWAY_STATION">Railway Station</option>
                       <option value="HELIPAD">Helipad Base</option>
                       <option value="BUS_TERMINAL">Bus Terminal</option>
-                    </select>
+                    </BaseSelect>
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Station / IATA Code</label>
-                    <input
+                    <label htmlFor="hub-code-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Station / IATA Code</label>
+                    <BaseInput
+                      id="hub-code-input"
+                      name="hub-code-input"
                       type="text"
                       value={hubCode}
                       onChange={(e) => setHubCode(e.target.value.toUpperCase())}
@@ -687,8 +702,10 @@ export const AdminCities: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Linked Destination</label>
-                    <select
+                    <label htmlFor="hub-linked-city-select" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Linked Destination</label>
+                    <BaseSelect
+                      id="hub-linked-city-select"
+                      name="hub-linked-city-select"
                       value={hubCityId}
                       onChange={(e) => setHubCityId(e.target.value)}
                       className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -698,12 +715,14 @@ export const AdminCities: React.FC = () => {
                           {c.name}
                         </option>
                       ))}
-                    </select>
+                    </BaseSelect>
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Distance to Temple (km)</label>
-                    <input
+                    <label htmlFor="hub-distance-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Distance to Temple (km)</label>
+                    <BaseInput
+                      id="hub-distance-input"
+                      name="hub-distance-input"
                       type="number"
                       step="0.1"
                       value={hubDistance}
@@ -714,9 +733,10 @@ export const AdminCities: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2 pt-2">
-                  <input
+                  <BaseInput
                     type="checkbox"
                     id="hub-primary"
+                    name="hub-primary"
                     checked={hubIsPrimary}
                     onChange={(e) => setHubIsPrimary(e.target.checked)}
                     className="rounded text-orange-600 focus:ring-orange-500"

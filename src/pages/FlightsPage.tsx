@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { InquiryModal } from '../components/common/InquiryModal.js';
+import { BaseInput, BaseSelect } from '../components/FormField.js';
 import {
   Plane,
   Calendar,
@@ -60,9 +61,11 @@ export const FlightsPage: React.FC = () => {
             <div className="bg-white text-[#0f294a] p-4 sm:p-6 rounded-3xl shadow-2xl border border-orange-200/60 grid grid-cols-1 sm:grid-cols-4 gap-4 text-left">
               
               <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">From</label>
+                <label htmlFor="flights-departure-city" className="block text-[11px] font-bold uppercase text-slate-400 mb-1">From</label>
                 <div className="relative">
-                  <input
+                  <BaseInput
+                    id="flights-departure-city"
+                    name="flights-departure-city"
                     type="text"
                     value={fromCity}
                     onChange={(e) => setFromCity(e.target.value)}
@@ -73,8 +76,10 @@ export const FlightsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">Holy Destination</label>
-                <select
+                <label htmlFor="flights-destination-airport" className="block text-[11px] font-bold uppercase text-slate-400 mb-1">Holy Destination</label>
+                <BaseSelect
+                  id="flights-destination-airport"
+                  name="flights-destination-airport"
                   value={toAirport}
                   onChange={(e) => setToAirport(e.target.value)}
                   className="w-full text-xs font-bold p-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none"
@@ -84,12 +89,14 @@ export const FlightsPage: React.FC = () => {
                       {a.city} ({a.code})
                     </option>
                   ))}
-                </select>
+                </BaseSelect>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">Travel Date</label>
-                <input
+                <label htmlFor="flights-travel-date" className="block text-[11px] font-bold uppercase text-slate-400 mb-1">Travel Date</label>
+                <BaseInput
+                  id="flights-travel-date"
+                  name="flights-travel-date"
                   type="date"
                   value={flightDate}
                   onChange={(e) => setFlightDate(e.target.value)}

@@ -5,6 +5,7 @@ import { localStore } from '../../services/localStore.js';
 import { supabase } from '../../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor } from '../../types.js';
 import { useRouter } from '../../context/RouterContext.js';
+import { BaseInput, BaseSelect } from '../../components/FormField.js';
 import {
   Users,
   UserPlus,
@@ -675,7 +676,9 @@ export const AdminStaff: React.FC = () => {
 
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                <input
+                <BaseInput
+                  id="admin-staff-search-input"
+                  name="admin-staff-search-input"
                   type="text"
                   placeholder="Search staff by name, email, or designation..."
                   value={searchQuery}
@@ -1065,10 +1068,12 @@ export const AdminStaff: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <select
+                  <BaseSelect
+                    id="admin-staff-audit-filter-select"
+                    name="admin-staff-audit-filter-select"
                     value={selectedStaffLogFilter}
                     onChange={(e) => setSelectedStaffLogFilter(e.target.value)}
-                    className="px-3 py-1.5 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="px-3 py-1.5 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
                   >
                     <option value="ALL">All Staff Members</option>
                     {staffList.map((s) => (
@@ -1076,7 +1081,7 @@ export const AdminStaff: React.FC = () => {
                         {s.name} ({s.email})
                       </option>
                     ))}
-                  </select>
+                  </BaseSelect>
                 </div>
               </div>
 
@@ -1185,10 +1190,12 @@ export const AdminStaff: React.FC = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <label htmlFor="staff-form-name-input" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Full Staff Name *
                     </label>
-                    <input
+                    <BaseInput
+                      id="staff-form-name-input"
+                      name="staff-form-name-input"
                       type="text"
                       required
                       placeholder="e.g., Anjali Sharma"
@@ -1199,10 +1206,12 @@ export const AdminStaff: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <label htmlFor="staff-form-designation-input" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Role / Designation
                     </label>
-                    <input
+                    <BaseInput
+                      id="staff-form-designation-input"
+                      name="staff-form-designation-input"
                       type="text"
                       placeholder="e.g., Pilgrim Inquiries Coordinator"
                       value={formData.designation}
@@ -1214,10 +1223,12 @@ export const AdminStaff: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <label htmlFor="staff-form-email-input" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Staff Email ID *
                     </label>
-                    <input
+                    <BaseInput
+                      id="staff-form-email-input"
+                      name="staff-form-email-input"
                       type="email"
                       required
                       placeholder="staff@tirthyatra.com"
@@ -1228,10 +1239,12 @@ export const AdminStaff: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <label htmlFor="staff-form-phone-input" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Phone / WhatsApp
                     </label>
-                    <input
+                    <BaseInput
+                      id="staff-form-phone-input"
+                      name="staff-form-phone-input"
                       type="tel"
                       placeholder="+91 98765 43210"
                       value={formData.phone}
@@ -1243,12 +1256,14 @@ export const AdminStaff: React.FC = () => {
 
                 {/* Explicit Password Field */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <label htmlFor="staff-form-password-input" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {editingStaff ? 'New Password (leave empty to keep current)' : 'Staff Password *'}
                   </label>
                   <div className="relative">
                     <KeyRound className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                    <input
+                    <BaseInput
+                      id="staff-form-password-input"
+                      name="staff-form-password-input"
                       type={showPassword ? 'text' : 'password'}
                       required={!editingStaff}
                       placeholder={editingStaff ? 'Keep existing password' : 'Enter password (min 6 chars)'}
@@ -1277,8 +1292,10 @@ export const AdminStaff: React.FC = () => {
                   </p>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input
+                    <label htmlFor="staff-perm-view-inquiries-check" className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <BaseInput
+                        id="staff-perm-view-inquiries-check"
+                        name="staff-perm-view-inquiries-check"
                         type="checkbox"
                         checked={formData.canViewInquiries}
                         onChange={(e) => setFormData({ ...formData, canViewInquiries: e.target.checked })}
@@ -1287,8 +1304,10 @@ export const AdminStaff: React.FC = () => {
                       <span className="font-medium">Can View Customer Inquiries &amp; Pilgrim Leads</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input
+                    <label htmlFor="staff-perm-update-status-check" className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <BaseInput
+                        id="staff-perm-update-status-check"
+                        name="staff-perm-update-status-check"
                         type="checkbox"
                         checked={formData.canUpdateStatus}
                         onChange={(e) => setFormData({ ...formData, canUpdateStatus: e.target.checked })}
@@ -1299,8 +1318,10 @@ export const AdminStaff: React.FC = () => {
                       </span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input
+                    <label htmlFor="staff-perm-add-notes-check" className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <BaseInput
+                        id="staff-perm-add-notes-check"
+                        name="staff-perm-add-notes-check"
                         type="checkbox"
                         checked={formData.canAddNotes}
                         onChange={(e) => setFormData({ ...formData, canAddNotes: e.target.checked })}
@@ -1363,10 +1384,12 @@ export const AdminStaff: React.FC = () => {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <label htmlFor="staff-block-reason-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Reason for Blocking / Revoking Access:
                     </label>
-                    <select
+                    <BaseSelect
+                      id="staff-block-reason-select"
+                      name="staff-block-reason-select"
                       value={blockReason}
                       onChange={(e) => setBlockReason(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
@@ -1383,9 +1406,11 @@ export const AdminStaff: React.FC = () => {
                       <option value="Staff member resigned / employment contract ended">
                         Employment ended / contract concluded
                       </option>
-                    </select>
+                    </BaseSelect>
 
-                    <input
+                    <BaseInput
+                      id="staff-block-reason-custom-input"
+                      name="staff-block-reason-custom-input"
                       type="text"
                       placeholder="Or specify custom reason..."
                       value={blockReason}
@@ -1441,11 +1466,13 @@ export const AdminStaff: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label htmlFor="staff-reset-new-password-input" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   New Password (minimum 6 characters)
                 </label>
                 <div className="relative">
-                  <input
+                  <BaseInput
+                    id="staff-reset-new-password-input"
+                    name="staff-reset-new-password-input"
                     type={showPassword ? 'text' : 'password'}
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}

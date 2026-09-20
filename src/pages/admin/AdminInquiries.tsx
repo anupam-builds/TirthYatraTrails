@@ -6,6 +6,7 @@ import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../servic
 import { useAuth } from '../../context/AuthContext.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
+import { BaseInput, BaseSelect } from '../../components/FormField.js';
 import { getLeadId, formatLeadId, formatCrmTimestamp } from '../../utils/crmUtils.js';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import {
@@ -572,7 +573,9 @@ export const AdminInquiries: React.FC = () => {
               {/* Search Bar for Trashed Leads */}
               <div className="relative max-w-md">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
+                <BaseInput
+                  id="trash-search-query-input"
+                  name="trash-search-query-input"
                   type="text"
                   placeholder="Filter deleted leads by Lead ID, Customer Name, Phone..."
                   value={trashSearchQuery}
@@ -717,10 +720,12 @@ export const AdminInquiries: React.FC = () => {
                             {/* 5. Staff Reassignment Dropdown */}
                             <td className="py-4 px-4 align-top">
                               <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                                <label htmlFor={`restore-assign-staff-${inq.id}`} className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
                                   Assign on Restore:
                                 </label>
-                                <select
+                                <BaseSelect
+                                  id={`restore-assign-staff-${inq.id}`}
+                                  name={`restore-assign-staff-${inq.id}`}
                                   value={assignedStaffId}
                                   onChange={(e) => {
                                     console.log('🎯 [AdminInquiries] Restore staff select changed:', {
@@ -739,7 +744,7 @@ export const AdminInquiries: React.FC = () => {
                                       {s.name} ({s.role.replace('_', ' ')})
                                     </option>
                                   ))}
-                                </select>
+                                </BaseSelect>
                               </div>
                             </td>
 

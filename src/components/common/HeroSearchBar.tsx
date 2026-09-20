@@ -3,6 +3,7 @@ import { useRouter } from '../../context/RouterContext.js';
 import { City } from '../../types.js';
 import { GuestsRoomsPopover } from './GuestsRoomsPopover.js';
 import { DatePickerPopover } from './DatePickerPopover.js';
+import { BaseInput } from '../FormField.js';
 import { MapPin, Search, ChevronRight, Building2, Check, X } from 'lucide-react';
 
 export interface HeroSearchBarProps {
@@ -213,7 +214,9 @@ export const HeroSearchBar: React.FC<HeroSearchBarProps> = ({
               {/* Search text input */}
               <div className="relative mb-2.5">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
-                <input
+                <BaseInput
+                  id="hero-city-filter-search"
+                  name="hero-city-filter-search"
                   type="text"
                   placeholder="Search Varanasi, Kedarnath, Puri, Ayodhya..."
                   value={cityFilterText}

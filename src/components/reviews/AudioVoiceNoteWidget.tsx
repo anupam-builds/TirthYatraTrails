@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { BaseInput } from '../FormField.js';
 import {
   Mic,
   Square,
@@ -356,10 +357,12 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
 
           {/* Audio Title Field */}
           <div className="pt-1">
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+            <label htmlFor="audio-voice-note-title" className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
               Audio Note Title / Caption (Optional)
             </label>
-            <input
+            <BaseInput
+              id="audio-voice-note-title"
+              name="audio-voice-note-title"
               type="text"
               value={audioTitle}
               onChange={(e) => {
@@ -460,8 +463,10 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
               : 'border-slate-300 hover:border-[#ea580c] bg-white'
           }`}
         >
-          <input
+          <BaseInput
             ref={fileInputRef}
+            id="audio-voice-note-file-upload"
+            name="audio-voice-note-file-upload"
             type="file"
             accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm"
             className="hidden"

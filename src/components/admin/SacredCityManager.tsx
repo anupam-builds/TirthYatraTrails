@@ -43,6 +43,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
+import { BaseInput, BaseTextarea } from '../FormField.js';
 import {
   MapPin,
   Plus,
@@ -368,7 +369,9 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
             <div className="p-2 space-y-2">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
+                <BaseInput
+                  id="sacred-city-manager-dropdown-search-input"
+                  name="sacred-city-manager-dropdown-search-input"
                   ref={searchInputRef}
                   type="text"
                   value={dropdownSearch}
@@ -521,7 +524,9 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
         <div className="relative w-full sm:w-80">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
+          <BaseInput
+            id="sacred-city-manager-list-search-input"
+            name="sacred-city-manager-list-search-input"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -654,10 +659,12 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
 
           <div className="mt-4 space-y-4 text-xs">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sacred-city-manager-modal-name-input" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Sacred City / Dham Name <span className="text-orange-500">*</span>
               </label>
-              <input
+              <BaseInput
+                id="sacred-city-manager-modal-name-input"
+                name="sacred-city-manager-modal-name-input"
                 type="text"
                 required
                 value={nameInput}
@@ -669,10 +676,12 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sacred-city-manager-modal-state-input" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 State / Territory
               </label>
-              <input
+              <BaseInput
+                id="sacred-city-manager-modal-state-input"
+                name="sacred-city-manager-modal-state-input"
                 type="text"
                 value={stateInput}
                 onChange={(e) => setStateInput(e.target.value)}
@@ -697,10 +706,12 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="sacred-city-manager-modal-significance-textarea" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Temple Significance & Yatra Highlights
               </label>
-              <textarea
+              <BaseTextarea
+                id="sacred-city-manager-modal-significance-textarea"
+                name="sacred-city-manager-modal-significance-textarea"
                 rows={2}
                 value={significanceInput}
                 onChange={(e) => setSignificanceInput(e.target.value)}

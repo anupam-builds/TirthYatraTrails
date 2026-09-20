@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSacredCities, SacredCity } from '../../hooks/useSacredCities.js';
+import { BaseInput } from '../FormField.js';
 import {
   MapPin,
   Search,
@@ -227,8 +228,10 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
               {/* Search Bar */}
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
+                <BaseInput
                   ref={searchInputRef}
+                  id="sacred-city-search"
+                  name="sacred-city-search"
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -346,10 +349,12 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
               )}
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="quick-add-city-name" className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   City / Dham Name *
                 </label>
-                <input
+                <BaseInput
+                  id="quick-add-city-name"
+                  name="quick-add-city-name"
                   type="text"
                   required
                   value={newCityName}
@@ -361,10 +366,12 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="quick-add-state" className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   State / Region
                 </label>
-                <input
+                <BaseInput
+                  id="quick-add-state"
+                  name="quick-add-state"
                   type="text"
                   value={newState}
                   onChange={(e) => setNewState(e.target.value)}
@@ -374,10 +381,12 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="quick-add-significance" className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Temple Significance / Highlights
                 </label>
-                <input
+                <BaseInput
+                  id="quick-add-significance"
+                  name="quick-add-significance"
                   type="text"
                   value={newSignificance}
                   onChange={(e) => setNewSignificance(e.target.value)}

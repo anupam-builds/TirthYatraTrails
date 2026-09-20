@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { BaseInput } from '../FormField.js';
 
 interface DatePickerPopoverProps {
   id?: string;
@@ -155,7 +156,7 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
 
       {/* Field Trigger Display */}
       <div
-        id={id}
+        id={`${id}-trigger`}
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center justify-between cursor-pointer py-1 group"
       >
@@ -185,7 +186,9 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
       </div>
 
       {/* Hidden Native Input for screen-readers & form-fallback */}
-      <input
+      <BaseInput
+        id={id}
+        name={id}
         type="date"
         value={value}
         onChange={(e) => onChange(e.target.value)}

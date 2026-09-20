@@ -5,6 +5,7 @@ import { Review } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
 import { supabase } from '../../lib/supabase.js';
+import { BaseInput, BaseSelect, BaseTextarea } from '../../components/FormField.js';
 import {
   Quote,
   Plus,
@@ -357,7 +358,9 @@ export const AdminReviews: React.FC = () => {
         {/* Search Input */}
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
+          <BaseInput
+            id="admin-reviews-search-input"
+            name="admin-reviews-search-input"
             type="text"
             placeholder="Search reviews by pilgrim name, destination, or keyword..."
             value={searchTerm}
@@ -549,10 +552,12 @@ export const AdminReviews: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Author Name */}
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">
+                    <label htmlFor="review-author-name-input" className="font-bold text-slate-700 dark:text-slate-300">
                       Author / Pilgrim Name <span className="text-orange-500">*</span>
                     </label>
-                    <input
+                    <BaseInput
+                      id="review-author-name-input"
+                      name="review-author-name-input"
                       type="text"
                       required
                       placeholder="e.g. Milind Pawar or Ramesh Sharma"
@@ -564,10 +569,12 @@ export const AdminReviews: React.FC = () => {
 
                   {/* Destination / Trip */}
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">
+                    <label htmlFor="review-author-location-input" className="font-bold text-slate-700 dark:text-slate-300">
                       Destination / Trip <span className="text-orange-500">*</span>
                     </label>
-                    <input
+                    <BaseInput
+                      id="review-author-location-input"
+                      name="review-author-location-input"
                       type="text"
                       required
                       placeholder="e.g. Mathura · Vrindavan or Kashi · Ayodhya"
@@ -581,8 +588,10 @@ export const AdminReviews: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Rating Dropdown */}
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">Star Rating</label>
-                    <select
+                    <label htmlFor="review-rating-select" className="font-bold text-slate-700 dark:text-slate-300">Star Rating</label>
+                    <BaseSelect
+                      id="review-rating-select"
+                      name="review-rating-select"
                       value={formData.rating}
                       onChange={(e) => setFormData({ ...formData, rating: parseFloat(e.target.value) })}
                       className="w-full bg-slate-50 dark:bg-[#0f233f] border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
@@ -591,13 +600,15 @@ export const AdminReviews: React.FC = () => {
                       <option value={4.8}>4.8 ★★★★★ (Excellent)</option>
                       <option value={4.5}>4.5 ★★★★☆ (Great)</option>
                       <option value={4.0}>4.0 ★★★★☆ (Good)</option>
-                    </select>
+                    </BaseSelect>
                   </div>
 
                   {/* Author Initials (Optional) */}
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">Avatar Initials (Optional)</label>
-                    <input
+                    <label htmlFor="review-author-initials-input" className="font-bold text-slate-700 dark:text-slate-300">Avatar Initials (Optional)</label>
+                    <BaseInput
+                      id="review-author-initials-input"
+                      name="review-author-initials-input"
                       type="text"
                       maxLength={3}
                       placeholder="e.g. MP (Auto from name)"
@@ -609,8 +620,10 @@ export const AdminReviews: React.FC = () => {
 
                   {/* Display Order */}
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">Carousel Order</label>
-                    <input
+                    <label htmlFor="review-order-input" className="font-bold text-slate-700 dark:text-slate-300">Carousel Order</label>
+                    <BaseInput
+                      id="review-order-input"
+                      name="review-order-input"
                       type="number"
                       min={0}
                       value={formData.order}
@@ -632,10 +645,12 @@ export const AdminReviews: React.FC = () => {
 
                 {/* Review Body (Textarea) */}
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                  <label htmlFor="review-text-textarea" className="font-bold text-slate-700 dark:text-slate-300">
                     Review Description / Pilgrim Experience <span className="text-orange-500">*</span>
                   </label>
-                  <textarea
+                  <BaseTextarea
+                    id="review-text-textarea"
+                    name="review-text-textarea"
                     required
                     rows={4}
                     placeholder="Describe the devotee's spiritual journey, proximity to sanctum, VIP darshan comfort, or hospitality dining experience..."
@@ -647,8 +662,10 @@ export const AdminReviews: React.FC = () => {
 
                 {/* External Link */}
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">External Google Review Link (Optional)</label>
-                  <input
+                  <label htmlFor="review-google-url-input" className="font-bold text-slate-700 dark:text-slate-300">External Google Review Link (Optional)</label>
+                  <BaseInput
+                    id="review-google-url-input"
+                    name="review-google-url-input"
                     type="url"
                     placeholder="https://maps.google.com/..."
                     value={formData.googleReviewUrl}
@@ -659,8 +676,10 @@ export const AdminReviews: React.FC = () => {
 
                 {/* Switches / Checkboxes */}
                 <div className="flex flex-col sm:flex-row gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
+                  <label htmlFor="review-is-featured-checkbox" className="flex items-center gap-2 cursor-pointer">
+                    <BaseInput
+                      id="review-is-featured-checkbox"
+                      name="review-is-featured-checkbox"
                       type="checkbox"
                       checked={formData.isFeatured}
                       onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
@@ -669,8 +688,10 @@ export const AdminReviews: React.FC = () => {
                     <span className="font-bold text-slate-900 dark:text-white">Feature on Homepage Carousel</span>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
+                  <label htmlFor="review-is-verified-checkbox" className="flex items-center gap-2 cursor-pointer">
+                    <BaseInput
+                      id="review-is-verified-checkbox"
+                      name="review-is-verified-checkbox"
                       type="checkbox"
                       checked={formData.isVerified}
                       onChange={(e) => setFormData({ ...formData, isVerified: e.target.checked })}

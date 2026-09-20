@@ -6,6 +6,7 @@ import { City, Hotel, Package, Inquiry } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
 import { generateCustomerWhatsAppLink } from '../../utils/crmUtils.js';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
+import { BaseSelect } from '../../components/FormField.js';
 import {
   MessageSquare,
   Building,
@@ -329,7 +330,9 @@ export const AdminDashboard: React.FC = () => {
                         <div className="text-[10px] text-slate-400 dark:text-slate-500">{inq.checkInDate || 'Flexible'} • {inq.adults || 2} Adults</div>
                       </td>
                       <td className="py-3.5 px-3 space-y-1">
-                        <select
+                        <BaseSelect
+                          id={`dashboard-inquiry-status-${inq.id}`}
+                          name={`dashboard-inquiry-status-${inq.id}`}
                           value={inq.status}
                           onChange={(e) => handleUpdateStatus(inq.id, e.target.value as any)}
                           className={`text-[10px] font-bold px-2 py-1 rounded-lg border focus:outline-none cursor-pointer ${
@@ -346,7 +349,7 @@ export const AdminDashboard: React.FC = () => {
                           <option value="CONTACTED">CONTACTED</option>
                           <option value="CONFIRMED">CONFIRMED</option>
                           <option value="CLOSED">CLOSED</option>
-                        </select>
+                        </BaseSelect>
                         {(inq.assignedStaffName || (inq as any).assigned_staff_name) && (
                           <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium truncate">
                             Staff: {inq.assignedStaffName || (inq as any).assigned_staff_name}

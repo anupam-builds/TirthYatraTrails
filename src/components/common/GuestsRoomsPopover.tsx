@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Plus, Minus, ChevronRight, Users, Info } from 'lucide-react';
+import { BaseSelect } from '../FormField.js';
 
 export interface GuestsRoomsState {
   adults: number;
@@ -195,8 +196,9 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                     >
                       Child {index + 1} Age
                     </label>
-                    <select
+                    <BaseSelect
                       id={`child-age-select-${index}`}
+                      name={`child-age-select-${index}`}
                       value={age}
                       onChange={(e) => handleAgeChange(index, Number(e.target.value))}
                       className="w-full text-xs font-semibold bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#0f294a] focus:ring-2 focus:ring-orange-500 focus:outline-none shadow-xs cursor-pointer"
@@ -207,7 +209,7 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
                           {val} {val === 1 ? 'year' : 'years'}
                         </option>
                       ))}
-                    </select>
+                    </BaseSelect>
                   </div>
                 ))}
               </div>

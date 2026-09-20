@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useCitiesMaster } from '../../context/CitiesContext.js';
 import { City } from '../../types.js';
+import { BaseInput } from '../FormField.js';
 import {
   MapPin,
   Plus,
@@ -266,7 +267,9 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
               {/* Search Bar Input */}
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
+                <BaseInput
+                  id="sacred-city-selector-search-input"
+                  name="sacred-city-selector-search-input"
                   ref={searchInputRef}
                   type="text"
                   value={searchQuery}
@@ -412,10 +415,12 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
 
               {/* City Name */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
+                <label htmlFor="sacred-city-selector-new-name-input" className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
                   City / Destination Name <span className="text-orange-500">*</span>
                 </label>
-                <input
+                <BaseInput
+                  id="sacred-city-selector-new-name-input"
+                  name="sacred-city-selector-new-name-input"
                   type="text"
                   required
                   value={newCityName}
@@ -428,10 +433,12 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
 
               {/* State Selection */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
+                <label htmlFor="sacred-city-selector-new-state-input" className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
                   State / Territory
                 </label>
-                <input
+                <BaseInput
+                  id="sacred-city-selector-new-state-input"
+                  name="sacred-city-selector-new-state-input"
                   type="text"
                   value={newState}
                   onChange={(e) => setNewState(e.target.value)}
@@ -459,10 +466,12 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
 
               {/* Spiritual Essence / Popular For */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
+                <label htmlFor="sacred-city-selector-new-popular-for-input" className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
                   Spiritual Highlight / Popular For
                 </label>
-                <input
+                <BaseInput
+                  id="sacred-city-selector-new-popular-for-input"
+                  name="sacred-city-selector-new-popular-for-input"
                   type="text"
                   value={newPopularFor}
                   onChange={(e) => setNewPopularFor(e.target.value)}
@@ -473,7 +482,7 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
 
               {/* Destination Cover Image */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
+                <label htmlFor="sacred-city-selector-new-image-url-input" className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px] mb-1">
                   Destination Cover Photo URL
                 </label>
                 <div className="flex items-center gap-2">
@@ -485,7 +494,9 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
                       (e.target as HTMLImageElement).src = PRESET_TEMPLE_IMAGES[0].url;
                     }}
                   />
-                  <input
+                  <BaseInput
+                    id="sacred-city-selector-new-image-url-input"
+                    name="sacred-city-selector-new-image-url-input"
                     type="url"
                     value={newImageUrl}
                     onChange={(e) => setNewImageUrl(e.target.value)}

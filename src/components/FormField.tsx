@@ -1,5 +1,48 @@
 import React from 'react';
 
+/**
+ * BaseInput primitive:
+ * Guarantees native id and name presence on the <input> element.
+ */
+export const BaseInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ id, name, ...props }, ref) => {
+    const resolvedId = id || name;
+    const resolvedName = name || id;
+    return <input ref={ref} id={resolvedId} name={resolvedName} {...props} />;
+  }
+);
+BaseInput.displayName = 'BaseInput';
+
+/**
+ * BaseSelect primitive:
+ * Guarantees native id and name presence on the <select> element.
+ */
+export const BaseSelect = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
+  ({ id, name, children, ...props }, ref) => {
+    const resolvedId = id || name;
+    const resolvedName = name || id;
+    return (
+      <select ref={ref} id={resolvedId} name={resolvedName} {...props}>
+        {children}
+      </select>
+    );
+  }
+);
+BaseSelect.displayName = 'BaseSelect';
+
+/**
+ * BaseTextarea primitive:
+ * Guarantees native id and name presence on the <textarea> element.
+ */
+export const BaseTextarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  ({ id, name, ...props }, ref) => {
+    const resolvedId = id || name;
+    const resolvedName = name || id;
+    return <textarea ref={ref} id={resolvedId} name={resolvedName} {...props} />;
+  }
+);
+BaseTextarea.displayName = 'BaseTextarea';
+
 export interface FormFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   id?: string;

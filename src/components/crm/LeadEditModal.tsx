@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
+import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
 import {
   getLeadId,
   formatLeadId,
@@ -307,10 +308,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-customer-name" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Full Name
                 </label>
-                <input
+                <BaseInput
+                  id="edit-modal-customer-name"
+                  name="edit-modal-customer-name"
                   type="text"
                   required
                   value={formData.customerName || ''}
@@ -321,7 +324,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <label htmlFor="edit-modal-customer-phone" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                     WhatsApp / Phone Number
                   </label>
                   {Boolean(formData.customerPhone) && (
@@ -338,7 +341,9 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                 </div>
                 <div className="relative">
                   <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
+                  <BaseInput
+                    id="edit-modal-customer-phone"
+                    name="edit-modal-customer-phone"
                     type="tel"
                     required
                     value={formData.customerPhone || ''}
@@ -349,12 +354,14 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-customer-email" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Email Address
                 </label>
                 <div className="relative">
                   <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
+                  <BaseInput
+                    id="edit-modal-customer-email"
+                    name="edit-modal-customer-email"
                     type="email"
                     value={formData.customerEmail || ''}
                     onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
@@ -364,12 +371,14 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-user-city" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Origin City / Devotee Residence
                 </label>
                 <div className="relative">
                   <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
+                  <BaseInput
+                    id="edit-modal-user-city"
+                    name="edit-modal-user-city"
                     type="text"
                     value={formData.userCity || ''}
                     onChange={(e) => setFormData({ ...formData, userCity: e.target.value })}
@@ -391,7 +400,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Lead Status */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-lead-status" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Lead Status
                 </label>
                 {isStaffMode && (isLocked || inquiry.status === 'CLOSED') ? (
@@ -406,7 +415,9 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                   </div>
                 ) : (
                   <div>
-                    <select
+                    <BaseSelect
+                      id="edit-modal-lead-status"
+                      name="edit-modal-lead-status"
                       value={formData.status || 'NEW'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value as InquiryStatus })}
                       className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold"
@@ -416,7 +427,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                           {CRM_STATUS_CONFIG[st]?.label || st}
                         </option>
                       ))}
-                    </select>
+                    </BaseSelect>
                     {isStaffMode && formData.status === 'CLOSED' && (
                       <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 font-semibold">
                         Notice: Setting to CLOSED will permanently lock this lead for staff upon saving.
@@ -428,7 +439,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
               {/* Assigned Staff Representative */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-assigned-staff" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Assigned Staff Representative
                 </label>
                 {isStaffMode ? (
@@ -447,7 +458,9 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <select
+                  <BaseSelect
+                    id="edit-modal-assigned-staff"
+                    name="edit-modal-assigned-staff"
                     value={formData.assignedStaffId || ''}
                     onChange={(e) => {
                       console.log('🎯 [LeadEditModal] Assignment select changed:', e.target.value);
@@ -461,7 +474,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                         {stf.name} ({stf.department || 'Travel Desk'})
                       </option>
                     ))}
-                  </select>
+                  </BaseSelect>
                 )}
               </div>
             </div>
@@ -476,10 +489,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-accommodation-tier" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Accommodation Preference Tier
                 </label>
-                <select
+                <BaseSelect
+                  id="edit-modal-accommodation-tier"
+                  name="edit-modal-accommodation-tier"
                   value={formData.accommodationTier || '3 Star Hotel'}
                   onChange={(e) => setFormData({ ...formData, accommodationTier: e.target.value })}
                   className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -489,16 +504,18 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                       {tier}
                     </option>
                   ))}
-                </select>
+                </BaseSelect>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-checkin-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Arrival / Check-in Date
                 </label>
                 <div className="relative">
                   <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
+                  <BaseInput
+                    id="edit-modal-checkin-date"
+                    name="edit-modal-checkin-date"
                     type="date"
                     value={formData.checkInDate || ''}
                     onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
@@ -509,10 +526,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="edit-modal-adults" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Adults (12+ yrs)
                   </label>
-                  <input
+                  <BaseInput
+                    id="edit-modal-adults"
+                    name="edit-modal-adults"
                     type="number"
                     min="1"
                     max="100"
@@ -522,10 +541,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="edit-modal-children" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Children (0-11 yrs)
                   </label>
-                  <input
+                  <BaseInput
+                    id="edit-modal-children"
+                    name="edit-modal-children"
                     type="number"
                     min="0"
                     max="50"
@@ -537,10 +558,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-tour-duration" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Tour Duration
                 </label>
-                <input
+                <BaseInput
+                  id="edit-modal-tour-duration"
+                  name="edit-modal-tour-duration"
                   type="text"
                   placeholder="e.g. 5 Days / 4 Nights"
                   value={formData.tourDuration || ''}
@@ -550,10 +573,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-pickup-location" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Pickup City / Station
                 </label>
-                <input
+                <BaseInput
+                  id="edit-modal-pickup-location"
+                  name="edit-modal-pickup-location"
                   type="text"
                   placeholder="e.g. Haridwar Railway Station"
                   value={formData.pickupLocation || ''}
@@ -563,10 +588,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="edit-modal-dropoff-location" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Drop City / Station
                 </label>
-                <input
+                <BaseInput
+                  id="edit-modal-dropoff-location"
+                  name="edit-modal-dropoff-location"
                   type="text"
                   placeholder="e.g. Dehradun Airport"
                   value={formData.dropoffLocation || ''}
@@ -577,10 +604,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="edit-modal-title" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Yatra / Stay Title
               </label>
-              <input
+              <BaseInput
+                id="edit-modal-title"
+                name="edit-modal-title"
                 type="text"
                 value={formData.title || ''}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -590,7 +619,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
             {/* Tags */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="edit-modal-tags-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Tags / Lead Categories (Press Enter to Add)
               </label>
               <div className="flex flex-wrap items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700">
@@ -609,7 +638,9 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                     </button>
                   </span>
                 ))}
-                <input
+                <BaseInput
+                  id="edit-modal-tags-input"
+                  name="edit-modal-tags-input"
                   type="text"
                   placeholder="Type tag and press Enter..."
                   value={tagInput}
@@ -622,10 +653,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
             {/* Special Requests */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="edit-modal-special-requests" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Devotee Notes &amp; Special Requests
               </label>
-              <textarea
+              <BaseTextarea
+                id="edit-modal-special-requests"
+                name="edit-modal-special-requests"
                 rows={3}
                 value={formData.specialRequests || ''}
                 onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
@@ -670,7 +703,9 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
             {onAddNote && (
               <div className="flex items-center gap-2 pt-1">
-                <input
+                <BaseInput
+                  id="edit-modal-new-note"
+                  name="edit-modal-new-note"
                   type="text"
                   placeholder="Type a new internal staff note..."
                   value={newNoteText}

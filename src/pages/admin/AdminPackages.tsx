@@ -5,6 +5,7 @@ import { Package } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
 import { supabase } from '../../lib/supabase.js';
+import { BaseInput, BaseSelect, BaseTextarea } from '../../components/FormField.js';
 import {
   Compass,
   Plus,
@@ -293,7 +294,9 @@ export const AdminPackages: React.FC = () => {
         {/* Filters */}
         <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
           <div className="flex items-center gap-3">
-            <select
+            <BaseSelect
+              id="admin-packages-category-filter"
+              name="admin-packages-category-filter"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
@@ -304,12 +307,14 @@ export const AdminPackages: React.FC = () => {
                   {c}
                 </option>
               ))}
-            </select>
+            </BaseSelect>
           </div>
 
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
+            <BaseInput
+              id="admin-packages-search-input"
+              name="admin-packages-search-input"
               type="text"
               placeholder="Search package title..."
               value={searchQuery}
@@ -407,8 +412,10 @@ export const AdminPackages: React.FC = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-2 text-xs">
               <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Package Title</label>
-                <input
+                <label htmlFor="package-title-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Package Title</label>
+                <BaseInput
+                  id="package-title-input"
+                  name="package-title-input"
                   type="text"
                   required
                   value={title}
@@ -420,8 +427,10 @@ export const AdminPackages: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Category</label>
-                  <select
+                  <label htmlFor="package-category-select" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Category</label>
+                  <BaseSelect
+                    id="package-category-select"
+                    name="package-category-select"
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
@@ -431,12 +440,14 @@ export const AdminPackages: React.FC = () => {
                         {c}
                       </option>
                     ))}
-                  </select>
+                  </BaseSelect>
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Duration</label>
-                  <input
+                  <label htmlFor="package-duration-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Duration</label>
+                  <BaseInput
+                    id="package-duration-input"
+                    name="package-duration-input"
                     type="text"
                     required
                     value={duration}
@@ -449,8 +460,10 @@ export const AdminPackages: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Locations / Route</label>
-                  <input
+                  <label htmlFor="package-location-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Locations / Route</label>
+                  <BaseInput
+                    id="package-location-input"
+                    name="package-location-input"
                     type="text"
                     required
                     value={location}
@@ -461,8 +474,10 @@ export const AdminPackages: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Starting Price (₹/person)</label>
-                  <input
+                  <label htmlFor="package-starting-price-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Starting Price (₹/person)</label>
+                  <BaseInput
+                    id="package-starting-price-input"
+                    name="package-starting-price-input"
                     type="number"
                     required
                     value={startingPrice}
@@ -487,8 +502,10 @@ export const AdminPackages: React.FC = () => {
               />
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Overview / Description</label>
-                <textarea
+                <label htmlFor="package-overview-textarea" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Overview / Description</label>
+                <BaseTextarea
+                  id="package-overview-textarea"
+                  name="package-overview-textarea"
                   rows={3}
                   required
                   value={overview}
@@ -498,10 +515,12 @@ export const AdminPackages: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">
+                <label htmlFor="package-highlights-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">
                   Highlights (comma-separated)
                 </label>
-                <input
+                <BaseInput
+                  id="package-highlights-input"
+                  name="package-highlights-input"
                   type="text"
                   value={highlightsString}
                   onChange={(e) => setHighlightsString(e.target.value)}
@@ -510,8 +529,10 @@ export const AdminPackages: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Cancellation Policy</label>
-                <input
+                <label htmlFor="package-cancellation-policy-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Cancellation Policy</label>
+                <BaseInput
+                  id="package-cancellation-policy-input"
+                  name="package-cancellation-policy-input"
                   type="text"
                   value={cancellationPolicy}
                   onChange={(e) => setCancellationPolicy(e.target.value)}

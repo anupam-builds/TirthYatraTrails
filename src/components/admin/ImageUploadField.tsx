@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { processAndOptimizeImage } from '../../utils/imageUtils.js';
+import { BaseInput } from '../FormField.js';
 
 interface ImageUploadFieldProps {
   id?: string;
@@ -168,7 +169,9 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       {/* Optional Manual URL Input */}
       {showUrlInput && (
         <div className="p-3 bg-slate-50 dark:bg-[#0c1a2c] rounded-xl border border-slate-200 dark:border-slate-700/60 flex flex-col sm:flex-row gap-2">
-          <input
+          <BaseInput
+            id={`${id}-manual-url-input`}
+            name={`${id}-manual-url-input`}
             type="url"
             placeholder="https://example.com/photo.jpg"
             value={manualUrl}
@@ -199,7 +202,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
               : 'border-slate-200 dark:border-slate-700 bg-slate-900 shadow-md'
           }`}
         >
-          <input
+          <BaseInput
             ref={fileInputRef}
             type="file"
             accept="image/*"
@@ -207,6 +210,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
             onChange={(e) => handleFiles(e.target.files)}
             className="hidden"
             id={`${id}-file-input`}
+            name={`${id}-file-input`}
           />
 
           <div className="relative w-full h-56 sm:h-64 bg-slate-950 flex items-center justify-center overflow-hidden">
@@ -285,14 +289,15 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
               : 'border-slate-300 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 bg-slate-50/60 dark:bg-[#0a1628]/60'
           }`}
         >
-          <input
+          <BaseInput
             ref={fileInputRef}
             type="file"
             accept="image/*"
             multiple={multiple}
             onChange={(e) => handleFiles(e.target.files)}
             className="hidden"
-            id={`${id}-file-input`}
+            id={`${id}-multi-file-input`}
+            name={`${id}-multi-file-input`}
           />
 
           <div className="flex flex-col items-center justify-center gap-2">

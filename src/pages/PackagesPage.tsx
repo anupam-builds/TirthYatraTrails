@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { Package } from '../types.js';
+import { BaseInput, BaseSelect } from '../components/FormField.js';
 import {
   Compass,
   MapPin,
@@ -83,7 +84,9 @@ export const PackagesPage: React.FC = () => {
           <div className="pt-4 max-w-xl mx-auto">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
-              <input
+              <BaseInput
+                id="packages-hero-search-input"
+                name="packages-hero-search-input"
                 type="text"
                 placeholder="Search by destination (e.g. Kedarnath, Ayodhya, Tirupati)..."
                 value={searchQuery}
@@ -119,7 +122,9 @@ export const PackagesPage: React.FC = () => {
           {/* Filter Dropdowns (Destination, Duration, Budget) */}
           <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
             {/* Duration */}
-            <select
+            <BaseSelect
+              id="packages-duration-filter"
+              name="packages-duration-filter"
               value={durationFilter}
               onChange={(e) => setDurationFilter(e.target.value)}
               className="px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -127,10 +132,12 @@ export const PackagesPage: React.FC = () => {
               <option value="all">Any Duration</option>
               <option value="short">Short Yatra (3-5 Days)</option>
               <option value="long">Grand Circuit (6-10 Days)</option>
-            </select>
+            </BaseSelect>
 
             {/* Budget */}
-            <select
+            <BaseSelect
+              id="packages-budget-filter"
+              name="packages-budget-filter"
               value={budgetFilter}
               onChange={(e) => setBudgetFilter(e.target.value)}
               className="px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -138,7 +145,7 @@ export const PackagesPage: React.FC = () => {
               <option value="all">Any Budget</option>
               <option value="budget">Under ₹20,000</option>
               <option value="premium">₹20,000 &amp; Above</option>
-            </select>
+            </BaseSelect>
           </div>
         </div>
       </div>

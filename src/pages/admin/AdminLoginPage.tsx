@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useRouter } from '../../context/RouterContext.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
+import { BaseInput } from '../../components/FormField.js';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Lock,
@@ -164,12 +165,14 @@ export const AdminLoginPage: React.FC = () => {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-700">
+                  <label htmlFor="admin-login-email" className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-700">
                     Admin Work Email
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="admin-login-email"
+                      name="admin-login-email"
                       type="email"
                       required
                       value={email}
@@ -181,12 +184,14 @@ export const AdminLoginPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-700">
+                  <label htmlFor="admin-login-password" className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-700">
                     Master Password
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
+                    <BaseInput
+                      id="admin-login-password"
+                      name="admin-login-password"
                       type={showPassword ? 'text' : 'password'}
                       required
                       value={password}
