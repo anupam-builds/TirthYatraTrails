@@ -93,13 +93,15 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     const targetName = String(currentStaffName || '').trim().toLowerCase();
 
     return inquiries.filter((inq) => {
-      // 1. Strict & normalized ID matching
-      const inqStaffId = String(inq.assignedStaffId || '').trim().toLowerCase();
-      const hasStaffId = Boolean(inqStaffId && inqStaffId !== 'undefined' && inqStaffId !== 'null');
+      // 1. Strict & normalized ID matching (handles assigned_staff_id and assignedStaffId)
+      const rawStaffId = (inq as any).assigned_staff_id || inq.assignedStaffId || '';
+      const inqStaffId = String(rawStaffId).trim().toLowerCase();
+      const hasStaffId = Boolean(inqStaffId && inqStaffId !== 'undefined' && inqStaffId !== 'null' && inqStaffId !== '--unassigned--');
       const matchesId = hasStaffId && targetId !== '' && inqStaffId === targetId;
 
       // 2. Resilient Name matching (trimmed, case-insensitive, whitespace-normalized)
-      const inqStaffName = String(inq.assignedStaffName || '').trim().toLowerCase();
+      const rawStaffName = (inq as any).assigned_staff_name || inq.assignedStaffName || '';
+      const inqStaffName = String(rawStaffName).trim().toLowerCase();
       const hasStaffName = Boolean(inqStaffName && inqStaffName !== 'undefined' && inqStaffName !== 'null');
       const matchesName = hasStaffName && Boolean(
         targetName && (
@@ -121,7 +123,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const contactedCount = baseInquiries.filter((i) => i.status === 'CONTACTED').length;
   const confirmedCount = baseInquiries.filter((i) => i.status === 'CONFIRMED').length;
   const closedCount = baseInquiries.filter((i) => i.status === 'CLOSED').length;
-  const unassignedCount = baseInquiries.filter((i) => !i.assignedStaffId).length;
+  const unassignedCount = baseInquiries.filter((i) => {
+    const raw = (i as any).assigned_staff_id || i.assignedStaffId;
+    return !raw || raw === '--Unassigned--';
+  }).length;
 
   const handleCopyLeadId = (leadId: string) => {
     navigator.clipboard.writeText(leadId);
@@ -190,11 +195,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
     // Staff filter (Applicable only in Admin mode)
     if (isAdmin) {
-      if (staffFilter === 'UNASSIGNED' && inq.assignedStaffId) {
+      const inqStaff = (inq as any).assigned_staff_id || inq.assignedStaffId || '';
+      const hasAssigned = Boolean(inqStaff && inqStaff !== '--Unassigned--');
+      if (staffFilter === 'UNASSIGNED' && hasAssigned) {
         return false;
-      } else if (staffFilter === 'MY' && currentStaffId && inq.assignedStaffId !== currentStaffId) {
+      } else if (staffFilter === 'MY' && currentStaffId && inqStaff !== currentStaffId) {
         return false;
-      } else if (staffFilter !== 'ALL' && staffFilter !== 'UNASSIGNED' && staffFilter !== 'MY' && inq.assignedStaffId !== staffFilter) {
+      } else if (staffFilter !== 'ALL' && staffFilter !== 'UNASSIGNED' && staffFilter !== 'MY' && inqStaff !== staffFilter) {
         return false;
       }
     }
@@ -488,6 +495,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
               ) : (
                 filteredInquiries.map((inq) => {
                   const lead = inq as any;
+                  const currentAssignedId = lead.assigned_staff_id || lead.assignedStaffId || inq.assignedStaffId || '--Unassigned--';
                   const leadId = formatLeadId(lead.id);
                   const paxStr = formatPaxCount(inq);
                   const statusCfg = CRM_STATUS_CONFIG[inq.status as InquiryStatus] || CRM_STATUS_CONFIG.NEW;
@@ -547,7 +555,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             <BaseSelect
                               id={`row-assigned-staff-${lead.id}`}
                               name={`row-assigned-staff-${lead.id}`}
-                              value={inq.assignedStaffId || ''}
+                              value={currentAssignedId === null ? '--Unassigned--' : currentAssignedId}
                               onChange={async (e) => {
                                 const rawVal = e?.target ? e.target.value : ((e as any)?.assignedStaffId || e);
                                 const rawStaffId = typeof rawVal === 'object' && rawVal !== null
@@ -556,7 +564,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 console.log('🎯 [LeadTableView] Assignment dropdown changed:', {
                                   leadId: lead.id,
                                   selectedValue: rawStaffId,
-                                  previousAssigned: inq.assignedStaffId,
+                                  previousAssigned: currentAssignedId,
                                 });
                                 const cleaned = cleanUnassignedValue(String(rawStaffId || '')) || '';
                                 const staffMember = cleaned ? staffList.find((s) => String(s.id) === String(cleaned)) : null;
@@ -581,10 +589,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               }}
                               className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
                             >
-                              <option value="">-- Unassigned --</option>
-                              {staffList.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
+                              <option value="--Unassigned--">-- Unassigned --</option>
+                              {staffList.map((stf) => (
+                                <option key={stf.id} value={stf.id}>
+                                  {stf.name}
                                 </option>
                               ))}
                             </BaseSelect>
@@ -594,7 +602,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <UserCheck className="w-3 h-3 text-emerald-500" />
                                 <span>
                                   {inq.assignedStaffName ||
-                                    staffList.find((s) => s.id === inq.assignedStaffId)?.name ||
+                                    lead.assigned_staff_name ||
+                                    staffList.find((s) => s.id === (currentAssignedId !== '--Unassigned--' ? currentAssignedId : inq.assignedStaffId))?.name ||
                                     (isStaffMode ? 'Assigned to You' : 'Unassigned')}
                                 </span>
                               </span>

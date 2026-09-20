@@ -32,6 +32,20 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     matches: currentStaffId === HARDCODED_STAFF_ID,
   });
 
+  // Normalizer helper so assignment fields never drop on render or realtime update
+  const normalizeLeadRow = (row: any) => {
+    if (!row) return row;
+    const assignedId = row.assigned_staff_id || row.assignedStaffId || null;
+    const assignedName = row.assigned_staff_name || row.assignedStaffName || null;
+    return {
+      ...row,
+      assigned_staff_id: assignedId,
+      assignedStaffId: assignedId,
+      assigned_staff_name: assignedName,
+      assignedStaffName: assignedName,
+    };
+  };
+
   const fetchAssignedLeads = useCallback(async () => {
     const staffId = HARDCODED_STAFF_ID; // force match test against seeded staff id
     setLoading(true);
@@ -44,7 +58,9 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
         .order('created_at', { ascending: false });
 
       console.log('🔍 [StaffLeads] Initial query result:', { count: data?.length, error, data });
-      if (data) setStaffLeads(data);
+      if (data) {
+        setStaffLeads(data.map(normalizeLeadRow));
+      }
     } catch (err) {
       console.error('❌ [StaffLeads] Error fetching leads:', err);
     } finally {
@@ -62,7 +78,9 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
       .eq('assigned_staff_id', staffId)
       .then(({ data, error }) => {
         console.log('🔍 [StaffLeads] Initial query result:', { count: data?.length, error, data });
-        if (data) setStaffLeads(data);
+        if (data) {
+          setStaffLeads(data.map(normalizeLeadRow));
+        }
         setLoading(false);
       });
 
@@ -73,8 +91,9 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
         { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
           console.log('⚡ [StaffRealtime] RAW PAYLOAD ARRIVED:', payload);
-          const newRow = payload.new as any;
+          const rawNew = payload.new as any;
           const oldRow = payload.old as any;
+          const newRow = rawNew ? normalizeLeadRow(rawNew) : null;
 
           setStaffLeads((prev) => {
             if (payload.eventType === 'DELETE') {
@@ -82,12 +101,13 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
             }
             if (!newRow) return prev;
 
-            const isAssignedToStaff = newRow.assigned_staff_id === staffId;
+            const assigned = newRow.assigned_staff_id || newRow.assignedStaffId;
+            const isAssignedToStaff = assigned === staffId;
             const exists = prev.some((l) => l.id === newRow.id);
 
             if (exists) {
               if (!isAssignedToStaff) return prev.filter((l) => l.id !== newRow.id);
-              return prev.map((l) => (l.id === newRow.id ? newRow : l));
+              return prev.map((l) => (l.id === newRow.id ? { ...l, ...newRow } : l));
             } else if (isAssignedToStaff) {
               return [newRow, ...prev];
             }
@@ -117,8 +137,14 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
   }
 
   const mappedInquiries: Inquiry[] = staffLeads.map((l) => {
-    if (l.title !== undefined && l.type !== undefined) return l as Inquiry;
-    return mapInquiryRow(l);
+    const inq = (l.title !== undefined && l.type !== undefined) ? (l as Inquiry) : mapInquiryRow(l);
+    const assignedId = (l as any).assigned_staff_id || inq.assignedStaffId || (l as any).assignedStaffId || undefined;
+    const assignedName = (l as any).assigned_staff_name || inq.assignedStaffName || (l as any).assignedStaffName || undefined;
+    return {
+      ...inq,
+      assignedStaffId: assignedId,
+      assignedStaffName: assignedName,
+    };
   });
 
   return (
