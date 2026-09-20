@@ -291,16 +291,19 @@ export const StaffPortalPage: React.FC = () => {
           setStaffLeads((prevLeads) => {
             // If deleted
             if (payload.eventType === 'DELETE') {
-              return prevLeads.filter((l) => l.id !== oldRow?.id);
+              return prevLeads.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id));
             }
 
             // Check if this lead belongs to current staff or was newly assigned/unassigned
             const isForThisStaff = newRow?.assigned_staff_id === currentStaffId;
-            const existsInState = prevLeads.some((l) => l.id === newRow?.id);
+            const existsInState = prevLeads.some((l) => l.id === newRow?.id || String(l.id) === String(newRow?.id));
 
             if (existsInState) {
-              // Update existing row
-              return prevLeads.map((l) => (l.id === newRow.id ? newRow : l));
+              // If reassigned away from this staff, remove it; otherwise update row
+              if (!isForThisStaff) {
+                return prevLeads.filter((l) => l.id !== newRow?.id && String(l.id) !== String(newRow?.id));
+              }
+              return prevLeads.map((l) => (l.id === newRow.id || String(l.id) === String(newRow.id) ? newRow : l));
             } else if (isForThisStaff) {
               // Prepend new row assigned to this staff
               return [newRow, ...prevLeads];
