@@ -53,38 +53,44 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     }
   }, [currentStaffId, staffUser?.name]);
 
-  // Fetch immediately on mount & listen to realtime updates
+  // Initial fetch on mount & whenever currentStaffId changes
   useEffect(() => {
     fetchStaffLeads();
+  }, [fetchStaffLeads]);
+
+  // Direct Leads Realtime Update wire into Staff View
+  useEffect(() => {
+    const staffId = currentStaffId || 'stf-1789834704496-07kq'; // fallback or dynamic session staff id
 
     const channel = supabase
-      .channel('staff-assigned-leads-watcher')
+      .channel('staff-leads-live-sync')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads' },
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'leads',
+        },
         (payload) => {
-          const newRow = payload.new as any;
-          const oldRow = payload.old as any;
+          console.log('⚡ [Staff Leads Realtime UPDATE received]:', payload.new);
+          const updatedLead = payload.new as any;
 
-          setLeads((prev) => {
-            if (payload.eventType === 'DELETE') {
-              return prev.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id));
-            }
-
-            const belongsToStaff = newRow?.assigned_staff_id === currentStaffId;
-            const exists = prev.some((l) => l.id === newRow?.id || String(l.id) === String(newRow?.id));
+          setLeads((prevLeads) => {
+            const exists = prevLeads.some((l) => l.id === updatedLead.id || String(l.id) === String(updatedLead.id));
+            const belongsToStaff = updatedLead.assigned_staff_id === staffId;
 
             if (exists) {
-              // If reassigned away from this staff, remove it; otherwise update row
               if (!belongsToStaff) {
-                return prev.filter((l) => l.id !== newRow?.id && String(l.id) !== String(newRow?.id));
+                // Unassigned away from this staff
+                return prevLeads.filter((l) => l.id !== updatedLead.id && String(l.id) !== String(updatedLead.id));
               }
-              return prev.map((l) => (l.id === newRow.id || String(l.id) === String(newRow.id) ? newRow : l));
+              // Update existing row
+              return prevLeads.map((l) => (l.id === updatedLead.id || String(l.id) === String(updatedLead.id) ? updatedLead : l));
             } else if (belongsToStaff) {
-              // Newly assigned to this staff
-              return [newRow, ...prev];
+              // Newly assigned to this staff, prepend
+              return [updatedLead, ...prevLeads];
             }
-            return prev;
+            return prevLeads;
           });
         }
       )
@@ -93,7 +99,7 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentStaffId, fetchStaffLeads]);
+  }, [currentStaffId]);
 
   if (!currentStaffId) {
     return (
