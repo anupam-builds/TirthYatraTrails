@@ -59,10 +59,9 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     fetchStaffLeads();
   }, [fetchStaffLeads]);
 
-  // Public Leads Realtime Channel with raw comparison & prefix matching
+  // Public Leads Realtime Channel
   useEffect(() => {
-    const targetStaffId = currentStaffId || 'stf-1789834704496-07kq';
-    console.log('📡 [StaffRealtime] Subscribing to public:leads-realtime for targetStaffId:', targetStaffId);
+    const targetStaffId = currentStaffId || 'stf-1789834704496-07kq'; // hardcoded target or auth session ID
 
     const channel = supabase
       .channel('public:leads-realtime')
@@ -70,50 +69,36 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
-          console.log('⚡ Realtime event payload:', payload);
-          const incoming = payload.new as any;
+          console.log('⚡ STAFF REALTIME LEADS PAYLOAD:', payload.eventType, payload.new);
+          const newRow = payload.new as any;
           const oldRow = payload.old as any;
 
-          if (payload.eventType === 'DELETE') {
-            setStaffLeads((prev) => prev.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id)));
-            return;
-          }
+          setStaffLeads((prev) => {
+            if (payload.eventType === 'DELETE') {
+              return prev.filter((l) => l.id !== oldRow?.id);
+            }
+            if (!newRow) return prev;
 
-          const incomingStaffId = incoming?.assigned_staff_id;
-          console.log('🔎 [StaffLeads Sync] payload.new.assigned_staff_id vs targetStaffId:', {
-            rawAssigned: incomingStaffId,
-            targetStaffId,
-            matchesExact: incomingStaffId === targetStaffId,
-            matchesPrefix: Boolean(
-              incomingStaffId &&
-              targetStaffId &&
-              (incomingStaffId.startsWith(targetStaffId) || targetStaffId.startsWith(incomingStaffId))
-            ),
-          });
+            const matchesStaff = newRow.assigned_staff_id === targetStaffId;
+            const exists = prev.some((l) => l.id === newRow.id);
 
-          const isMatchingStaff = Boolean(
-            incomingStaffId &&
-            (incomingStaffId === targetStaffId ||
-              incomingStaffId.startsWith(targetStaffId) ||
-              targetStaffId.startsWith(incomingStaffId))
-          );
-
-          if (incoming && isMatchingStaff) {
-            setStaffLeads((prev) => {
-              const exists = prev.some((l) => l.id === incoming.id || String(l.id) === String(incoming.id));
-              if (exists) {
-                return prev.map((l) => (l.id === incoming.id || String(l.id) === String(incoming.id) ? incoming : l));
+            if (exists) {
+              if (!matchesStaff) {
+                // Reassigned away from this staff desk
+                return prev.filter((l) => l.id !== newRow.id);
               }
-              return [incoming, ...prev];
-            });
-          } else if (incoming && !isMatchingStaff) {
-            // If reassigned away from this staff, remove from list
-            setStaffLeads((prev) => prev.filter((l) => l.id !== incoming.id && String(l.id) !== String(incoming.id)));
-          }
+              // Update row attributes live
+              return prev.map((l) => (l.id === newRow.id ? { ...l, ...newRow } : l));
+            } else if (matchesStaff) {
+              // Newly assigned to this staff desk, prepend
+              return [newRow, ...prev];
+            }
+            return prev;
+          });
         }
       )
       .subscribe((status) => {
-        console.log('Staff leads channel status:', status);
+        console.log('📡 Staff leads realtime status:', status);
       });
 
     return () => {
