@@ -234,103 +234,144 @@ export async function toggleStaffBlock(staffId: string, isBlocked: boolean) {
   return res.json();
 }
 
+export interface UpdateLeadOptions {
+  id: string | number;
+  status?: string | InquiryStatus;
+  assignedStaffId?: string | null;
+  assignedStaffName?: string | null;
+  userRole?: string;
+  currentStatus?: string;
+  [key: string]: any;
+}
+
 /**
  * Universal safeguarded status and assignment updater for leads and inquiries.
  * Targets 'inquiries' (if ID starts with 'inq') or 'leads', cleans '--Unassigned--'
  * staff IDs into null, enforces staff closed-status locks, and writes proper timestamps using PostgREST.
+ * Accepts an UpdateLeadOptions object or legacy positional arguments.
  */
 export async function updateLeadOrInquiryStatus(
-  id: string | number,
-  status: InquiryStatus | string | Partial<Inquiry>,
+  optionsOrId: UpdateLeadOptions | string | number,
+  status?: InquiryStatus | string | Partial<Inquiry>,
   assignedStaffId?: string | { userRole?: string; currentStatus?: string },
   staffNameOrOptions?: string | { userRole?: string; currentStatus?: string },
   options?: { userRole?: string; currentStatus?: string }
 ): Promise<any> {
-  console.log('🚀 [API] updateLeadOrInquiryStatus called with:', { id, status, assignedStaffId });
-  const resolvedOptions =
-    (typeof options === 'object' && options !== null)
-      ? options
-      : (typeof staffNameOrOptions === 'object' && staffNameOrOptions !== null)
-      ? staffNameOrOptions
-      : (typeof assignedStaffId === 'object' && assignedStaffId !== null)
-      ? assignedStaffId
-      : undefined;
+  let resolvedId: string = '';
+  let resolvedStatus: string | undefined = undefined;
+  let resolvedAssignedStaffId: string | null | undefined = undefined;
+  let resolvedAssignedStaffName: string | null | undefined = undefined;
+  let resolvedRoleOptions: { userRole?: string; currentStatus?: string } | undefined = undefined;
+  let extraPayload: Record<string, any> = {};
+
+  if (typeof optionsOrId === 'object' && optionsOrId !== null) {
+    const opts = optionsOrId as UpdateLeadOptions;
+    resolvedId = String(opts.id || '').trim();
+    resolvedStatus = opts.status !== undefined ? String(opts.status) : undefined;
+    resolvedAssignedStaffId = opts.assignedStaffId;
+    resolvedAssignedStaffName = opts.assignedStaffName;
+    resolvedRoleOptions = {
+      userRole: opts.userRole,
+      currentStatus: opts.currentStatus,
+    };
+    const { id: _id, status: _st, assignedStaffId: _asi, assignedStaffName: _asn, userRole: _ur, currentStatus: _cs, ...rest } = opts;
+    extraPayload = rest;
+  } else {
+    resolvedId = String(optionsOrId || '').trim();
+    resolvedRoleOptions =
+      (typeof options === 'object' && options !== null)
+        ? options
+        : (typeof staffNameOrOptions === 'object' && staffNameOrOptions !== null)
+        ? staffNameOrOptions
+        : (typeof assignedStaffId === 'object' && assignedStaffId !== null)
+        ? assignedStaffId
+        : undefined;
+
+    if (typeof status === 'string') {
+      resolvedStatus = status;
+    } else if (typeof status === 'object' && status !== null) {
+      extraPayload = { ...status };
+      if ('status' in status && status.status) resolvedStatus = status.status;
+      if ('assignedStaffId' in status) resolvedAssignedStaffId = (status as any).assignedStaffId;
+      if ('assignedStaffName' in status) resolvedAssignedStaffName = (status as any).assignedStaffName;
+    }
+
+    if (typeof assignedStaffId === 'string') {
+      resolvedAssignedStaffId = assignedStaffId;
+    } else if (typeof assignedStaffId === 'object' && assignedStaffId !== null) {
+      if ('assignedStaffId' in assignedStaffId) resolvedAssignedStaffId = (assignedStaffId as any).assignedStaffId;
+      else if ('id' in assignedStaffId) resolvedAssignedStaffId = (assignedStaffId as any).id;
+      else if ('target' in assignedStaffId && (assignedStaffId as any).target?.value) resolvedAssignedStaffId = (assignedStaffId as any).target.value;
+    }
+
+    if (typeof staffNameOrOptions === 'string') {
+      resolvedAssignedStaffName = staffNameOrOptions;
+    }
+  }
 
   // Enforce staff closed-status lock
   if (
-    resolvedOptions?.userRole?.toLowerCase() === 'staff' &&
-    resolvedOptions?.currentStatus?.toLowerCase() === 'closed'
+    resolvedRoleOptions?.userRole?.toLowerCase() === 'staff' &&
+    resolvedRoleOptions?.currentStatus?.toLowerCase() === 'closed'
   ) {
     throw new Error('Access denied: Closed leads can only be modified by administrators.');
   }
 
-  const cleanId = String(id || '').trim();
-  if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
-    console.warn('[updateLeadOrInquiryStatus] Stripped malformed lead/inquiry id:', id);
+  if (!resolvedId || resolvedId === 'undefined' || resolvedId === 'null') {
+    console.warn('[updateLeadOrInquiryStatus] Stripped malformed lead/inquiry id:', optionsOrId);
     throw new Error('Invalid lead/inquiry ID');
   }
 
-  const targetTable = cleanId.startsWith('inq') ? 'inquiries' : 'leads';
+  const targetTable = resolvedId.startsWith('inq') ? 'inquiries' : 'leads';
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
 
-  let actualAssignedStaffId: any = undefined;
-  if (typeof assignedStaffId === 'string') {
-    actualAssignedStaffId = assignedStaffId;
-  } else if (typeof assignedStaffId === 'object' && assignedStaffId !== null) {
-    if ('assignedStaffId' in assignedStaffId) {
-      actualAssignedStaffId = (assignedStaffId as any).assignedStaffId;
-    } else if ('id' in assignedStaffId) {
-      actualAssignedStaffId = (assignedStaffId as any).id;
-    } else if ('target' in assignedStaffId && (assignedStaffId as any).target?.value) {
-      actualAssignedStaffId = (assignedStaffId as any).target.value;
-    }
-  }
-  const actualStaffName = typeof staffNameOrOptions === 'string' ? staffNameOrOptions : undefined;
-
-  if (typeof status === 'string') {
-    payload.status = status;
-  } else if (typeof status === 'object' && status !== null) {
-    Object.assign(payload, status);
-    if ('status' in status && status.status) {
-      payload.status = status.status;
-    }
-    if ('assignedStaffId' in status) {
-      actualAssignedStaffId = (status as any).assignedStaffId;
-      delete payload.assignedStaffId;
-    }
-    if ('assignedStaffName' in status) {
-      payload.assigned_staff_name = (status as any).assignedStaffName;
-      delete payload.assignedStaffName;
-    }
-    if ('whatsapp_number' in status || 'whatsappNumber' in status || 'phone' in status || 'customerPhone' in status) {
-      const ph = (status as any).whatsapp_number || (status as any).phone || (status as any).whatsappNumber || (status as any).customerPhone || '';
-      payload.phone = ph;
-      payload.whatsapp_number = ph;
-    }
-    if ('metadata' in status) {
-      payload.metadata = (status as any).metadata;
-    }
+  if (resolvedStatus !== undefined) {
+    payload.status = resolvedStatus;
   }
 
-  if (actualAssignedStaffId !== undefined) {
+  if (resolvedAssignedStaffId !== undefined) {
     payload.assigned_staff_id =
-      actualAssignedStaffId === '--Unassigned--' ||
-      actualAssignedStaffId === 'UNASSIGNED' ||
-      !actualAssignedStaffId ||
-      actualAssignedStaffId === 'undefined' ||
-      actualAssignedStaffId === 'null'
+      resolvedAssignedStaffId === '--Unassigned--' ||
+      resolvedAssignedStaffId === 'UNASSIGNED' ||
+      !resolvedAssignedStaffId ||
+      resolvedAssignedStaffId === 'undefined' ||
+      resolvedAssignedStaffId === 'null'
         ? null
-        : actualAssignedStaffId;
+        : String(resolvedAssignedStaffId);
   }
 
-  if (actualStaffName) {
-    payload.assigned_staff_name = payload.assigned_staff_id ? actualStaffName : null;
+  if (resolvedAssignedStaffName !== undefined) {
+    payload.assigned_staff_name =
+      resolvedAssignedStaffName === '--Unassigned--' ||
+      !payload.assigned_staff_id ||
+      payload.assigned_staff_id === '--Unassigned--'
+        ? null
+        : resolvedAssignedStaffName;
   }
 
-  const url = `${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(cleanId)}`;
-  console.log('🌐 [API] Fetching PATCH:', url, payload);
+  // Merge extra fields from partial updates
+  if (Object.keys(extraPayload).length > 0) {
+    for (const [k, v] of Object.entries(extraPayload)) {
+      if (k === 'whatsapp_number' || k === 'whatsappNumber' || k === 'phone' || k === 'customerPhone') {
+        payload.phone = v;
+        payload.whatsapp_number = v;
+      } else if (k === 'assignedStaffId') {
+        if (payload.assigned_staff_id === undefined) {
+          payload.assigned_staff_id = v === '--Unassigned--' || !v ? null : v;
+        }
+      } else if (k === 'assignedStaffName') {
+        if (payload.assigned_staff_name === undefined) {
+          payload.assigned_staff_name = v === '--Unassigned--' || !payload.assigned_staff_id ? null : v;
+        }
+      } else if (k !== 'id' && k !== 'status') {
+        payload[k] = v;
+      }
+    }
+  }
 
-  const res = await fetch(url, {
+  console.log('🚀 [API] Safe update payload for', targetTable, payload);
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(resolvedId)}`, {
     method: 'PATCH',
     headers: {
       'apikey': SUPABASE_ANON_KEY,
@@ -348,12 +389,11 @@ export async function updateLeadOrInquiryStatus(
   }
 
   const data = await res.json();
-  // PostgREST return=representation returns an array; extract first item if array
-  const rawRow = Array.isArray(data) ? (data[0] || { id: cleanId, status: payload.status, ...payload }) : (data || { id: cleanId, status: payload.status, ...payload });
+  const rawRow = Array.isArray(data) ? (data[0] || { id: resolvedId, ...payload }) : (data || { id: resolvedId, ...payload });
 
   const mapped: Inquiry = {
     ...rawRow,
-    id: rawRow.id || cleanId,
+    id: rawRow.id || resolvedId,
     status: (rawRow.status || payload.status || 'NEW') as any,
     assignedStaffId: rawRow.assigned_staff_id !== undefined ? rawRow.assigned_staff_id : payload.assigned_staff_id,
     assignedStaffName: rawRow.assigned_staff_name !== undefined ? rawRow.assigned_staff_name : payload.assigned_staff_name,
@@ -361,7 +401,7 @@ export async function updateLeadOrInquiryStatus(
   } as Inquiry;
 
   try {
-    localStore.updateInquiry(cleanId, mapped);
+    localStore.updateInquiry(resolvedId, mapped);
     broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: mapped.assignedStaffName });
   } catch {}
 
@@ -927,12 +967,12 @@ export const api = {
   },
 
   async updateLeadOrInquiryStatus(
-    leadOrInquiryId: string | number,
-    statusOrUpdates: InquiryStatus | string | Partial<Inquiry>,
+    optionsOrId: UpdateLeadOptions | string | number,
+    statusOrUpdates?: InquiryStatus | string | Partial<Inquiry>,
     staffId?: string,
     staffName?: string
   ): Promise<Inquiry> {
-    return updateLeadOrInquiryStatus(leadOrInquiryId, statusOrUpdates, staffId, staffName);
+    return updateLeadOrInquiryStatus(optionsOrId, statusOrUpdates, staffId, staffName);
   },
 
   async updateInquiryStatus(

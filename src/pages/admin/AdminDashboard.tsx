@@ -128,7 +128,7 @@ export const AdminDashboard: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, status: Inquiry['status']) => {
     try {
-      await updateLeadOrInquiryStatus(id, status);
+      await updateLeadOrInquiryStatus({ id, status });
       setRecentInquiries((prev) =>
         prev.map((item) => (item.id === id ? { ...item, status } : item))
       );

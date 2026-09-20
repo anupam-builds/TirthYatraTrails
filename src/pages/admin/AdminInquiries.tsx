@@ -172,7 +172,7 @@ export const AdminInquiries: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, status: InquiryStatus) => {
     try {
-      const res = await updateLeadOrInquiryStatus(id, status);
+      const res = await updateLeadOrInquiryStatus({ id, status });
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       setInquiries((prev) =>
         prev.map((i) =>
@@ -207,17 +207,13 @@ export const AdminInquiries: React.FC = () => {
       const cleanedStaffId = cleanUnassignedValue(rawStaffId ? String(rawStaffId) : '') || '';
       const staffMember = cleanedStaffId ? staffList.find((s) => String(s.id) === String(cleanedStaffId)) : null;
       const staffName = staffMember ? staffMember.name : '';
-      console.log('🎯 [AdminInquiries] Dispatching updateLeadOrInquiryStatus:', { inquiryId, rawStaffId, cleanedStaffId, staffName });
+      console.log('🎯 [AdminInquiries] Dispatching updateLeadOrInquiryStatus options object:', { inquiryId, rawStaffId, cleanedStaffId, staffName });
       
-      const res = await updateLeadOrInquiryStatus(
-        inquiryId,
-        {
-          assignedStaffId: cleanedStaffId || undefined,
-          assignedStaffName: staffName || undefined,
-        },
-        cleanedStaffId ? String(cleanedStaffId) : undefined,
-        staffName || undefined
-      );
+      const res = await updateLeadOrInquiryStatus({
+        id: inquiryId,
+        assignedStaffId: cleanedStaffId || null,
+        assignedStaffName: staffName || null,
+      });
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       console.log('✅ [AdminInquiries] Staff assigned successfully:', { inquiryId, updated });
       setInquiries((prev) =>
@@ -243,7 +239,7 @@ export const AdminInquiries: React.FC = () => {
 
   const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
     try {
-      const res = await updateLeadOrInquiryStatus(id, updates);
+      const res = await updateLeadOrInquiryStatus({ id, ...updates });
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       setInquiries((prev) =>
         prev.map((i) =>

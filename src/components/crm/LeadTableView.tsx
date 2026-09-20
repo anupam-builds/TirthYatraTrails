@@ -169,7 +169,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           if (onUpdateStatus) {
             await onUpdateStatus(exactId, 'CONTACTED');
           } else {
-            await updateLeadOrInquiryStatus(exactId, 'CONTACTED');
+            await updateLeadOrInquiryStatus({ id: exactId, status: 'CONTACTED' });
           }
         } catch (err: any) {
           console.error('Failed to update status to CONTACTED:', err);
@@ -567,7 +567,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                     await onAssignStaff(lead.id, String(cleaned));
                                   } else {
                                     console.log('🎯 [LeadTableView] Calling updateLeadOrInquiryStatus with lead.id:', { leadId: lead.id, status: inq.status, assignedStaffId: cleaned });
-                                    await updateLeadOrInquiryStatus(lead.id, inq.status || 'NEW', String(cleaned || ''), staffName);
+                                    await updateLeadOrInquiryStatus({
+                                      id: lead.id,
+                                      status: inq.status || 'NEW',
+                                      assignedStaffId: cleaned || null,
+                                      assignedStaffName: staffName || null,
+                                    });
                                   }
                                   console.log('✅ [LeadTableView] Staff assigned successfully for lead:', lead.id, { staffId: cleaned });
                                 } catch (err) {
@@ -690,7 +695,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 if (onUpdateStatus) {
                                   await onUpdateStatus(lead.id, newStatus);
                                 } else {
-                                  await updateLeadOrInquiryStatus(lead.id, newStatus);
+                                  await updateLeadOrInquiryStatus({ id: lead.id, status: newStatus });
                                 }
                               }}
                               className={`text-xs font-extrabold rounded-xl px-3 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${

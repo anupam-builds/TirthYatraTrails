@@ -386,7 +386,11 @@ export const StaffPortalPage: React.FC = () => {
     }
 
     try {
-      const res = await updateLeadOrInquiryStatus(id, newStatus, staffUser.id, staffUser.name, {
+      const res = await updateLeadOrInquiryStatus({
+        id,
+        status: newStatus,
+        assignedStaffId: staffUser.id,
+        assignedStaffName: staffUser.name,
         userRole: 'staff',
         currentStatus: inquiry?.status,
       });
@@ -420,16 +424,12 @@ export const StaffPortalPage: React.FC = () => {
       const cleanedStaffId = cleanUnassignedValue(rawStaffId ? String(rawStaffId) : '') || '';
       const selected = cleanedStaffId ? staffList.find((s) => s.id === cleanedStaffId) : null;
       const staffName = selected ? selected.name : '';
-      console.log('🎯 [StaffPortalPage] Calling updateLeadOrInquiryStatus:', { inquiryId, rawStaffId, cleanedStaffId, staffName });
-      const res = await updateLeadOrInquiryStatus(
-        inquiryId,
-        {
-          assignedStaffId: cleanedStaffId || undefined,
-          assignedStaffName: staffName || undefined,
-        },
-        cleanedStaffId ? String(cleanedStaffId) : undefined,
-        staffName || undefined
-      );
+      console.log('🎯 [StaffPortalPage] Calling updateLeadOrInquiryStatus options object:', { inquiryId, rawStaffId, cleanedStaffId, staffName });
+      const res = await updateLeadOrInquiryStatus({
+        id: inquiryId,
+        assignedStaffId: cleanedStaffId || null,
+        assignedStaffName: staffName || null,
+      });
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       console.log('✅ [StaffPortalPage] Assigned staff result:', updated);
       setInquiries((prev) => prev.map((i) => (i.id === inquiryId ? { ...i, ...updated } : i)));
@@ -444,7 +444,7 @@ export const StaffPortalPage: React.FC = () => {
 
   const handleSaveInquiryUpdates = async (id: string, updates: Partial<Inquiry>) => {
     try {
-      const res = await updateLeadOrInquiryStatus(id, updates);
+      const res = await updateLeadOrInquiryStatus({ id, ...updates });
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
       setInquiries((prev) => prev.map((i) => (i.id === id ? { ...i, ...updated } : i)));
       setSelectedInquiryForEdit(null);
