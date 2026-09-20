@@ -58,43 +58,46 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     fetchStaffLeads();
   }, [fetchStaffLeads]);
 
-  // Direct Leads Realtime Update wire into Staff View
+  // Raw Debug Lead Realtime Channel & State Merger
   useEffect(() => {
-    const staffId = currentStaffId || 'stf-1789834704496-07kq'; // fallback or dynamic session staff id
+    const staffId = currentStaffId || 'stf-1789834704496-07kq';
+    console.log('📡 [StaffRealtime] Mounting leads listener for staffId:', staffId);
 
     const channel = supabase
-      .channel('staff-leads-live-sync')
+      .channel('staff-leads-live-debug')
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'leads',
-        },
+        { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
-          console.log('⚡ [Staff Leads Realtime UPDATE received]:', payload.new);
-          const updatedLead = payload.new as any;
+          console.log('🔥 RAW LEAD CHANGE RECEIVED:', payload.eventType, payload.new || payload.old);
+
+          const newRow = payload.new as any;
+          const oldRow = payload.old as any;
 
           setLeads((prevLeads) => {
-            const exists = prevLeads.some((l) => l.id === updatedLead.id || String(l.id) === String(updatedLead.id));
-            const belongsToStaff = updatedLead.assigned_staff_id === staffId;
+            if (payload.eventType === 'DELETE') {
+              return prevLeads.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id));
+            }
+
+            const targetId = newRow?.assigned_staff_id;
+            const belongsToStaff = targetId === staffId;
+            const exists = prevLeads.some((l) => l.id === newRow?.id || String(l.id) === String(newRow?.id));
 
             if (exists) {
               if (!belongsToStaff) {
-                // Unassigned away from this staff
-                return prevLeads.filter((l) => l.id !== updatedLead.id && String(l.id) !== String(updatedLead.id));
+                return prevLeads.filter((l) => l.id !== newRow?.id && String(l.id) !== String(newRow?.id));
               }
-              // Update existing row
-              return prevLeads.map((l) => (l.id === updatedLead.id || String(l.id) === String(updatedLead.id) ? updatedLead : l));
+              return prevLeads.map((l) => (l.id === newRow.id || String(l.id) === String(newRow.id) ? { ...l, ...newRow } : l));
             } else if (belongsToStaff) {
-              // Newly assigned to this staff, prepend
-              return [updatedLead, ...prevLeads];
+              return [newRow, ...prevLeads];
             }
             return prevLeads;
           });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('📡 [StaffRealtime] Subscription status:', status, err);
+      });
 
     return () => {
       supabase.removeChannel(channel);
