@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { useCitiesMaster } from '../context/CitiesContext.js';
 import { api } from '../services/api.js';
 import { City, Hotel } from '../types.js';
 import { HeroSearchBar } from '../components/common/HeroSearchBar.js';
+import { CityCoverageSection } from '../components/CityCoverageSection.js';
 import { BaseInput } from '../components/FormField.js';
 import {
   MapPin,
@@ -26,6 +27,7 @@ export const HotelsPage: React.FC = () => {
   const { path, navigate } = useRouter();
   const { cities, refreshCities } = useCitiesMaster();
   const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [allHotels, setAllHotels] = useState<Hotel[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Parse URL query params
@@ -106,11 +108,13 @@ export const HotelsPage: React.FC = () => {
     async function loadData() {
       setLoading(true);
       try {
-        const [_, hList] = await Promise.all([
+        const [_, hList, masterHotelList] = await Promise.all([
           refreshCities(),
           api.getHotels(selectedCityId, searchQuery),
+          api.getHotels(),
         ]);
         setHotels(hList);
+        setAllHotels(masterHotelList);
       } catch (err) {
         console.error('Failed to load hotels:', err);
       } finally {
@@ -140,6 +144,63 @@ export const HotelsPage: React.FC = () => {
       c.id.toLowerCase() === selectedCityId.toLowerCase()
   );
   const selectedCityName = currentCityObj ? currentCityObj.name : (selectedCityId || 'Select City or Temple');
+
+  // Dynamic Grouping/Counting per Requirements
+  const cityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    (allHotels || []).forEach((hotel: any) => {
+      const keys = new Set<string>();
+
+      const rawCity = hotel.city || hotel.cityName || hotel.location || '';
+      const normalized = rawCity.trim().toLowerCase();
+      if (normalized) {
+        keys.add(normalized);
+      }
+
+      const rawId = (hotel.cityId || '').trim().toLowerCase();
+      if (rawId) {
+        keys.add(rawId);
+        const cleanId = rawId.replace(/^city-/, '');
+        if (cleanId) keys.add(cleanId);
+      }
+
+      keys.forEach((key) => {
+        counts[key] = (counts[key] || 0) + 1;
+      });
+    });
+    return counts;
+  }, [allHotels]);
+
+  const getCityHotelCount = (city: City): number => {
+    const normName = (city.name || '').trim().toLowerCase();
+    const normId = (city.id || '').trim().toLowerCase();
+    const cleanId = normId.replace(/^city-/, '');
+
+    if (cityCounts[normName] !== undefined) return cityCounts[normName];
+    if (cityCounts[normId] !== undefined) return cityCounts[normId];
+    if (cityCounts[cleanId] !== undefined) return cityCounts[cleanId];
+
+    if (normName.includes('&')) {
+      const parts = normName.split('&').map((p) => p.trim());
+      let sum = 0;
+      let found = false;
+      for (const p of parts) {
+        if (cityCounts[p] !== undefined) {
+          sum += cityCounts[p];
+          found = true;
+        }
+      }
+      if (found) return sum;
+    }
+
+    for (const key of Object.keys(cityCounts)) {
+      if (key && (normName.includes(key) || key.includes(normName))) {
+        return cityCounts[key];
+      }
+    }
+
+    return 0;
+  };
 
   const filteredHotels = hotels.filter((hotel) => {
     if (selectedCityId) {
@@ -289,7 +350,7 @@ export const HotelsPage: React.FC = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0f294a] via-[#0f294a]/30 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3 text-white">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full inline-block mb-1">
-                    {city.hotelCount} {city.hotelCount === 1 ? 'Stay' : 'Stays'}
+                    {getCityHotelCount(city)} {getCityHotelCount(city) === 1 ? 'Stay' : 'Stays'}
                   </span>
                   <h3 className="font-bold text-base leading-tight text-white">{city.name}</h3>
                   <p className="text-[11px] text-slate-200 truncate mt-0.5 opacity-90">
@@ -514,30 +575,14 @@ export const HotelsPage: React.FC = () => {
       </section>
 
       {/* 4. EVERY CITY WE COVER (Multi-column list at bottom) */}
-      <section className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-200">
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-[#0f294a]">Every city we cover</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Explore sacred pilgrim accommodations across India</p>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-y-4 gap-x-6 text-xs">
-          {cities.map((city) => (
-            <div
-              key={city.id}
-              onClick={() => {
-                setSelectedCityId(city.id);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="cursor-pointer hover:text-[#ea580c] transition-colors group flex items-baseline justify-between"
-            >
-              <span className="font-semibold text-slate-700 group-hover:text-[#ea580c] truncate">
-                {city.name}
-              </span>
-              <span className="text-slate-400 text-[10px] ml-1">({city.hotelCount})</span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <CityCoverageSection
+        cities={cities}
+        allHotels={allHotels}
+        onSelectCity={(cityId) => {
+          setSelectedCityId(cityId);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
     </div>
   );
 };

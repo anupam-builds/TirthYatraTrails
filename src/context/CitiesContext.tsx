@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { City } from '../types.js';
 import { api } from '../services/api.js';
+import { localStore } from '../services/localStore.js';
 
 export interface CitiesContextType {
   cities: City[];
@@ -24,9 +25,16 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       setLoading(true);
       setError(null);
-      const list = await api.getCities();
-      setCities(list);
-      return list;
+      const [list, hotelList] = await Promise.all([
+        api.getCities(),
+        api.getHotels().catch(() => []),
+      ]);
+      const enriched = list.map((c) => ({
+        ...c,
+        hotelCount: localStore.countHotelsForCity(c, hotelList),
+      }));
+      setCities(enriched);
+      return enriched;
     } catch (err: any) {
       console.error('Failed to load cities in CitiesProvider:', err);
       setError(err?.message || 'Failed to load cities');
