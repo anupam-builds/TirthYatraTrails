@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api, updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
+import { api, updateLeadOrInquiryStatus, cleanUnassignedValue, matchLeadId, mergeUpdatedLeadFields, mapInquiryRow } from '../../services/api.js';
+import { supabase } from '../../lib/supabase.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../services/soundNotification.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -52,7 +53,7 @@ export const AdminInquiries: React.FC = () => {
     onUpdate: (updatedInq) => {
       console.log('🔄 [AdminInquiries] Realtime lead UPDATE received:', updatedInq.id);
       setSelectedInquiryForEdit((curr) =>
-        curr && String(curr.id) === String(updatedInq.id) ? { ...curr, ...updatedInq } : curr
+        curr && matchLeadId(curr, updatedInq.id) ? { ...curr, ...updatedInq } : curr
       );
     },
     onProfileUpdate: (profile) => {
@@ -71,6 +72,71 @@ export const AdminInquiries: React.FC = () => {
       );
     },
   });
+
+  const leads = inquiries;
+  const setLeads = setInquiries;
+
+  // Active postgres_changes subscription specifically listening for event: 'UPDATE' on both 'leads' and 'inquiries' tables
+  useEffect(() => {
+    const channelName = `admin-desk-update-sync-${Math.random().toString(36).substring(2, 8)}`;
+    console.log(`🔌 [AdminInquiries] Registering active UPDATE postgres_changes listeners on ${channelName}`);
+
+    const handleRemoteUpdate = (payload: any) => {
+      const newRow = payload?.new;
+      if (!newRow || !newRow.id) return;
+      console.log(`📡 [AdminInquiries] Live postgres_changes UPDATE on table '${payload.table || 'leads'}':`, {
+        id: newRow.id,
+        status: newRow.status,
+        assigned_staff_id: newRow.assigned_staff_id,
+        assigned_staff_name: newRow.assigned_staff_name,
+        updated_at: newRow.updated_at,
+      });
+
+      // Safely merge incoming updated fields into the admin state array
+      setLeads((prevLeads) => {
+        const index = prevLeads.findIndex((item) => matchLeadId(item, newRow.id));
+        if (index === -1) {
+          const mapped = mapInquiryRow(newRow);
+          return [mapped, ...prevLeads];
+        }
+        const updatedLeads = [...prevLeads];
+        updatedLeads[index] = mergeUpdatedLeadFields(prevLeads[index], newRow);
+        return updatedLeads;
+      });
+
+      // Also update selected lead modal if currently open for this lead
+      setSelectedInquiryForEdit((curr) => {
+        if (!curr || !matchLeadId(curr, newRow.id)) return curr;
+        return mergeUpdatedLeadFields(curr, newRow);
+      });
+    };
+
+    const updateChannel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'leads' },
+        handleRemoteUpdate
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'inquiries' },
+        handleRemoteUpdate
+      )
+      .subscribe((status, err) => {
+        if (err) {
+          console.error(`[AdminInquiries] Subscription error on ${channelName}:`, err);
+        } else {
+          console.log(`[AdminInquiries] Live updates channel ${channelName} status:`, status);
+        }
+      });
+
+    // Dedup channel subscriptions cleanly in useEffect cleanup
+    return () => {
+      console.log(`🧹 [AdminInquiries] Cleaning up channel ${channelName}`);
+      supabase.removeChannel(updateChannel);
+    };
+  }, [setLeads]);
 
   // Trash UI states
   const [trashSearchQuery, setTrashSearchQuery] = useState('');
@@ -115,15 +181,8 @@ export const AdminInquiries: React.FC = () => {
       if (!updatedInquiry) return;
       setInquiries((prev) =>
         prev.map((item) =>
-          String(item.id) === String(updatedInquiry.id)
-            ? {
-                ...item,
-                ...updatedInquiry,
-                assignedStaffId: updatedInquiry.assignedStaffId ?? (updatedInquiry as any).assigned_staff_id ?? item.assignedStaffId,
-                assigned_staff_id: (updatedInquiry as any).assigned_staff_id ?? updatedInquiry.assignedStaffId ?? (item as any).assigned_staff_id,
-                assignedStaffName: updatedInquiry.assignedStaffName ?? (updatedInquiry as any).assigned_staff_name ?? item.assignedStaffName,
-                assigned_staff_name: (updatedInquiry as any).assigned_staff_name ?? updatedInquiry.assignedStaffName ?? (item as any).assigned_staff_name,
-              }
+          matchLeadId(item, updatedInquiry.id)
+            ? mergeUpdatedLeadFields(item, updatedInquiry as any)
             : item
         )
       );

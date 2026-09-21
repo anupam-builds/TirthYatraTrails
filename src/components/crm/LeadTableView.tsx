@@ -94,8 +94,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   }, [inquiries]);
 
   // In Staff Mode, staff members can ONLY view inquiries explicitly assigned to them by the administrator
+  // Prioritize incoming inquiries prop so remote realtime status updates render immediately without lag
   const baseInquiries = useMemo(() => {
-    const activeList = localInquiries && localInquiries.length > 0 ? localInquiries : inquiries;
+    const activeList = inquiries && inquiries.length > 0 ? inquiries : localInquiries;
     if (!isStaffMode) return activeList;
     const targetId = String(currentStaffId || '').trim().toLowerCase();
     const targetName = String(currentStaffName || '').trim().toLowerCase();

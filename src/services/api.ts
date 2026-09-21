@@ -2381,6 +2381,111 @@ export function mapInquiryRow(row: any): Inquiry {
   };
 }
 
+/**
+ * Safely checks whether an existing Inquiry matches an incoming row identifier.
+ * Matches on id, leadId, lead_id, referenceId, reference_id, or stripped prefix forms ('lead-123' vs '123', 'inq-123' vs '123').
+ */
+export function matchLeadId(item: Inquiry | Record<string, any>, incomingId: string | number): boolean {
+  if (!incomingId || !item) return false;
+  const target = String(incomingId).trim().toLowerCase();
+  const id = String(item.id || '').trim().toLowerCase();
+  const leadId = String(item.leadId || (item as any).lead_id || '').trim().toLowerCase();
+  const refId = String(item.referenceId || (item as any).reference_id || '').trim().toLowerCase();
+
+  if (id === target || leadId === target || refId === target) return true;
+
+  const strip = (s: string) => s.replace(/^(lead|inq|ttt|htl)[-_]/i, '');
+  const strippedTarget = strip(target);
+  if (strippedTarget) {
+    if (strip(id) === strippedTarget) return true;
+    if (strip(leadId) === strippedTarget) return true;
+    if (strip(refId) === strippedTarget) return true;
+  }
+  return false;
+}
+
+/**
+ * Merges updated fields from a real-time Postgres UPDATE payload into an existing Inquiry object.
+ * Safely preserves existing values without letting nulls or default template values overwrite custom fields.
+ */
+export function mergeUpdatedLeadFields(existing: Inquiry, newRow: Record<string, any>): Inquiry {
+  if (!newRow) return existing;
+
+  const status = newRow.status !== undefined && newRow.status !== null
+    ? (String(newRow.status).toUpperCase() as any)
+    : existing.status;
+
+  const rawStaffId = newRow.assigned_staff_id !== undefined ? newRow.assigned_staff_id : newRow.assignedStaffId;
+  const cleanedStaffId = rawStaffId === '--Unassigned--' || rawStaffId === 'UNASSIGNED' || !rawStaffId ? null : String(rawStaffId);
+  const assignedStaffId = rawStaffId !== undefined ? (cleanedStaffId || undefined) : existing.assignedStaffId;
+  const assigned_staff_id = rawStaffId !== undefined ? (cleanedStaffId || null) : existing.assigned_staff_id;
+
+  const rawStaffName = newRow.assigned_staff_name !== undefined ? newRow.assigned_staff_name : newRow.assignedStaffName;
+  const cleanedStaffName = !cleanedStaffId || rawStaffName === '--Unassigned--' || !rawStaffName ? null : String(rawStaffName);
+  const assignedStaffName = rawStaffName !== undefined ? (cleanedStaffName || undefined) : existing.assignedStaffName;
+  const assigned_staff_name = rawStaffName !== undefined ? (cleanedStaffName || null) : existing.assigned_staff_name;
+
+  const updatedAt = newRow.updated_at || newRow.updatedAt || new Date().toISOString();
+
+  const isLockedForStaff = newRow.is_locked_for_staff !== undefined
+    ? Boolean(newRow.is_locked_for_staff)
+    : newRow.isLockedForStaff !== undefined
+    ? Boolean(newRow.isLockedForStaff)
+    : (status === 'CLOSED' ? true : existing.isLockedForStaff);
+
+  const isResolved = newRow.is_resolved !== undefined
+    ? Boolean(newRow.is_resolved)
+    : newRow.isResolved !== undefined
+    ? Boolean(newRow.isResolved)
+    : (status === 'CLOSED' || status === 'CONFIRMED' ? true : existing.isResolved);
+
+  const closedAt = newRow.closed_at || newRow.closedAt || (status === 'CLOSED' ? existing.closedAt || updatedAt : existing.closedAt);
+  const closedBy = newRow.closed_by || newRow.closedBy || existing.closedBy;
+
+  let notes = existing.notes;
+  if (newRow.notes !== undefined && newRow.notes !== null) {
+    notes = typeof newRow.notes === 'string'
+      ? newRow.notes
+      : Array.isArray(newRow.notes)
+      ? newRow.notes.map((n: any) => n.text || JSON.stringify(n)).join('\n')
+      : existing.notes;
+  }
+
+  let followUpNotes = existing.followUpNotes;
+  if (Array.isArray(newRow.follow_up_notes)) {
+    followUpNotes = newRow.follow_up_notes;
+  } else if (Array.isArray(newRow.followUpNotes)) {
+    followUpNotes = newRow.followUpNotes;
+  } else if (Array.isArray(newRow.notes)) {
+    followUpNotes = newRow.notes;
+  }
+
+  return {
+    ...existing,
+    status,
+    assignedStaffId,
+    assigned_staff_id,
+    assignedStaffName,
+    assigned_staff_name,
+    updatedAt,
+    isLockedForStaff,
+    isResolved,
+    closedAt,
+    closedBy,
+    notes,
+    followUpNotes,
+    ...(newRow.customer_name ? { customerName: newRow.customer_name, fullName: newRow.customer_name } : {}),
+    ...(newRow.customer_phone || newRow.phone ? { customerPhone: newRow.customer_phone || newRow.phone, phone: newRow.customer_phone || newRow.phone } : {}),
+    ...(newRow.whatsapp_number ? { whatsappNumber: newRow.whatsapp_number, whatsapp_number: newRow.whatsapp_number } : {}),
+    ...(newRow.customer_email || newRow.email ? { customerEmail: newRow.customer_email || newRow.email, email: newRow.customer_email || newRow.email } : {}),
+    ...(newRow.user_city ? { userCity: newRow.user_city } : {}),
+    ...(newRow.plan_chosen || newRow.plan ? { planChosen: newRow.plan_chosen || newRow.plan } : {}),
+    ...(newRow.special_requests ? { specialRequests: newRow.special_requests } : {}),
+    ...(newRow.pickup_location ? { pickupLocation: newRow.pickup_location } : {}),
+    ...(newRow.dropoff_location ? { dropoffLocation: newRow.dropoff_location } : {}),
+  };
+}
+
 export function mapStaffRow(row: any): StaffMember {
   const isOnline = Boolean(row.is_online ?? row.isOnline ?? row.is_currently_logged_in ?? row.isCurrentlyLoggedIn);
   return {

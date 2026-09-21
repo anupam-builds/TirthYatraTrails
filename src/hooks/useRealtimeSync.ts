@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { supabase } from '../lib/supabase.js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { matchLeadId, mergeUpdatedLeadFields } from '../services/api.js';
 
 // ==============================================================================
 // 1. STATE RECONCILIATION HELPER (Optimistic & Deduplicating)
@@ -461,40 +462,82 @@ export function useIsolatedLeadsRealtime<T extends Record<string, any> = any>(
 
   useEffect(() => {
     const channelName = options?.channelName || 'public:leads-realtime';
+
+    const handlePayload = (payload: any) => {
+      setLeads((currentLeads) => {
+        if (payload.eventType === 'INSERT') {
+          const inserted = payload.new as T;
+          optionsRef.current?.onInsert?.(inserted);
+          const exists = currentLeads.some((i) => matchLeadId(i as any, (inserted as any).id));
+          if (exists) return currentLeads;
+          return [inserted, ...currentLeads];
+        }
+        if (payload.eventType === 'UPDATE') {
+          const updatedRow = payload.new;
+          if (!updatedRow) return currentLeads;
+          let mergedResult: any = null;
+          const updatedList = currentLeads.map((item) => {
+            if (matchLeadId(item as any, updatedRow.id)) {
+              const merged = mergeUpdatedLeadFields(item as any, updatedRow);
+              mergedResult = merged;
+              return merged as unknown as T;
+            }
+            return item;
+          });
+          if (mergedResult) {
+            optionsRef.current?.onUpdate?.(mergedResult);
+          } else {
+            optionsRef.current?.onUpdate?.(updatedRow as T);
+          }
+          return updatedList;
+        }
+        if (payload.eventType === 'DELETE') {
+          const deletedId = (payload.old as any)?.id || (payload.new as any)?.id;
+          optionsRef.current?.onDelete?.(deletedId);
+          return currentLeads.filter((item) => !matchLeadId(item as any, deletedId));
+        }
+        return currentLeads;
+      });
+    };
+
     const channel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads' },
-        (payload) => {
-          setLeads((currentLeads) => {
-            if (payload.eventType === 'INSERT') {
-              const inserted = payload.new as T;
-              optionsRef.current?.onInsert?.(inserted);
-              return [inserted, ...currentLeads];
-            }
-            if (payload.eventType === 'UPDATE') {
-              const updated = payload.new as T;
-              optionsRef.current?.onUpdate?.(updated);
-              return currentLeads.map((item) =>
-                item.id === (payload.new as any).id ? { ...item, ...payload.new } : item
-              );
-            }
-            if (payload.eventType === 'DELETE') {
-              const deletedId = (payload.old as any)?.id;
-              optionsRef.current?.onDelete?.(deletedId);
-              return currentLeads.filter((item) => item.id !== deletedId);
-            }
-            return currentLeads;
-          });
-        }
+        { event: 'UPDATE', schema: 'public', table: 'leads' },
+        handlePayload
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'inquiries' },
+        handlePayload
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'leads' },
+        handlePayload
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'inquiries' },
+        handlePayload
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'leads' },
+        handlePayload
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'inquiries' },
+        handlePayload
       )
       .subscribe();
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [options?.channelName]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [options?.channelName]);
 
   return { leads, setLeads };
 }

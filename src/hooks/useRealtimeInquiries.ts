@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { supabase } from '../lib/supabase';
 import { Inquiry } from '../types';
-import { api, mapInquiryRow } from '../services/api';
+import { api, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields } from '../services/api';
 
 export interface UseRealtimeInquiriesOptions {
   onInsert?: (inquiry: Inquiry) => void;
@@ -85,29 +85,45 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
       return;
     }
 
-    const mapped = mapInquiryRow(rawRow);
-
     if (eventType === 'INSERT') {
+      const mapped = mapInquiryRow(rawRow);
       setInquiries((prev) => {
-        const exists = prev.some((i) => String(i.id) === String(mapped.id));
+        const exists = prev.some((i) => matchLeadId(i, mapped.id));
         if (exists) return prev;
         return [mapped, ...prev];
       });
       if (optionsRef.current.onInsert) {
         optionsRef.current.onInsert(mapped);
       }
-    } else {
-      // UPDATE or other
+    } else if (eventType === 'UPDATE') {
+      let updatedItem: Inquiry | null = null;
       setInquiries((prev) => {
-        const exists = prev.some((i) => String(i.id) === String(mapped.id));
+        const exists = prev.some((i) => matchLeadId(i, rawRow.id));
         if (!exists) {
+          const mapped = mapInquiryRow(rawRow);
+          updatedItem = mapped;
           return [mapped, ...prev];
         }
-        return prev.map((i) => (String(i.id) === String(mapped.id) ? { ...i, ...mapped } : i));
+        return prev.map((i) => {
+          if (!matchLeadId(i, rawRow.id)) return i;
+          const merged = mergeUpdatedLeadFields(i, rawRow);
+          updatedItem = merged;
+          return merged;
+        });
       });
-      if (optionsRef.current.onUpdate) {
-        optionsRef.current.onUpdate(mapped);
+      if (optionsRef.current.onUpdate && updatedItem) {
+        optionsRef.current.onUpdate(updatedItem);
       }
+    } else {
+      // Catch-all for any other event
+      setInquiries((prev) => {
+        const exists = prev.some((i) => matchLeadId(i, rawRow.id));
+        if (!exists) {
+          const mapped = mapInquiryRow(rawRow);
+          return [mapped, ...prev];
+        }
+        return prev.map((i) => (matchLeadId(i, rawRow.id) ? mergeUpdatedLeadFields(i, rawRow) : i));
+      });
     }
   }, []);
 
@@ -141,21 +157,50 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
     const presenceChannelName = 'public:staff-presence-realtime';
     setConnectionStatus('CONNECTING');
 
-    // 1. Dedicated isolated channel for leads/inquiries
+    // 1. Dedicated isolated channel for leads/inquiries with explicit event listeners
     const leadsChannel = supabase
       .channel(leadsChannelName)
-      // Listen to 'leads' table changes (INSERT/UPDATE/DELETE)
+      // Listen explicitly to 'UPDATE' events on 'leads' and 'inquiries'
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads' },
+        { event: 'UPDATE', schema: 'public', table: 'leads' },
         (payload: any) => {
           handleLeadChange(payload);
         }
       )
-      // Also listen to 'inquiries' table changes (INSERT/UPDATE/DELETE)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inquiries' },
+        { event: 'UPDATE', schema: 'public', table: 'inquiries' },
+        (payload: any) => {
+          handleLeadChange(payload);
+        }
+      )
+      // Listen to 'INSERT' events on 'leads' and 'inquiries'
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'leads' },
+        (payload: any) => {
+          handleLeadChange(payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'inquiries' },
+        (payload: any) => {
+          handleLeadChange(payload);
+        }
+      )
+      // Listen to 'DELETE' events on 'leads' and 'inquiries'
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'leads' },
+        (payload: any) => {
+          handleLeadChange(payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'inquiries' },
         (payload: any) => {
           handleLeadChange(payload);
         }
