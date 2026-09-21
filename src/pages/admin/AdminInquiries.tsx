@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
 import { BaseInput, BaseSelect } from '../../components/FormField.js';
-import { getLeadId, formatLeadId, formatCrmTimestamp } from '../../utils/crmUtils.js';
+import { getLeadId, formatLeadId, formatSequentialLeadId, computeSequentialLeadIdMap, formatCrmTimestamp } from '../../utils/crmUtils.js';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import {
   MessageSquare,
@@ -465,17 +465,23 @@ export const AdminInquiries: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const deletedSeqIdMap = React.useMemo(() => {
+    return computeSequentialLeadIdMap(deletedInquiries);
+  }, [deletedInquiries]);
+
   const filteredDeletedInquiries = deletedInquiries.filter((inq) => {
     if (!trashSearchQuery.trim()) return true;
     const q = trashSearchQuery.toLowerCase();
-    const leadId = getLeadId(inq).toLowerCase();
+    const seqId = (deletedSeqIdMap.get(String(inq.id)) || '').toLowerCase();
+    const rawLeadId = getLeadId(inq).toLowerCase();
     const name = (inq.customerName || inq.fullName || '').toLowerCase();
     const phone = (inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
     const email = (inq.customerEmail || inq.email || '').toLowerCase();
     const city = (inq.userCity || '').toLowerCase();
     const title = (inq.title || '').toLowerCase();
     return (
-      leadId.includes(q) ||
+      seqId.includes(q) ||
+      rawLeadId.includes(q) ||
       name.includes(q) ||
       phone.includes(q) ||
       email.includes(q) ||
@@ -724,9 +730,9 @@ export const AdminInquiries: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      filteredDeletedInquiries.map((inq) => {
+                      filteredDeletedInquiries.map((inq, index) => {
                         const lead = inq as any;
-                        const leadId = formatLeadId(lead.id);
+                        const seqLeadId = deletedSeqIdMap.get(String(inq.id)) || formatSequentialLeadId(index + 1);
                         const assignedStaffId =
                           selectedRestoreStaff[inq.id] ||
                           inq.assignedStaffId ||
@@ -741,15 +747,18 @@ export const AdminInquiries: React.FC = () => {
                             <td className="py-4 px-4 align-top">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-mono font-black text-rose-600 dark:text-rose-400 text-xs tracking-tight bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800">
-                                    {formatLeadId(lead.id)}
+                                  <span
+                                    title={`System UUID: ${lead.id}`}
+                                    className="font-mono font-black text-rose-600 dark:text-rose-400 text-xs tracking-tight bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800"
+                                  >
+                                    {seqLeadId}
                                   </span>
                                   <button
-                                    onClick={() => handleCopyLeadId(leadId)}
-                                    title="Copy Lead ID"
+                                    onClick={() => handleCopyLeadId(seqLeadId)}
+                                    title={`Copy Lead ID (${seqLeadId})`}
                                     className="text-slate-400 hover:text-rose-600 transition-colors"
                                   >
-                                    {copiedId === leadId ? (
+                                    {copiedId === seqLeadId ? (
                                       <Check className="w-3 h-3 text-emerald-600" />
                                     ) : (
                                       <Copy className="w-3 h-3" />

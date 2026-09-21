@@ -27,11 +27,13 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
   const accommodationTier = meta.accommodation_tier || lead.accommodation_tier || lead.accommodationTier || lead.plan || lead.selectedPlan || '3 Star Premium';
   const specialRequests = meta.special_requests || lead.special_requests || lead.specialRequests || lead.message || 'No special requests specified.';
 
+  const leadDisplayId = lead.leadId && /^TTT\d{8}$/i.test(lead.leadId) ? lead.leadId : formatLeadId(lead.id);
+
   const handleOpenWhatsApp = () => {
     const rawPhone = whatsappNum.replace(/\D/g, '');
     if (!rawPhone) return;
     const formattedPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
-    const msg = `Namaste ${fullName}, regarding your sacred pilgrimage inquiry (${formatLeadId(lead.id)}) with Tirth Yatra. How may our pilgrimage desk assist you today?`;
+    const msg = `Namaste ${fullName}, regarding your sacred pilgrimage inquiry (${leadDisplayId}) with Tirth Yatra. How may our pilgrimage desk assist you today?`;
     window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -55,7 +57,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                 <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
                 <h3 className="text-lg font-extrabold text-orange-400">Yatra Lead Details</h3>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">Reference ID: {formatLeadId(lead.id)}</p>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">Reference ID: {leadDisplayId}</p>
             </div>
             <button
               id="close-lead-details-btn"

@@ -1,7 +1,7 @@
 import { Inquiry, InquiryStatus } from '../types.js';
-import { formatLeadId } from './formatters.js';
+import { formatLeadId, formatSequentialLeadId, computeSequentialLeadIdMap } from './formatters.js';
 
-export { formatLeadId };
+export { formatLeadId, formatSequentialLeadId, computeSequentialLeadIdMap };
 
 export interface StatusConfig {
   key: InquiryStatus;

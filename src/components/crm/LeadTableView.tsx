@@ -5,6 +5,8 @@ import { BaseInput, BaseSelect } from '../FormField.js';
 import {
   getLeadId,
   formatLeadId,
+  formatSequentialLeadId,
+  computeSequentialLeadIdMap,
   CRM_STATUS_CONFIG,
   CRM_STATUS_LIST,
   ADMIN_CRM_STATUS_LIST,
@@ -46,23 +48,26 @@ import { LeadDetailsModal } from '../LeadDetailsModal.js';
 
 interface LeadTableViewProps {
   inquiries: Inquiry[];
-  staffList: StaffMember[];
+  staffList?: StaffMember[];
   loading?: boolean;
   isAdmin?: boolean;
   isStaffMode?: boolean;
   currentStaffId?: string;
   currentStaffName?: string;
-  onUpdateStatus: (id: string, status: InquiryStatus) => Promise<void>;
+  onUpdateStatus?: (id: string, status: InquiryStatus) => Promise<void>;
   onAssignStaff?: (id: string, staffId: string) => Promise<void>;
   onDeleteInquiry?: (id: string) => Promise<void>;
   onUnlockInquiry?: (id: string) => Promise<void>;
-  onEditInquiry: (inquiry: Inquiry) => void;
+  onEditInquiry?: (inquiry: Inquiry) => void;
   onAddNote?: (id: string, text: string) => Promise<void>;
+  onEdit?: (inquiry: Inquiry) => void;
+  onView?: (inquiry: Inquiry) => void;
+  enableSelection?: boolean;
 }
 
 export const LeadTableView: React.FC<LeadTableViewProps> = ({
   inquiries,
-  staffList,
+  staffList = [],
   loading = false,
   isAdmin = false,
   isStaffMode = false,
@@ -74,6 +79,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   onUnlockInquiry,
   onEditInquiry,
   onAddNote,
+  onEdit,
+  onView,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -198,6 +205,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     window.open(waData.url, '_blank', 'noopener,noreferrer');
   };
 
+  // Compute chronological sequential IDs (oldest -> TTT00000001, TTT00000002, ...)
+  // Consistent across filtering and search queries
+  const leadSeqIdMap = useMemo(() => {
+    return computeSequentialLeadIdMap(baseInquiries);
+  }, [baseInquiries]);
+
   // Filter inquiries
   const filteredInquiries = baseInquiries.filter((inq) => {
     // Status Filter
@@ -218,11 +231,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       }
     }
 
-    // Search query matching Lead ID, name, phone, or city
+    // Search query matching Lead ID (sequential or raw UUID), name, phone, or city
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const lead = inq as any;
-      const leadId = (formatLeadId(lead.id) || getLeadId(inq)).toLowerCase();
+      const seqId = (leadSeqIdMap.get(String(inq.id)) || '').toLowerCase();
+      const rawLeadId = (formatLeadId(lead.id) || getLeadId(inq)).toLowerCase();
       const name = (inq.customerName || inq.fullName || '').toLowerCase();
       const phone = (lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || '').toLowerCase();
       const city = (inq.userCity || '').toLowerCase();
@@ -230,7 +244,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       const tagsStr = (inq.tags || []).join(' ').toLowerCase();
 
       const matches =
-        leadId.includes(q) ||
+        seqId.includes(q) ||
+        rawLeadId.includes(q) ||
         name.includes(q) ||
         phone.includes(q) ||
         city.includes(q) ||
@@ -505,10 +520,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredInquiries.map((inq) => {
+                filteredInquiries.map((inq, index) => {
                   const lead = inq as any;
                   const currentAssignedId = lead.assigned_staff_id || lead.assignedStaffId || inq.assignedStaffId || '--Unassigned--';
-                  const leadId = formatLeadId(lead.id);
+                  // Priority: Look up globally sequenced ID (TTT00000001, etc.), fallback to sequential position index, or raw format
+                  const seqLeadId = leadSeqIdMap.get(String(inq.id)) || formatSequentialLeadId(index + 1);
+                  const rawLeadId = formatLeadId(lead.id);
                   const paxStr = formatPaxCount(inq);
                   const statusCfg = CRM_STATUS_CONFIG[inq.status as InquiryStatus] || CRM_STATUS_CONFIG.NEW;
                   const isLocked = Boolean(inq.isLockedForStaff || inq.status === 'CLOSED');
@@ -531,15 +548,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         <td className="py-4 px-4 align-top">
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-mono font-black text-orange-600 dark:text-orange-400 text-xs tracking-tight bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800/80">
-                                {formatLeadId(lead.id)}
+                              <span
+                                title={`System UUID: ${lead.id}`}
+                                className="font-mono font-black text-orange-600 dark:text-orange-400 text-xs tracking-tight bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800/80"
+                              >
+                                {seqLeadId}
                               </span>
                               <button
-                                onClick={() => handleCopyLeadId(leadId)}
-                                title="Copy Lead ID"
+                                onClick={() => handleCopyLeadId(seqLeadId)}
+                                title={`Copy Lead ID (${seqLeadId})`}
                                 className="text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
                               >
-                                {copiedId === leadId ? (
+                                {copiedId === seqLeadId ? (
                                   <Check className="w-3 h-3 text-emerald-600" />
                                 ) : (
                                   <Copy className="w-3 h-3" />
@@ -547,7 +567,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setSelectedDetailedLead(inq)}
+                                onClick={() => setSelectedDetailedLead({ ...inq, leadId: seqLeadId })}
                                 title="Inspect Detailed Lead Profile"
                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-100 hover:bg-orange-600 hover:text-white dark:bg-orange-950/60 dark:hover:bg-orange-600 text-orange-700 dark:text-orange-400 text-[10px] font-bold border border-orange-300 dark:border-orange-800/80 transition-all cursor-pointer shadow-2xs"
                               >
@@ -798,7 +818,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             {/* Detailed Inspection Drawer */}
                             <button
                               type="button"
-                              onClick={() => setSelectedDetailedLead(inq)}
+                              onClick={() => {
+                                if (onView) onView({ ...inq, leadId: seqLeadId });
+                                else setSelectedDetailedLead({ ...inq, leadId: seqLeadId });
+                              }}
                               title="Detailed Yatra Lead Inspection"
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100/80 dark:bg-orange-950/60 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white border border-orange-300 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
                             >
@@ -808,7 +831,11 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
                             {/* Quick Edit modal */}
                             <button
-                              onClick={() => onEditInquiry(inq)}
+                              onClick={() => {
+                                const editLead = { ...inq, leadId: seqLeadId };
+                                if (onEditInquiry) onEditInquiry(editLead);
+                                else if (onEdit) onEdit(editLead);
+                              }}
                               title="Edit Lead Details"
                               className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             >
@@ -876,7 +903,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
                                 <span className="flex items-center gap-1.5">
                                   <Clock className="w-3.5 h-3.5 text-orange-500" />
-                                  <span>Internal Follow-up Notes for Lead {leadId}</span>
+                                  <span>Internal Follow-up Notes for Lead {seqLeadId}</span>
                                 </span>
                                 {inq.specialRequests && (
                                   <span className="text-[11px] font-normal text-slate-500 italic">
