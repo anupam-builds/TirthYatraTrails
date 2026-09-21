@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { Package } from '../types.js';
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 const CATEGORIES = [
-  'All',
+  'All Packages',
   'Pilgrimage',
   'Char Dham',
   'Varanasi Ayodhya',
@@ -30,7 +30,7 @@ export const PackagesPage: React.FC = () => {
   const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeCategory, setActiveCategory] = useState('All');
+  const [activeCategory, setActiveCategory] = useState('All Packages');
   const [searchQuery, setSearchQuery] = useState('');
   const [durationFilter, setDurationFilter] = useState('all');
   const [budgetFilter, setBudgetFilter] = useState('all');
@@ -39,7 +39,8 @@ export const PackagesPage: React.FC = () => {
     async function loadPackages() {
       setLoading(true);
       try {
-        const list = await api.getPackages(activeCategory, searchQuery);
+        // Fetch all packages to enable client-side superset filtering across categories and tags
+        const list = await api.getPackages();
         setPackages(list);
       } catch (err) {
         console.error('Failed to load packages:', err);
@@ -48,19 +49,66 @@ export const PackagesPage: React.FC = () => {
       }
     }
     loadPackages();
-  }, [activeCategory, searchQuery]);
+  }, []);
 
-  const filteredPackages = packages.filter((pkg) => {
-    if (durationFilter === 'short' && !pkg.duration.includes('4') && !pkg.duration.includes('5')) {
-      return false;
-    }
-    if (durationFilter === 'long' && !pkg.duration.includes('8') && !pkg.duration.includes('9') && !pkg.duration.includes('10')) {
-      return false;
-    }
-    if (budgetFilter === 'budget' && pkg.startingPrice > 20000) return false;
-    if (budgetFilter === 'premium' && pkg.startingPrice <= 20000) return false;
-    return true;
-  });
+  // Superset Filter: When 'All Packages' (or 'All' / empty / null) is selected,
+  // return the full unfiltered array across categories.
+  const filteredPackages = useMemo(() => {
+    return packages.filter((pkg) => {
+      // 1. Category / Tag Superset Filter
+      const isAllCategory =
+        !activeCategory ||
+        activeCategory === 'All Packages' ||
+        activeCategory === 'All';
+
+      if (!isAllCategory) {
+        const catLower = activeCategory.toLowerCase().trim();
+        const pkgCat = (pkg.category || '').toLowerCase();
+        const pkgType = (pkg.packageType || '').toLowerCase();
+        const pkgTitle = (pkg.title || '').toLowerCase();
+        const pkgOverview = (pkg.overview || '').toLowerCase();
+        const pkgLocation = (pkg.location || '').toLowerCase();
+
+        // Check if category, packageType, title, location, or overview matches the selected category filter
+        const matchesCategory =
+          pkgCat.includes(catLower) ||
+          pkgType.includes(catLower) ||
+          pkgTitle.includes(catLower) ||
+          pkgLocation.includes(catLower) ||
+          pkgOverview.includes(catLower);
+
+        if (!matchesCategory) {
+          return false;
+        }
+      }
+
+      // 2. Search Query Filter
+      if (searchQuery && searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const titleMatch = (pkg.title || '').toLowerCase().includes(q);
+        const locMatch = (pkg.location || '').toLowerCase().includes(q);
+        const catMatch = (pkg.category || '').toLowerCase().includes(q);
+        const overviewMatch = (pkg.overview || '').toLowerCase().includes(q);
+        if (!titleMatch && !locMatch && !catMatch && !overviewMatch) {
+          return false;
+        }
+      }
+
+      // 3. Duration Filter
+      if (durationFilter === 'short' && !pkg.duration.includes('4') && !pkg.duration.includes('5')) {
+        return false;
+      }
+      if (durationFilter === 'long' && !pkg.duration.includes('8') && !pkg.duration.includes('9') && !pkg.duration.includes('10')) {
+        return false;
+      }
+
+      // 4. Budget Filter
+      if (budgetFilter === 'budget' && pkg.startingPrice > 20000) return false;
+      if (budgetFilter === 'premium' && pkg.startingPrice <= 20000) return false;
+
+      return true;
+    });
+  }, [packages, activeCategory, searchQuery, durationFilter, budgetFilter]);
 
   return (
     <div id="packages-directory-page" className="min-h-screen bg-[#faf8f5] pb-20">
@@ -114,7 +162,7 @@ export const PackagesPage: React.FC = () => {
                     : 'bg-slate-100/80 text-slate-700 hover:bg-orange-50 hover:text-[#ea580c]'
                 }`}
               >
-                {cat === 'All' ? 'All Packages' : cat}
+                {cat}
               </button>
             ))}
           </div>
@@ -176,7 +224,7 @@ export const PackagesPage: React.FC = () => {
             </p>
             <button
               onClick={() => {
-                setActiveCategory('All');
+                setActiveCategory('All Packages');
                 setSearchQuery('');
                 setDurationFilter('all');
                 setBudgetFilter('all');

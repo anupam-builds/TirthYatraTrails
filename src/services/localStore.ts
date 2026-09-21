@@ -325,7 +325,7 @@ export const localStore = {
         list = [...INITIAL_PACKAGES];
       }
     }
-    if (category && category !== 'All') {
+    if (category && category !== 'All' && category !== 'All Packages') {
       list = list.filter(
         (p) =>
           p.category.toLowerCase().includes(category.toLowerCase()) ||

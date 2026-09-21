@@ -744,7 +744,9 @@ export const api = {
   async getPackages(category?: string, query?: string): Promise<Package[]> {
     try {
       let q = supabase.from('packages').select('*');
-      if (category) q = q.eq('category', category);
+      if (category && category !== 'All' && category !== 'All Packages') {
+        q = q.eq('category', category);
+      }
       const res = await q;
       if (!res.error && res.data && res.data.length) {
         let list = res.data.map(mapPackageRow);

@@ -553,7 +553,7 @@ class DatabaseStore {
   // Packages
   public getPackages(category?: string, query?: string) {
     let list = this.data.packages;
-    if (category && category !== 'All') {
+    if (category && category !== 'All' && category !== 'All Packages') {
       list = list.filter((p) => p.category.toLowerCase().includes(category.toLowerCase()) || (p.title && p.title.toLowerCase().includes(category.toLowerCase())));
     }
     if (query && query.trim()) {
