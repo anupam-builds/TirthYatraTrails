@@ -58,7 +58,8 @@ export const getTargetTable = (id: string | number): 'inquiries' | 'hotels' | 'l
   const str = String(id || '');
   if (str.startsWith('inq')) return 'inquiries';
   if (str.startsWith('htl')) return 'hotels';
-  return 'leads';
+  if (str.startsWith('lead')) return 'leads';
+  return 'inquiries';
 };
 
 /**
@@ -268,8 +269,8 @@ export async function updateLeadOrInquiryStatus(
     const opts = optionsOrId as UpdateLeadOptions;
     resolvedId = String(opts.id || '').trim();
     resolvedStatus = opts.status !== undefined ? String(opts.status) : undefined;
-    resolvedAssignedStaffId = opts.assignedStaffId;
-    resolvedAssignedStaffName = opts.assignedStaffName;
+    resolvedAssignedStaffId = opts.assignedStaffId ?? (opts as any).assigned_staff_id;
+    resolvedAssignedStaffName = opts.assignedStaffName ?? (opts as any).assigned_staff_name;
     resolvedRoleOptions = {
       userRole: opts.userRole,
       currentStatus: opts.currentStatus,
@@ -293,13 +294,16 @@ export async function updateLeadOrInquiryStatus(
       extraPayload = { ...status };
       if ('status' in status && status.status) resolvedStatus = status.status;
       if ('assignedStaffId' in status) resolvedAssignedStaffId = (status as any).assignedStaffId;
+      else if ('assigned_staff_id' in status) resolvedAssignedStaffId = (status as any).assigned_staff_id;
       if ('assignedStaffName' in status) resolvedAssignedStaffName = (status as any).assignedStaffName;
+      else if ('assigned_staff_name' in status) resolvedAssignedStaffName = (status as any).assigned_staff_name;
     }
 
     if (typeof assignedStaffId === 'string') {
       resolvedAssignedStaffId = assignedStaffId;
     } else if (typeof assignedStaffId === 'object' && assignedStaffId !== null) {
       if ('assignedStaffId' in assignedStaffId) resolvedAssignedStaffId = (assignedStaffId as any).assignedStaffId;
+      else if ('assigned_staff_id' in assignedStaffId) resolvedAssignedStaffId = (assignedStaffId as any).assigned_staff_id;
       else if ('id' in assignedStaffId) resolvedAssignedStaffId = (assignedStaffId as any).id;
       else if ('target' in assignedStaffId && (assignedStaffId as any).target?.value) resolvedAssignedStaffId = (assignedStaffId as any).target.value;
     }
@@ -322,82 +326,131 @@ export async function updateLeadOrInquiryStatus(
     throw new Error('Invalid lead/inquiry ID');
   }
 
-  const targetTable = resolvedId.startsWith('inq') ? 'inquiries' : 'leads';
-  const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+  const cleanedStaffId =
+    resolvedAssignedStaffId === '--Unassigned--' ||
+    resolvedAssignedStaffId === 'UNASSIGNED' ||
+    !resolvedAssignedStaffId ||
+    resolvedAssignedStaffId === 'undefined' ||
+    resolvedAssignedStaffId === 'null'
+      ? null
+      : String(resolvedAssignedStaffId);
+
+  const cleanedStaffName =
+    resolvedAssignedStaffName === '--Unassigned--' ||
+    !cleanedStaffId ||
+    cleanedStaffId === '--Unassigned--'
+      ? null
+      : resolvedAssignedStaffName;
+
+  const dbPayload: Record<string, any> = { updated_at: new Date().toISOString() };
 
   if (resolvedStatus !== undefined) {
-    payload.status = resolvedStatus;
+    dbPayload.status = resolvedStatus;
   }
 
   if (resolvedAssignedStaffId !== undefined) {
-    payload.assigned_staff_id =
-      resolvedAssignedStaffId === '--Unassigned--' ||
-      resolvedAssignedStaffId === 'UNASSIGNED' ||
-      !resolvedAssignedStaffId ||
-      resolvedAssignedStaffId === 'undefined' ||
-      resolvedAssignedStaffId === 'null'
-        ? null
-        : String(resolvedAssignedStaffId);
+    dbPayload.assigned_staff_id = cleanedStaffId;
   }
 
   if (resolvedAssignedStaffName !== undefined) {
-    payload.assigned_staff_name =
-      resolvedAssignedStaffName === '--Unassigned--' ||
-      !payload.assigned_staff_id ||
-      payload.assigned_staff_id === '--Unassigned--'
-        ? null
-        : resolvedAssignedStaffName;
+    dbPayload.assigned_staff_name = cleanedStaffName;
   }
 
   // Merge extra fields from partial updates
   if (Object.keys(extraPayload).length > 0) {
     for (const [k, v] of Object.entries(extraPayload)) {
       if (k === 'whatsapp_number' || k === 'whatsappNumber' || k === 'phone' || k === 'customerPhone') {
-        payload.phone = v;
-        payload.whatsapp_number = v;
-      } else if (k === 'assignedStaffId') {
-        if (payload.assigned_staff_id === undefined) {
-          payload.assigned_staff_id = v === '--Unassigned--' || !v ? null : v;
+        dbPayload.phone = v;
+        dbPayload.whatsapp_number = v;
+      } else if (k === 'assignedStaffId' || k === 'assigned_staff_id') {
+        if (dbPayload.assigned_staff_id === undefined) {
+          dbPayload.assigned_staff_id = v === '--Unassigned--' || !v ? null : v;
         }
-      } else if (k === 'assignedStaffName') {
-        if (payload.assigned_staff_name === undefined) {
-          payload.assigned_staff_name = v === '--Unassigned--' || !payload.assigned_staff_id ? null : v;
+      } else if (k === 'assignedStaffName' || k === 'assigned_staff_name') {
+        if (dbPayload.assigned_staff_name === undefined) {
+          dbPayload.assigned_staff_name = v === '--Unassigned--' || !dbPayload.assigned_staff_id ? null : v;
         }
-      } else if (k !== 'id' && k !== 'status') {
-        payload[k] = v;
+      } else if (k !== 'id' && k !== 'status' && !k.startsWith('assignedStaff')) {
+        dbPayload[k] = v;
       }
     }
   }
 
-  console.log('🚀 [API] Safe update payload for', targetTable, payload);
+  // Unified candidate tables routing: try primary table first, and fallback to alternate table
+  const candidateTables: Array<'inquiries' | 'leads'> =
+    resolvedId.startsWith('lead') ? ['leads', 'inquiries'] : ['inquiries', 'leads'];
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(resolvedId)}`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
-    },
-    body: JSON.stringify(payload)
-  });
+  console.log('🚀 [API] Safe update payload for candidate tables', candidateTables, dbPayload);
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error(`PATCH ${targetTable} failed (${res.status}):`, errText);
-    throw new Error(`Update failed: ${res.status}`);
+  let updatedRow: any = null;
+  let finalTargetTable: 'inquiries' | 'leads' = candidateTables[0];
+
+  for (const table of candidateTables) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(resolvedId)}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(dbPayload)
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (Array.isArray(data) && data.length > 0) {
+          updatedRow = data[0];
+          finalTargetTable = table;
+          console.log(`✅ [API] Persisted update to ${table}:`, updatedRow);
+          break;
+        }
+      } else {
+        const errText = await res.text().catch(() => '');
+        console.warn(`[API] PATCH on ${table} non-200:`, res.status, errText);
+      }
+    } catch (fetchErr) {
+      console.warn(`[API] Error patching ${table}:`, fetchErr);
+    }
   }
 
-  const data = await res.json();
-  const rawRow = Array.isArray(data) ? (data[0] || { id: resolvedId, ...payload }) : (data || { id: resolvedId, ...payload });
+  // SDK fallback if PostgREST direct patch didn't return a record
+  if (!updatedRow) {
+    for (const table of candidateTables) {
+      try {
+        const { data, error } = await supabase
+          .from(table)
+          .update(dbPayload)
+          .eq('id', resolvedId)
+          .select()
+          .maybeSingle();
+
+        if (!error && data) {
+          updatedRow = data;
+          finalTargetTable = table;
+          console.log(`✅ [API] SDK Fallback persisted update to ${table}:`, updatedRow);
+          break;
+        }
+      } catch (sdkErr) {
+        console.warn(`[API] SDK update error on ${table}:`, sdkErr);
+      }
+    }
+  }
+
+  const rawRow = updatedRow || { id: resolvedId, ...dbPayload };
+  const finalStaffId = (rawRow.assigned_staff_id !== undefined ? rawRow.assigned_staff_id : dbPayload.assigned_staff_id) ?? null;
+  const finalStaffName = (rawRow.assigned_staff_name !== undefined ? rawRow.assigned_staff_name : dbPayload.assigned_staff_name) ?? null;
 
   const mapped: Inquiry = {
     ...rawRow,
     id: rawRow.id || resolvedId,
-    status: (rawRow.status || payload.status || 'NEW') as any,
-    assignedStaffId: rawRow.assigned_staff_id !== undefined ? rawRow.assigned_staff_id : payload.assigned_staff_id,
-    assignedStaffName: rawRow.assigned_staff_name !== undefined ? rawRow.assigned_staff_name : payload.assigned_staff_name,
-    updatedAt: rawRow.updated_at || payload.updated_at,
+    status: (rawRow.status || dbPayload.status || 'NEW') as any,
+    assignedStaffId: finalStaffId || undefined,
+    assigned_staff_id: finalStaffId,
+    assignedStaffName: finalStaffName || undefined,
+    assigned_staff_name: finalStaffName,
+    updatedAt: rawRow.updated_at || dbPayload.updated_at,
   } as Inquiry;
 
   try {
@@ -405,11 +458,26 @@ export async function updateLeadOrInquiryStatus(
     broadcastInquiryUpdated(mapped, { newStatus: mapped.status, staffName: mapped.assignedStaffName });
   } catch {}
 
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('tirth-lead-changed', {
+        detail: { action: 'update', lead: mapped, id: resolvedId },
+      })
+    );
+    window.dispatchEvent(
+      new CustomEvent('tirth-inquiry-changed', {
+        detail: { action: 'update', inquiry: mapped, id: resolvedId },
+      })
+    );
+  }
+
   return {
     ...rawRow,
     ...mapped,
-    assignedStaffId: mapped.assignedStaffId,
-    assignedStaffName: mapped.assignedStaffName,
+    assignedStaffId: finalStaffId || undefined,
+    assigned_staff_id: finalStaffId,
+    assignedStaffName: finalStaffName || undefined,
+    assigned_staff_name: finalStaffName,
   };
 }
 
@@ -816,10 +884,27 @@ export const api = {
 
   async getInquiries(userId?: string): Promise<Inquiry[]> {
     try {
-      let q = supabase.from('inquiries').select('*').order('created_at', { ascending: false });
-      if (userId) q = q.eq('user_id', userId);
-      const { data } = await q;
-      if (data && data.length) return data.map(mapInquiryRow);
+      let qInq = supabase.from('inquiries').select('*').order('created_at', { ascending: false });
+      let qLeads = supabase.from('leads').select('*').order('created_at', { ascending: false });
+      if (userId) {
+        qInq = qInq.eq('user_id', userId);
+        qLeads = qLeads.eq('user_id', userId);
+      }
+      const [resInq, resLeads] = await Promise.allSettled([qInq, qLeads]);
+      const inqData = resInq.status === 'fulfilled' && (resInq.value as any)?.data ? (resInq.value as any).data : [];
+      const leadsData = resLeads.status === 'fulfilled' && (resLeads.value as any)?.data ? (resLeads.value as any).data : [];
+
+      const combined = [...inqData, ...leadsData];
+      if (combined.length > 0) {
+        const seen = new Set<string>();
+        const unique = combined.filter((r) => {
+          const idStr = String(r.id);
+          if (seen.has(idStr)) return false;
+          seen.add(idStr);
+          return true;
+        });
+        return unique.map(mapInquiryRow);
+      }
       return localStore.getInquiries(userId);
     } catch {
       return localStore.getInquiries(userId);
@@ -866,12 +951,16 @@ export const api = {
           ...(await this.getInquiries()).find((i) => String(i.id) === cleanId) || {},
           id: cleanId,
           assignedStaffId: cleanedStaffId || undefined,
+          assigned_staff_id: cleanedStaffId || null,
           assignedStaffName: resolvedStaffName || undefined,
+          assigned_staff_name: resolvedStaffName || null,
         } as Inquiry);
 
     localStore.updateInquiry(cleanId, {
       assignedStaffId: cleanedStaffId || undefined,
+      assigned_staff_id: cleanedStaffId || null,
       assignedStaffName: resolvedStaffName || undefined,
+      assigned_staff_name: resolvedStaffName || null,
     });
 
     broadcastInquiryUpdated(mapped, { staffName: resolvedStaffName || undefined });
@@ -2270,7 +2359,9 @@ export function mapInquiryRow(row: any): Inquiry {
     status: (row.status ? (row.status.toUpperCase() as any) : 'NEW'),
     isResolved: Boolean(row.is_resolved ?? row.isResolved ?? (row.status === 'CLOSED' || row.status === 'CONFIRMED')),
     assignedStaffId: row.assigned_staff_id || row.assignedStaffId || undefined,
+    assigned_staff_id: row.assigned_staff_id || row.assignedStaffId || null,
     assignedStaffName: row.assigned_staff_name || row.assignedStaffName || undefined,
+    assigned_staff_name: row.assigned_staff_name || row.assignedStaffName || null,
     isLockedForStaff: Boolean(row.is_locked_for_staff ?? row.isLockedForStaff),
     closedAt: row.closed_at || row.closedAt,
     closedBy: row.closed_by || row.closedBy,

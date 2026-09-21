@@ -279,7 +279,9 @@ export interface Inquiry {
   status: InquiryStatus | string;
   isResolved: boolean;
   assignedStaffId?: string;
+  assigned_staff_id?: string | null;
   assignedStaffName?: string;
+  assigned_staff_name?: string | null;
   isLockedForStaff?: boolean;
   closedAt?: string;
   closedBy?: string;

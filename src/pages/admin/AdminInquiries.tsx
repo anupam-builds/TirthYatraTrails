@@ -119,8 +119,10 @@ export const AdminInquiries: React.FC = () => {
             ? {
                 ...item,
                 ...updatedInquiry,
-                assignedStaffId: updatedInquiry.assignedStaffId ?? item.assignedStaffId,
-                assignedStaffName: updatedInquiry.assignedStaffName ?? item.assignedStaffName,
+                assignedStaffId: updatedInquiry.assignedStaffId ?? (updatedInquiry as any).assigned_staff_id ?? item.assignedStaffId,
+                assigned_staff_id: (updatedInquiry as any).assigned_staff_id ?? updatedInquiry.assignedStaffId ?? (item as any).assigned_staff_id,
+                assignedStaffName: updatedInquiry.assignedStaffName ?? (updatedInquiry as any).assigned_staff_name ?? item.assignedStaffName,
+                assigned_staff_name: (updatedInquiry as any).assigned_staff_name ?? updatedInquiry.assignedStaffName ?? (item as any).assigned_staff_name,
               }
             : item
         )
@@ -171,6 +173,12 @@ export const AdminInquiries: React.FC = () => {
   };
 
   const handleUpdateStatus = async (id: string, status: InquiryStatus) => {
+    // Immediate optimistic update
+    setInquiries((prev) =>
+      prev.map((i) =>
+        String(i.id) === String(id) ? { ...i, status } : i
+      )
+    );
     try {
       const res = await updateLeadOrInquiryStatus({ id, status });
       const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
@@ -181,7 +189,9 @@ export const AdminInquiries: React.FC = () => {
                 ...i,
                 ...updated,
                 assignedStaffId: updated.assignedStaffId ?? updated.assigned_staff_id ?? i.assignedStaffId,
+                assigned_staff_id: updated.assigned_staff_id ?? updated.assignedStaffId ?? (i as any).assigned_staff_id,
                 assignedStaffName: updated.assignedStaffName ?? updated.assigned_staff_name ?? i.assignedStaffName,
+                assigned_staff_name: updated.assigned_staff_name ?? updated.assignedStaffName ?? (i as any).assigned_staff_name,
               }
             : i
         )
@@ -209,6 +219,21 @@ export const AdminInquiries: React.FC = () => {
       const staffName = staffMember ? staffMember.name : '';
       console.log('🎯 [AdminInquiries] Dispatching updateLeadOrInquiryStatus options object:', { inquiryId, rawStaffId, cleanedStaffId, staffName });
       
+      // Immediate optimistic update
+      setInquiries((prev) =>
+        prev.map((i) =>
+          String(i.id) === String(inquiryId)
+            ? {
+                ...i,
+                assignedStaffId: cleanedStaffId || undefined,
+                assigned_staff_id: cleanedStaffId || null,
+                assignedStaffName: staffName || undefined,
+                assigned_staff_name: staffName || null,
+              }
+            : i
+        )
+      );
+
       const res = await updateLeadOrInquiryStatus({
         id: inquiryId,
         assignedStaffId: cleanedStaffId || null,
@@ -223,7 +248,9 @@ export const AdminInquiries: React.FC = () => {
                 ...i,
                 ...updated,
                 assignedStaffId: updated.assignedStaffId ?? updated.assigned_staff_id ?? cleanedStaffId ?? undefined,
+                assigned_staff_id: updated.assigned_staff_id ?? updated.assignedStaffId ?? cleanedStaffId ?? null,
                 assignedStaffName: updated.assignedStaffName ?? updated.assigned_staff_name ?? staffName ?? undefined,
+                assigned_staff_name: updated.assigned_staff_name ?? updated.assignedStaffName ?? staffName ?? null,
               }
             : i
         )

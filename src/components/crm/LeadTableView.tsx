@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
 import { BaseInput, BaseSelect } from '../FormField.js';
@@ -86,13 +86,24 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
   const [submittingNote, setSubmittingNote] = useState<Record<string, boolean>>({});
 
+  // Local state for optimistic updates and immediate persistence
+  const [localInquiries, setLocalInquiries] = useState<Inquiry[]>(inquiries);
+
+  useEffect(() => {
+    setLocalInquiries(inquiries);
+  }, [inquiries]);
+
   // In Staff Mode, staff members can ONLY view inquiries explicitly assigned to them by the administrator
   const baseInquiries = useMemo(() => {
-    if (!isStaffMode) return inquiries;
+    const activeList = localInquiries && localInquiries.length > 0 ? localInquiries : inquiries;
+    if (!isStaffMode) return activeList;
     const targetId = String(currentStaffId || '').trim().toLowerCase();
     const targetName = String(currentStaffName || '').trim().toLowerCase();
 
-    return inquiries.filter((inq) => {
+    // If no target ID or Name in staff mode, don't filter out everything
+    if (!targetId && !targetName) return activeList;
+
+    return activeList.filter((inq) => {
       // 1. Strict & normalized ID matching (handles assigned_staff_id and assignedStaffId)
       const rawStaffId = (inq as any).assigned_staff_id || inq.assignedStaffId || '';
       const inqStaffId = String(rawStaffId).trim().toLowerCase();
@@ -112,7 +123,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
       return matchesId || matchesName;
     });
-  }, [inquiries, isStaffMode, currentStaffId, currentStaffName]);
+  }, [inquiries, localInquiries, isStaffMode, currentStaffId, currentStaffName]);
 
   // Status options: Admin has 4 (New, Contacted, Confirmed, Closed), Staff has 3 (New, Contacted, Closed)
   const statusOptions = isAdmin ? ADMIN_CRM_STATUS_LIST : STAFF_CRM_STATUS_LIST;
@@ -569,22 +580,54 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 const cleaned = cleanUnassignedValue(String(rawStaffId || '')) || '';
                                 const staffMember = cleaned ? staffList.find((s) => String(s.id) === String(cleaned)) : null;
                                 const staffName = staffMember ? staffMember.name : '';
+
+                                // Optimistic local state update
+                                setLocalInquiries((prev) =>
+                                  prev.map((item) =>
+                                    String(item.id) === String(lead.id)
+                                      ? {
+                                          ...item,
+                                          assignedStaffId: cleaned || undefined,
+                                          assigned_staff_id: cleaned || null,
+                                          assignedStaffName: staffName || undefined,
+                                          assigned_staff_name: staffName || null,
+                                        }
+                                      : item
+                                  )
+                                );
+
                                 try {
                                   if (onAssignStaff) {
                                     console.log('🎯 [LeadTableView] Calling onAssignStaff with lead.id:', { leadId: lead.id, staffId: cleaned });
                                     await onAssignStaff(lead.id, String(cleaned));
                                   } else {
                                     console.log('🎯 [LeadTableView] Calling updateLeadOrInquiryStatus with lead.id:', { leadId: lead.id, status: inq.status, assignedStaffId: cleaned });
-                                    await updateLeadOrInquiryStatus({
+                                    const res = await updateLeadOrInquiryStatus({
                                       id: lead.id,
                                       status: inq.status || 'NEW',
                                       assignedStaffId: cleaned || null,
                                       assignedStaffName: staffName || null,
                                     });
+                                    const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+                                    setLocalInquiries((prev) =>
+                                      prev.map((item) =>
+                                        String(item.id) === String(lead.id)
+                                          ? {
+                                              ...item,
+                                              ...updated,
+                                              assignedStaffId: updated.assignedStaffId ?? updated.assigned_staff_id ?? (cleaned || undefined),
+                                              assigned_staff_id: updated.assigned_staff_id ?? updated.assignedStaffId ?? (cleaned || null),
+                                              assignedStaffName: updated.assignedStaffName ?? updated.assigned_staff_name ?? (staffName || undefined),
+                                              assigned_staff_name: updated.assigned_staff_name ?? updated.assignedStaffName ?? (staffName || null),
+                                            }
+                                          : item
+                                      )
+                                    );
                                   }
                                   console.log('✅ [LeadTableView] Staff assigned successfully for lead:', lead.id, { staffId: cleaned });
                                 } catch (err) {
                                   console.error('❌ [LeadTableView] Failed assigning staff for lead:', lead.id, err);
+                                  setLocalInquiries(inquiries);
                                 }
                               }}
                               className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
@@ -701,10 +744,30 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   );
                                   if (!proceed) return;
                                 }
-                                if (onUpdateStatus) {
-                                  await onUpdateStatus(lead.id, newStatus);
-                                } else {
-                                  await updateLeadOrInquiryStatus({ id: lead.id, status: newStatus });
+                                // Immediate optimistic state update
+                                setLocalInquiries((prev) =>
+                                  prev.map((item) =>
+                                    String(item.id) === String(lead.id)
+                                      ? { ...item, status: newStatus }
+                                      : item
+                                  )
+                                );
+                                try {
+                                  if (onUpdateStatus) {
+                                    await onUpdateStatus(lead.id, newStatus);
+                                  } else {
+                                    const res = await updateLeadOrInquiryStatus({ id: lead.id, status: newStatus });
+                                    const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+                                    setLocalInquiries((prev) =>
+                                      prev.map((item) =>
+                                        String(item.id) === String(lead.id)
+                                          ? { ...item, ...updated, status: updated.status || newStatus }
+                                          : item
+                                      )
+                                    );
+                                  }
+                                } catch (err) {
+                                  setLocalInquiries(inquiries);
                                 }
                               }}
                               className={`text-xs font-extrabold rounded-xl px-3 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${

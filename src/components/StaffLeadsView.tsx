@@ -18,13 +18,13 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
   onViewLead,
 }) => {
   const { staffUser } = useAuth();
-  const currentStaffId = propStaffId || staffUser?.id;
+  // Fallback / seeded target staff ID
+  const HARDCODED_STAFF_ID = 'stf-1789834704496-07kq';
+  const currentStaffId = propStaffId || staffUser?.id || HARDCODED_STAFF_ID;
+  const currentStaffName = staffUser?.name || 'Staff Specialist';
 
   const [staffLeads, setStaffLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Fallback / seeded target staff ID
-  const HARDCODED_STAFF_ID = 'stf-1789834704496-07kq';
 
   console.log('🔍 [StaffLeads] Staff ID Alignment Check:', {
     currentStaffId,
@@ -47,67 +47,93 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
   };
 
   const fetchAssignedLeads = useCallback(async () => {
-    const staffId = HARDCODED_STAFF_ID; // force match test against seeded staff id
+    const staffId = currentStaffId || HARDCODED_STAFF_ID;
     setLoading(true);
-    console.log('🔍 [StaffLeads] Forcing load for staffId:', staffId);
+    console.log('🔍 [StaffLeads] Querying assigned leads for staffId:', staffId);
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('assigned_staff_id', staffId)
-        .order('created_at', { ascending: false });
+      const [leadsRes, inqRes] = await Promise.allSettled([
+        supabase.from('leads').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false }),
+        supabase.from('inquiries').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false })
+      ]);
 
-      console.log('🔍 [StaffLeads] Initial query result:', { count: data?.length, error, data });
-      if (data) {
-        setStaffLeads(data.map(normalizeLeadRow));
-      }
+      const leadsData = leadsRes.status === 'fulfilled' && (leadsRes.value as any)?.data ? (leadsRes.value as any).data : [];
+      const inqData = inqRes.status === 'fulfilled' && (inqRes.value as any)?.data ? (inqRes.value as any).data : [];
+
+      const combined = [...leadsData, ...inqData];
+      const seen = new Set<string>();
+      const unique = combined.filter((r) => {
+        const idStr = String(r.id);
+        if (seen.has(idStr)) return false;
+        seen.add(idStr);
+        return true;
+      });
+
+      console.log('🔍 [StaffLeads] Initial query result count:', unique.length);
+      setStaffLeads(unique.map(normalizeLeadRow));
     } catch (err) {
       console.error('❌ [StaffLeads] Error fetching leads:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentStaffId]);
 
   useEffect(() => {
-    const staffId = 'stf-1789834704496-07kq'; // force match test against seeded staff id
-    console.log('🔍 [StaffLeads] Forcing load for staffId:', staffId);
+    fetchAssignedLeads();
 
-    supabase
-      .from('leads')
-      .select('*')
-      .eq('assigned_staff_id', staffId)
-      .then(({ data, error }) => {
-        console.log('🔍 [StaffLeads] Initial query result:', { count: data?.length, error, data });
-        if (data) {
-          setStaffLeads(data.map(normalizeLeadRow));
-        }
-        setLoading(false);
-      });
-
+    const channelName = `staff-leads-${currentStaffId || HARDCODED_STAFF_ID}`;
     const channel = supabase
-      .channel('public:leads-realtime')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
-          console.log('⚡ [StaffRealtime] RAW PAYLOAD ARRIVED:', payload);
+          console.log('⚡ [StaffRealtime leads] RAW PAYLOAD ARRIVED:', payload);
           const rawNew = payload.new as any;
           const oldRow = payload.old as any;
           const newRow = rawNew ? normalizeLeadRow(rawNew) : null;
 
           setStaffLeads((prev) => {
             if (payload.eventType === 'DELETE') {
-              return prev.filter((l) => l.id !== oldRow?.id);
+              return prev.filter((l) => String(l.id) !== String(oldRow?.id));
             }
             if (!newRow) return prev;
 
             const assigned = newRow.assigned_staff_id || newRow.assignedStaffId;
-            const isAssignedToStaff = assigned === staffId;
-            const exists = prev.some((l) => l.id === newRow.id);
+            const isAssignedToStaff = String(assigned || '').trim() === String(currentStaffId || HARDCODED_STAFF_ID).trim();
+            const exists = prev.some((l) => String(l.id) === String(newRow.id));
 
             if (exists) {
-              if (!isAssignedToStaff) return prev.filter((l) => l.id !== newRow.id);
-              return prev.map((l) => (l.id === newRow.id ? { ...l, ...newRow } : l));
+              if (!isAssignedToStaff) return prev.filter((l) => String(l.id) !== String(newRow.id));
+              return prev.map((l) => (String(l.id) === String(newRow.id) ? { ...l, ...newRow } : l));
+            } else if (isAssignedToStaff) {
+              return [newRow, ...prev];
+            }
+            return prev;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inquiries' },
+        (payload) => {
+          console.log('⚡ [StaffRealtime inquiries] RAW PAYLOAD ARRIVED:', payload);
+          const rawNew = payload.new as any;
+          const oldRow = payload.old as any;
+          const newRow = rawNew ? normalizeLeadRow(rawNew) : null;
+
+          setStaffLeads((prev) => {
+            if (payload.eventType === 'DELETE') {
+              return prev.filter((l) => String(l.id) !== String(oldRow?.id));
+            }
+            if (!newRow) return prev;
+
+            const assigned = newRow.assigned_staff_id || newRow.assignedStaffId;
+            const isAssignedToStaff = String(assigned || '').trim() === String(currentStaffId || HARDCODED_STAFF_ID).trim();
+            const exists = prev.some((l) => String(l.id) === String(newRow.id));
+
+            if (exists) {
+              if (!isAssignedToStaff) return prev.filter((l) => String(l.id) !== String(newRow.id));
+              return prev.map((l) => (String(l.id) === String(newRow.id) ? { ...l, ...newRow } : l));
             } else if (isAssignedToStaff) {
               return [newRow, ...prev];
             }
@@ -122,19 +148,7 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  if (!currentStaffId) {
-    return (
-      <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-        <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Staff Authentication Required</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Please log in with your staff credentials to view and manage your assigned leads.
-        </p>
-      </div>
-    );
-  }
+  }, [currentStaffId, fetchAssignedLeads]);
 
   const mappedInquiries: Inquiry[] = staffLeads.map((l) => {
     const inq = (l.title !== undefined && l.type !== undefined) ? (l as Inquiry) : mapInquiryRow(l);
@@ -143,7 +157,9 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     return {
       ...inq,
       assignedStaffId: assignedId,
+      assigned_staff_id: assignedId,
       assignedStaffName: assignedName,
+      assigned_staff_name: assignedName,
     };
   });
 
@@ -176,6 +192,8 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
         onEdit={onEditLead}
         onView={onViewLead}
         isStaffMode={true}
+        currentStaffId={currentStaffId}
+        currentStaffName={currentStaffName}
         enableSelection={false}
       />
     </div>
