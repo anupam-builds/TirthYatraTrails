@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { useTheme } from '../../context/ThemeContext.js';
 import { BaseInput, BaseSelect } from '../../components/FormField.js';
+import { supabase } from '../../lib/supabase.js';
 import {
   Bell,
   Volume2,
@@ -12,6 +13,7 @@ import {
   RotateCcw,
   Sparkles,
   Phone,
+  Mail,
   ShieldCheck,
   Radio,
   Sliders,
@@ -36,15 +38,59 @@ export const AdminSettings: React.FC = () => {
   const [isPlayingTest, setIsPlayingTest] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [deskPhone, setDeskPhone] = useState('+91 98765 43210');
+  const [deskEmail, setDeskEmail] = useState('support@tirthyatratrails.in');
   const [agencyName, setAgencyName] = useState('TirthYatraTrails Central Operations Desk');
+  const [settingsRowId, setSettingsRowId] = useState<string | null>(null);
+  const [isSavingDesk, setIsSavingDesk] = useState(false);
+  const [deskSaveSuccess, setDeskSaveSuccess] = useState(false);
+  const [deskSaveError, setDeskSaveError] = useState<string | null>(null);
   const [refreshRate, setRefreshRate] = useState('6');
 
   useEffect(() => {
-    // Load persisted agency settings if any
+    // 1. Initial fast load from localStorage cache
     const savedDesk = localStorage.getItem('tyt_agency_phone');
     if (savedDesk) setDeskPhone(savedDesk);
+    const savedEmail = localStorage.getItem('tyt_agency_email');
+    if (savedEmail) setDeskEmail(savedEmail);
     const savedAgency = localStorage.getItem('tyt_agency_name');
     if (savedAgency) setAgencyName(savedAgency);
+
+    // 2. Fetch authoritative configuration from Supabase table agency_settings
+    async function loadAgencySettings() {
+      try {
+        const { data, error } = await supabase
+          .from('agency_settings')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.warn('[AdminSettings] Error fetching agency_settings from Supabase:', error.message);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          const row = data[0];
+          setSettingsRowId(row.id || null);
+          if (row.whatsapp_helpline) {
+            setDeskPhone(row.whatsapp_helpline);
+            localStorage.setItem('tyt_agency_phone', row.whatsapp_helpline);
+          }
+          if (row.email) {
+            setDeskEmail(row.email);
+            localStorage.setItem('tyt_agency_email', row.email);
+          }
+          if (row.desk_name) {
+            setAgencyName(row.desk_name);
+            localStorage.setItem('tyt_agency_name', row.desk_name);
+          }
+        }
+      } catch (err: any) {
+        console.warn('[AdminSettings] Exception fetching agency settings:', err);
+      }
+    }
+
+    loadAgencySettings();
   }, []);
 
   const handleToggleSound = (enabled: boolean) => {
@@ -76,10 +122,81 @@ export const AdminSettings: React.FC = () => {
     }, 2200);
   };
 
-  const handleSaveAll = () => {
+  const handleSaveAgencySettings = async () => {
+    setIsSavingDesk(true);
+    setDeskSaveError(null);
+    setDeskSaveSuccess(false);
+
+    try {
+      const payload = {
+        whatsapp_helpline: deskPhone.trim(),
+        email: deskEmail.trim(),
+        desk_name: agencyName.trim(),
+        updated_at: new Date().toISOString(),
+      };
+
+      let errorResult: any = null;
+
+      if (settingsRowId) {
+        const { error } = await supabase
+          .from('agency_settings')
+          .update(payload)
+          .eq('id', settingsRowId);
+        errorResult = error;
+      } else {
+        const { data: existingRows } = await supabase
+          .from('agency_settings')
+          .select('id')
+          .limit(1);
+
+        if (existingRows && existingRows.length > 0) {
+          const rowId = existingRows[0].id;
+          setSettingsRowId(rowId);
+          const { error } = await supabase
+            .from('agency_settings')
+            .update(payload)
+            .eq('id', rowId);
+          errorResult = error;
+        } else {
+          const { data: inserted, error } = await supabase
+            .from('agency_settings')
+            .insert([payload])
+            .select('id')
+            .single();
+          if (inserted?.id) {
+            setSettingsRowId(inserted.id);
+          }
+          errorResult = error;
+        }
+      }
+
+      if (errorResult) {
+        throw errorResult;
+      }
+
+      // Persist to localStorage for client caching across reloads
+      localStorage.setItem('tyt_agency_phone', deskPhone.trim());
+      localStorage.setItem('tyt_agency_email', deskEmail.trim());
+      localStorage.setItem('tyt_agency_name', agencyName.trim());
+
+      setDeskSaveSuccess(true);
+      setTimeout(() => setDeskSaveSuccess(false), 3500);
+    } catch (err: any) {
+      console.error('[AdminSettings] Failed to save agency settings:', err);
+      // Cache locally as fallback
+      localStorage.setItem('tyt_agency_phone', deskPhone.trim());
+      localStorage.setItem('tyt_agency_email', deskEmail.trim());
+      localStorage.setItem('tyt_agency_name', agencyName.trim());
+      setDeskSaveError(err.message || 'Unable to update database; cached locally.');
+      setTimeout(() => setDeskSaveError(null), 4000);
+    } finally {
+      setIsSavingDesk(false);
+    }
+  };
+
+  const handleSaveAll = async () => {
     saveNotificationSettings(settings);
-    localStorage.setItem('tyt_agency_phone', deskPhone);
-    localStorage.setItem('tyt_agency_name', agencyName);
+    await handleSaveAgencySettings();
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
@@ -471,10 +588,11 @@ export const AdminSettings: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label htmlFor="settings-desk-phone-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Central WhatsApp Helpline
+              <label htmlFor="settings-desk-phone-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Central WhatsApp Helpline</span>
               </label>
               <BaseInput
                 id="settings-desk-phone-input"
@@ -491,8 +609,28 @@ export const AdminSettings: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="settings-agency-name-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Agency / Operations Center Name
+              <label htmlFor="settings-desk-email-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-sky-500" />
+                <span>Operations Desk Email</span>
+              </label>
+              <BaseInput
+                id="settings-desk-email-input"
+                name="settings-desk-email-input"
+                type="email"
+                value={deskEmail}
+                onChange={(e) => setDeskEmail(e.target.value)}
+                placeholder="support@tirthyatratrails.in"
+                className="w-full bg-slate-50 dark:bg-[#0f233f] border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+              />
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                Official email address for bookings and operational dispatches.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="settings-agency-name-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                <span>Agency / Operations Center Name</span>
               </label>
               <BaseInput
                 id="settings-agency-name-input"
@@ -507,6 +645,46 @@ export const AdminSettings: React.FC = () => {
                 Included in dispatch signatures and admin headers.
               </p>
             </div>
+          </div>
+
+          {/* Action Row at Bottom Right */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-5 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              {deskSaveSuccess && (
+                <span
+                  id="agency-settings-saved-toast"
+                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 px-3 py-1.5 rounded-xl shadow-xs animate-in fade-in"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Saved!</span>
+                </span>
+              )}
+              {deskSaveError && (
+                <span className="text-xs font-medium text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 px-3 py-1.5 rounded-xl">
+                  {deskSaveError}
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              id="btn-save-agency-settings"
+              onClick={handleSaveAgencySettings}
+              disabled={isSavingDesk}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-500 active:scale-95 text-white shadow-md shadow-orange-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isSavingDesk ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Changes</span>
+                </>
+              )}
+            </button>
           </div>
         </section>
 
