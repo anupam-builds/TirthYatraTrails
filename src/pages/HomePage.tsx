@@ -3,6 +3,7 @@ import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { City, Hotel, Package, Review } from '../types.js';
 import { AudioPlayer } from '../components/reviews/AudioPlayer.js';
+import { HeroVideo } from '../components/HeroVideo.js';
 import {
   MapPin,
   Calendar,
@@ -103,62 +104,13 @@ export const HomePage: React.FC = () => {
     <div id="home-page" className="min-h-screen bg-[#fdfbf7]">
       
       {/* ================================================================ */}
-      {/* A. HERO SECTION                                                 */}
+      {/* A. HERO SECTION - ATMOSPHERIC VIDEO BACKGROUND                   */}
       {/* ================================================================ */}
-      <section className="bg-[#0f294a] text-white pt-16 pb-20 sm:pt-20 sm:pb-24 px-4 sm:px-8 relative">
-        <div className="max-w-4xl mx-auto text-center relative z-10 w-full space-y-6">
-          
-          {/* Top Badge */}
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[11px] font-bold tracking-wider bg-white/10 border border-white/20 text-orange-300 uppercase shadow-xs">
-            <Sparkles className="w-3.5 h-3.5 text-orange-400" />
-            <span>VERIFIED SACRED TEMPLE ACCOMMODATIONS</span>
-          </div>
-
-          {/* Prominently Centered TirthYatraTrails.in Circular Brand Emblem */}
-          <div className="flex justify-center pt-1 pb-2">
-            <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-white shadow-2xl shadow-black/30 border border-white/40 p-2 sm:p-3 flex items-center justify-center shrink-0 transition-transform duration-300 hover:scale-105 aspect-square">
-              <img
-                src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
-                alt="TirthYatraTrails.in - Divine Journeys, Memorable Experiences"
-                className="w-full h-full aspect-square object-contain scale-110"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          </div>
-
-          {/* Headline */}
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-tight font-serif">
-            Find a hotel steps from your <span className="text-[#ea580c]">darshan</span>
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-sm sm:text-lg text-slate-300 max-w-2xl mx-auto font-normal leading-relaxed">
-            Devoted retreats offering temple tours, spiritual consultations, prayer group access, and wellness rituals
-          </p>
-
-          {/* Action CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6">
-            <button
-              id="hero-explore-hotels-btn"
-              onClick={() => navigate('/hotels')}
-              className="w-full sm:w-auto bg-[#ea580c] hover:bg-[#d44e0a] text-white px-8 py-4 rounded-full font-bold text-base shadow-xl shadow-orange-600/30 flex items-center justify-center gap-2.5 transition-all active:scale-95 cursor-pointer"
-            >
-              <Building2 className="w-5 h-5" />
-              <span>Search &amp; Book Hotels</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </button>
-            <button
-              id="hero-explore-packages-btn"
-              onClick={() => navigate('/packages')}
-              className="w-full sm:w-auto bg-white/10 hover:bg-white/15 text-white border border-white/20 px-8 py-4 rounded-full font-bold text-base flex items-center justify-center gap-2.5 transition-all active:scale-95 cursor-pointer"
-            >
-              <Compass className="w-5 h-5 text-orange-400" />
-              <span>Explore Yatra Packages</span>
-            </button>
-          </div>
-
-        </div>
-      </section>
+      <HeroVideo
+        onExploreYatras={() => navigate('/packages')}
+        onExploreHotels={() => navigate('/hotels')}
+        whatsappPhone={localStorage.getItem('tyt_agency_phone') || '+91 98765 43210'}
+      />
 
       {/* ================================================================ */}
       {/* B. TOP-SELLING PACKAGES                                          */}
