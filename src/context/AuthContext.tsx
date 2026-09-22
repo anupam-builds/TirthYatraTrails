@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, StaffMember } from '../types.js';
 import { api } from '../services/api.js';
+import { localStore } from '../services/localStore.js';
 
 interface AuthContextType {
   // Customer
@@ -18,6 +19,8 @@ interface AuthContextType {
   isAdminLoading: boolean;
   isAdminAuthenticated: boolean;
   loginAdmin: (email: string, pass: string) => Promise<void>;
+  loginAdminWithOtp: (email: string, otp: string) => Promise<void>;
+  sendAdminOtp: (email: string) => Promise<{ ok: boolean; message?: string }>;
   logoutAdmin: () => void;
 
   // Staff Portal
@@ -60,17 +63,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initCustomer();
   }, []);
 
-  // Restore Admin Session
+  // Restore Admin Session with strict role re-verification
   useEffect(() => {
     async function initAdmin() {
       try {
         const stored = await api.getMe('tyt_admin_token');
         if (stored && stored.role === 'ADMIN') {
-          setAdminUser(stored);
+          // Strict database-backed re-assertion of admin privileges
+          const isValidAdmin = await api.verifyAdminSession(stored);
+          if (isValidAdmin) {
+            setAdminUser(stored);
+          } else {
+            console.warn('[AuthContext] Admin privileges revoked or not found in database. Terminating session.');
+            localStorage.removeItem('tyt_admin_token');
+            setAdminUser(null);
+          }
         } else {
+          localStorage.removeItem('tyt_admin_token');
           setAdminUser(null);
         }
       } catch {
+        localStorage.removeItem('tyt_admin_token');
         setAdminUser(null);
       } finally {
         setIsAdminLoading(false);
@@ -93,13 +106,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               localStorage.removeItem('tyt_staff_token');
               setStaffUser(null);
             }
-          } catch {
-            const decoded = JSON.parse(atob(token));
-            if (decoded && (decoded.role === 'STAFF' || decoded.role === 'ADMIN') && !decoded.isBlocked && decoded.isActive !== false) {
-              setStaffUser(decoded);
-            } else {
+          } catch (err: any) {
+            // If the account was blocked or revoked, instantly revoke the session and remove stored token
+            if (
+              err?.message?.includes('Blocked') ||
+              err?.message?.includes('revoked') ||
+              err?.message?.includes('not found')
+            ) {
+              console.warn('[AuthContext] Staff account revoked or blocked. Terminating session.');
               localStorage.removeItem('tyt_staff_token');
               setStaffUser(null);
+            } else {
+              // Only fallback to decoded token if it's explicitly verified as unblocked
+              try {
+                const decoded = JSON.parse(atob(token));
+                if (
+                  decoded &&
+                  (decoded.role === 'STAFF' || decoded.role === 'ADMIN') &&
+                  !decoded.isBlocked &&
+                  decoded.isActive !== false
+                ) {
+                  // Re-check against localStore if available
+                  const verifiedLocal = localStore.getStaffMembers().find((s) => s.id === decoded.id);
+                  if (verifiedLocal && (verifiedLocal.isBlocked || !verifiedLocal.isActive)) {
+                    localStorage.removeItem('tyt_staff_token');
+                    setStaffUser(null);
+                  } else {
+                    setStaffUser(decoded);
+                  }
+                } else {
+                  localStorage.removeItem('tyt_staff_token');
+                  setStaffUser(null);
+                }
+              } catch {
+                localStorage.removeItem('tyt_staff_token');
+                setStaffUser(null);
+              }
             }
           }
         } else {
@@ -144,11 +186,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  // Admin Login
+  // Admin Login (Legacy/Fallback)
   const loginAdmin = async (email: string, pass: string) => {
     const res = await api.login(email, pass, 'admin');
     if (res.user.role !== 'ADMIN') {
       throw new Error('Access denied: Account does not have administrator privileges.');
+    }
+    localStorage.setItem('tyt_admin_token', res.token);
+    setAdminUser(res.user);
+  };
+
+  // Admin Passwordless OTP Dispatcher
+  const sendAdminOtp = async (email: string) => {
+    return api.sendAdminOtp(email);
+  };
+
+  // Admin Passwordless OTP Verification & Strict Role Assertion
+  const loginAdminWithOtp = async (email: string, otp: string) => {
+    const res = await api.verifyAdminOtp(email, otp);
+    if (!res?.user || res.user.role !== 'ADMIN') {
+      throw new Error('Unauthorized: Admin privileges required. Your account is not authorized as an administrator.');
     }
     localStorage.setItem('tyt_admin_token', res.token);
     setAdminUser(res.user);
@@ -209,6 +266,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdminLoading,
         isAdminAuthenticated: !!adminUser && adminUser.role === 'ADMIN',
         loginAdmin,
+        loginAdminWithOtp,
+        sendAdminOtp,
         logoutAdmin,
         staffUser,
         isStaffLoading,

@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor } from '../../types.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { BaseInput, BaseSelect } from '../../components/FormField.js';
+import { AdminManagerSection } from '../../components/admin/AdminManagerSection.js';
 import {
   Users,
   UserPlus,
@@ -44,7 +45,7 @@ import {
 
 export const AdminStaff: React.FC = () => {
   const { navigate } = useRouter();
-  const [activeView, setActiveView] = useState<'DIRECTORY' | 'SESSIONS' | 'LOGS'>('DIRECTORY');
+  const [activeView, setActiveView] = useState<'DIRECTORY' | 'SESSIONS' | 'LOGS' | 'ADMINS'>('DIRECTORY');
 
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [sessionMonitor, setSessionMonitor] = useState<StaffSessionMonitor | null>(null);
@@ -647,6 +648,22 @@ export const AdminStaff: React.FC = () => {
             <FileText className="w-3.5 h-3.5" />
             <span>Audit &amp; Activity Trail ({activityLogs.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveView('ADMINS')}
+            id="tab-admin-rpc-provisioning"
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeView === 'ADMINS'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-white dark:bg-[#0d1d33] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+            <span>Multi-Admin Provisioning</span>
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono">
+              RPC
+            </span>
+          </button>
         </div>
 
         {/* ===================== VIEW 1: STAFF DIRECTORY ===================== */}
@@ -1152,6 +1169,11 @@ export const AdminStaff: React.FC = () => {
               )}
             </div>
           </div>
+        )}
+
+        {/* ===================== VIEW 4: ADMIN MANAGEMENT & RPC PROVISIONING ===================== */}
+        {activeView === 'ADMINS' && (
+          <AdminManagerSection />
         )}
 
         {/* ===================== MODAL: CREATE / EDIT STAFF ===================== */}

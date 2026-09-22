@@ -244,6 +244,42 @@ class DatabaseStore {
     return safeUser;
   }
 
+  public async provisionAdminUser(email: string, passwordPlain: string, provisionedBy: string) {
+    const cleanEmail = email.toLowerCase().trim();
+    if (!this.data.users) this.data.users = [];
+    const existingIndex = this.data.users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+    const passwordHash = await bcrypt.hash(passwordPlain, 10);
+
+    if (existingIndex >= 0) {
+      this.data.users[existingIndex].role = 'ADMIN';
+      this.data.users[existingIndex].password = passwordHash;
+      this.save();
+      const { password, ...safeUser } = this.data.users[existingIndex];
+      return safeUser;
+    } else {
+      const newUser = {
+        id: `usr-admin-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        name: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        phone: '',
+        password: passwordHash,
+        role: 'ADMIN' as const,
+        createdAt: new Date().toISOString(),
+      };
+      this.data.users.push(newUser);
+      this.save();
+      const { password, ...safeUser } = newUser;
+      return safeUser;
+    }
+  }
+
+  public getAdminUsers() {
+    if (!this.data.users) this.data.users = [];
+    return this.data.users
+      .filter((u) => u.role === 'ADMIN')
+      .map(({ password, ...safeUser }) => safeUser);
+  }
+
   public async findOrCreateOAuthUser({
     provider,
     providerAccountId,

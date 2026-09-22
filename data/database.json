@@ -7,6 +7,15 @@
       "password": "$2b$10$FIhJqXaAxPVG5Ulqq41TVOPJuI1OFaijfGZsmYSDqUFxupaY3VLYy",
       "role": "ADMIN",
       "createdAt": "2026-01-10T08:00:00.000Z"
+    },
+    {
+      "id": "usr-admin-1790072657549-ntn0o",
+      "name": "ops.coordinator",
+      "email": "ops.coordinator@tirthyatratrails.com",
+      "phone": "",
+      "password": "$2b$10$ISkBvTYzhghowZR.afuwJOOkyWPlPrrdPdCTkDE7s9VfhywHwGc8.",
+      "role": "ADMIN",
+      "createdAt": "2026-09-22T10:24:17.549Z"
     }
   ],
   "staff": [

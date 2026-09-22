@@ -47,6 +47,19 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
   const { adminUser, logoutAdmin, isAdminAuthenticated, isAdminLoading } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
 
+  // Route change / mount re-verification of admin privileges
+  useEffect(() => {
+    if (!isAdminLoading && adminUser) {
+      api.verifyAdminSession(adminUser).then((isValid) => {
+        if (!isValid) {
+          console.warn('[AdminLayout] Security Guard: Unauthorized admin access. Revoking session.');
+          logoutAdmin();
+          navigate('/admin/dashboard');
+        }
+      }).catch(() => {});
+    }
+  }, [activeTab, adminUser, isAdminLoading, logoutAdmin, navigate]);
+
   // Sync admin presence
   useStaffPresence(adminUser?.id);
   

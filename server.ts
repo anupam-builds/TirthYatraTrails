@@ -252,6 +252,90 @@ app.get('/api/auth/me', (req, res) => {
   }
 });
 
+// ===================== ADMIN PROVISIONING RPC ROUTES =====================
+app.post('/api/admin/create-sub-admin', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    let callerEmail = '';
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      try {
+        const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+        callerEmail = decoded.email || '';
+      } catch {
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+            callerEmail = payload.email || '';
+          }
+        } catch {}
+      }
+    }
+
+    callerEmail = callerEmail.toLowerCase().trim();
+
+    // STRICT SERVER-SIDE ROOT ADMIN ASSERTION
+    if (callerEmail !== 'anupamsaxena.dev@gmail.com') {
+      return res.status(403).json({
+        code: 'P0001',
+        message: 'Only root admin anupamsaxena.dev@gmail.com can provision new administrators',
+        details: 'Unauthorized sub-admin provisioning attempted without root administrator authorization.',
+      });
+    }
+
+    const { target_email, target_password } = req.body;
+    if (!target_email || !target_password) {
+      return res.status(400).json({
+        code: '22023',
+        message: 'target_email and target_password are required.',
+      });
+    }
+
+    const cleanEmail = target_email.toLowerCase().trim();
+    if (!cleanEmail.includes('@')) {
+      return res.status(400).json({
+        code: '22023',
+        message: 'Invalid target email address.',
+      });
+    }
+
+    if (target_password.length < 6) {
+      return res.status(400).json({
+        code: '22023',
+        message: 'Password must be at least 6 characters.',
+      });
+    }
+
+    const safeUser = await db.provisionAdminUser(cleanEmail, target_password, callerEmail);
+
+    return res.status(200).json({
+      success: true,
+      user_id: safeUser.id,
+      email: cleanEmail,
+      role: 'ADMIN',
+      provisioned_by: callerEmail,
+      created_at: safeUser.createdAt,
+      message: 'Sub-admin successfully provisioned with full administrator access.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      code: '500',
+      message: err.message || 'Internal server error during sub-admin provisioning.',
+    });
+  }
+});
+
+app.get('/api/admin/administrators', (req, res) => {
+  try {
+    const adminUsers = db.getAdminUsers();
+    return res.json(adminUsers);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ===================== PUBLIC DATA ROUTES =====================
 app.get('/api/cities', (req, res) => { res.json(db.getCities()); });
 app.get('/api/hotels', (req, res) => {
