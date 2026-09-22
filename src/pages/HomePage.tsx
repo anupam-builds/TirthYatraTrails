@@ -3,7 +3,6 @@ import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { City, Hotel, Package, Review } from '../types.js';
 import { AudioPlayer } from '../components/reviews/AudioPlayer.js';
-import { SubmitReviewModal } from '../components/reviews/SubmitReviewModal.js';
 import {
   MapPin,
   Calendar,
@@ -22,7 +21,6 @@ import {
   CheckCircle2,
   ExternalLink,
   X,
-  Mic,
   Volume2,
   Headphones,
 } from 'lucide-react';
@@ -34,7 +32,6 @@ export const HomePage: React.FC = () => {
   const [packages, setPackages] = useState<Package[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
-  const [showSubmitReviewModal, setShowSubmitReviewModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -355,36 +352,23 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* ================================================================ */}
-      {/* D. FEATURED TRAVELLER STORIES (DYNAMIC REVIEWS & AUDIO NOTES)    */}
+      {/* D. FEATURED TRAVELLER STORIES (DYNAMIC REVIEWS)                  */}
       {/* ================================================================ */}
       <section className="bg-[#0f294a] text-white py-16 px-4 sm:px-6 lg:px-8 my-8 relative">
         <div className="max-w-6xl mx-auto">
           
           {/* Header */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10 text-center md:text-left">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-orange-400 mb-2 flex items-center justify-center md:justify-start gap-1.5">
-                <Headphones className="w-3.5 h-3.5 text-orange-400" />
-                <span>IN THEIR OWN WORDS • AUTHENTIC DEVOTEE EXPERIENCES</span>
-              </p>
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-                Featured <span className="italic text-sky-400 font-serif">traveller</span> stories &amp; voice notes
-              </h2>
-              <div className="inline-flex items-center gap-2 mt-3 bg-white/10 px-4 py-1 rounded-full border border-white/20 text-xs font-semibold text-orange-200">
-                <span className="text-amber-400">★★★★★</span>
-                <span>5.0 on Google • Verified Pilgrim Testimonials with Audio</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                id="btn-share-devotee-story"
-                onClick={() => setShowSubmitReviewModal(true)}
-                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-2xl shadow-lg shadow-orange-900/30 flex items-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
-              >
-                <Mic className="w-4 h-4 text-white animate-pulse" />
-                <span>Record Voice Note &amp; Review</span>
-              </button>
+          <div className="mb-10 text-center md:text-left">
+            <p className="text-xs font-bold uppercase tracking-widest text-orange-400 mb-2 flex items-center justify-center md:justify-start gap-1.5">
+              <Headphones className="w-3.5 h-3.5 text-orange-400" />
+              <span>IN THEIR OWN WORDS • AUTHENTIC DEVOTEE EXPERIENCES</span>
+            </p>
+            <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+              Featured <span className="italic text-sky-400 font-serif">traveller</span> stories
+            </h2>
+            <div className="inline-flex items-center gap-2 mt-3 bg-white/10 px-4 py-1 rounded-full border border-white/20 text-xs font-semibold text-orange-200">
+              <span className="text-amber-400">★★★★★</span>
+              <span>5.0 on Google • Verified Pilgrim Testimonials</span>
             </div>
           </div>
 
@@ -599,16 +583,6 @@ export const HomePage: React.FC = () => {
 
         </div>
       </section>
-
-      {/* Submit Review & Voice Note Modal */}
-      <SubmitReviewModal
-        isOpen={showSubmitReviewModal}
-        onClose={() => setShowSubmitReviewModal(false)}
-        onSuccess={(newReview) => {
-          setReviews((prev) => [newReview, ...prev]);
-          setCurrentReviewIndex(0);
-        }}
-      />
 
     </div>
   );
