@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { supabase } from '../../lib/supabase.js';
 import {
   PhoneCall,
   CalendarCheck,
@@ -13,11 +14,78 @@ import {
   MessageCircle,
 } from 'lucide-react';
 
+const DEFAULT_HELPLINE = '+91 98765 43210';
+
 export const CustomerNavbar: React.FC = () => {
   const { path, navigate } = useRouter();
   const { user, logoutCustomer } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+
+  // Initialize with cached phone number or default fallback
+  const [helplinePhone, setHelplinePhone] = useState<string>(() => {
+    return localStorage.getItem('tyt_agency_phone') || DEFAULT_HELPLINE;
+  });
+
+  // Fetch current helpline from Supabase agency_settings on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchAgencyHelpline() {
+      try {
+        const { data, error } = await supabase
+          .from('agency_settings')
+          .select('whatsapp_helpline, phone')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.warn('[Navbar] Failed to fetch agency_settings helpline:', error.message);
+          return;
+        }
+
+        if (data && data.length > 0 && isMounted) {
+          const row = data[0] as { whatsapp_helpline?: string | null; phone?: string | null };
+          const resolved = (row.whatsapp_helpline || row.phone || '').trim();
+          if (resolved) {
+            setHelplinePhone(resolved);
+            localStorage.setItem('tyt_agency_phone', resolved);
+          }
+        }
+      } catch (err) {
+        console.warn('[Navbar] Exception fetching agency_settings helpline:', err);
+      }
+    }
+
+    fetchAgencyHelpline();
+
+    // Listen for local updates across tabs or admin saves
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'tyt_agency_phone' && e.newValue) {
+        setHelplinePhone(e.newValue);
+      }
+    };
+    const handleCustomUpdate = (e: Event) => {
+      const customEv = e as CustomEvent<string>;
+      if (customEv.detail) {
+        setHelplinePhone(customEv.detail);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('tyt_agency_phone_updated', handleCustomUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('tyt_agency_phone_updated', handleCustomUpdate);
+    };
+  }, []);
+
+  const cleanPhone = helplinePhone.replace(/[^0-9]/g, '');
+  const helplineWhatsappUrl = `https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(
+    'Namaste TirthYatraTrails Team, I need assistance with pilgrimage booking'
+  )}`;
 
   const isActive = (route: string) => {
     if (route === '/' && path === '/') return true;
@@ -35,13 +103,14 @@ export const CustomerNavbar: React.FC = () => {
         </div>
         <div className="hidden md:flex items-center gap-5 text-slate-300 text-[11px]">
           <a
-            href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%20Team%2C%20I%20need%20assistance%20with%20pilgrimage%20booking"
+            id="announcement-bar-helpline-link"
+            href={helplineWhatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 hover:text-orange-400 transition-colors"
           >
             <PhoneCall className="w-3 h-3 text-orange-400" />
-            <span>24x7 Pilgrim Desk: +91 98765 43210</span>
+            <span>24x7 Pilgrim Desk: {helplinePhone}</span>
           </a>
           <span className="text-slate-600">|</span>
           <span className="flex items-center gap-1">
@@ -60,11 +129,11 @@ export const CustomerNavbar: React.FC = () => {
             onClick={() => navigate('/')}
             className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group py-1"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xs border border-slate-200/80 p-0.5 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white shadow-xs border border-slate-200/80 p-0.5 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
               <img
                 src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
                 alt="TirthYatraTrails.in Logo"
-                className="w-10 h-10 object-contain"
+                className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
               />
             </div>
@@ -227,13 +296,15 @@ export const CustomerNavbar: React.FC = () => {
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
             <a
               id="mobile-nav-whatsapp-btn"
-              href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%20Team%2C%20I%20would%20like%20to%20plan%20a%20pilgrimage%20yatra"
+              href={`https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(
+                'Namaste TirthYatraTrails Team, I would like to plan a pilgrimage yatra'
+              )}`}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full py-2.5 text-center font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-center gap-2 text-xs"
             >
               <MessageCircle className="w-4 h-4 text-emerald-600 fill-emerald-600" />
-              <span>WhatsApp Travel Desk (+91 98765 43210)</span>
+              <span>WhatsApp Travel Desk ({helplinePhone})</span>
             </a>
             <button
               id="mobile-nav-plan-btn"

@@ -178,6 +178,7 @@ export const AdminSettings: React.FC = () => {
       localStorage.setItem('tyt_agency_phone', deskPhone.trim());
       localStorage.setItem('tyt_agency_email', deskEmail.trim());
       localStorage.setItem('tyt_agency_name', agencyName.trim());
+      window.dispatchEvent(new CustomEvent('tyt_agency_phone_updated', { detail: deskPhone.trim() }));
 
       setDeskSaveSuccess(true);
       setTimeout(() => setDeskSaveSuccess(false), 3500);

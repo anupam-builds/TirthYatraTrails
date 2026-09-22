@@ -4,6 +4,7 @@ import { api } from '../services/api.js';
 import { City, Hotel, Package, Review } from '../types.js';
 import { AudioPlayer } from '../components/reviews/AudioPlayer.js';
 import { HeroVideo } from '../components/HeroVideo.js';
+import { SunriseWisdomSection } from '../components/SunriseWisdomSection.js';
 import {
   MapPin,
   Calendar,
@@ -302,6 +303,11 @@ export const HomePage: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* ================================================================ */}
+      {/* C.1 NEW SUNRISE WISDOM SECTION                                   */}
+      {/* ================================================================ */}
+      <SunriseWisdomSection />
 
       {/* ================================================================ */}
       {/* D. FEATURED TRAVELLER STORIES (DYNAMIC REVIEWS)                  */}

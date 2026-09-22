@@ -48,7 +48,7 @@ export const CustomerFooter: React.FC = () => {
               </div>
               
               <p className="text-gray-300 text-xs leading-relaxed">
-                Your no-cost travel desk on WhatsApp. We curate sanctum-facing hotels, VIP darshan passes, and verified spiritual pilgrimages across India.
+                Your no-cost travel desk on WhatsApp. We help you plan comfortable stays, darshan bookings, and memorable spiritual journeys across India.
               </p>
 
               <div className="space-y-1.5 pt-1">
