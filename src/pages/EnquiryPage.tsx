@@ -405,24 +405,8 @@ export const EnquiryPage: React.FC = () => {
           </h1>
 
           <p className="text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed font-normal">
-            Fill in your preferred yatra details below to receive a personalized day-by-day darshan itinerary, verified hotel options, and transparent quotation within 15–30 minutes.
+            Fill in your yatra details below to request a personalized day-by-day itinerary, verified hotel options, and travel coordination assistance.
           </p>
-
-          {/* Quick trust metrics banner */}
-          <div className="pt-2 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-slate-300">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Zero Service or Booking Fees</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>100% Pure-Veg &amp; Sattvic Meals</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>VIP Temple Darshan Passes</span>
-            </div>
-          </div>
         </div>
       </section>
 
