@@ -22,6 +22,7 @@ const STORAGE_KEYS = {
   STAFF_LOGS: 'tyt_local_staff_logs',
   COMPANIONS: 'tyt_local_companions',
   COMPANION_CONNS: 'tyt_local_companion_conns',
+  CUSTOM_CATEGORIES: 'tyt_local_package_categories',
 };
 
 const INITIAL_HUBS: TransitHub[] = [
@@ -372,6 +373,9 @@ export const localStore = {
     };
     packages.unshift(newPkg);
     setStored(STORAGE_KEYS.PACKAGES, packages);
+    if (newPkg.category) {
+      this.addCustomCategory(newPkg.category);
+    }
     return newPkg;
   },
 
@@ -381,6 +385,9 @@ export const localStore = {
     if (idx === -1) throw new Error('Package not found');
     packages[idx] = { ...packages[idx], ...updates };
     setStored(STORAGE_KEYS.PACKAGES, packages);
+    if (updates.category) {
+      this.addCustomCategory(updates.category);
+    }
     return packages[idx];
   },
 
@@ -408,6 +415,23 @@ export const localStore = {
     });
     setStored(STORAGE_KEYS.PACKAGES, packages);
     return true;
+  },
+
+  // Custom Package Categories Registry
+  getCustomCategories(): string[] {
+    return getStored<string[]>(STORAGE_KEYS.CUSTOM_CATEGORIES, []);
+  },
+
+  addCustomCategory(category: string): string[] {
+    if (!category || !category.trim()) return this.getCustomCategories();
+    const normalized = category.trim();
+    const existing = this.getCustomCategories();
+    const updated = Array.from(new Set([...existing, normalized]));
+    setStored(STORAGE_KEYS.CUSTOM_CATEGORIES, updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-categories-changed', { detail: updated }));
+    }
+    return updated;
   },
 
   // Inquiries

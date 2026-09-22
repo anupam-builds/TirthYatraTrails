@@ -3,6 +3,7 @@ import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { Package } from '../types.js';
 import { BaseInput, BaseSelect } from '../components/FormField.js';
+import { useDynamicPackageCategories } from '../components/PackagesView.js';
 import {
   Compass,
   MapPin,
@@ -16,7 +17,7 @@ import {
   Calendar,
 } from 'lucide-react';
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   'All Packages',
   'Pilgrimage',
   'Char Dham',
@@ -27,7 +28,7 @@ const CATEGORIES = [
 
 export const PackagesPage: React.FC = () => {
   const { navigate } = useRouter();
-  const [packages, setPackages] = useState<Package[]>([]);
+  const [allPackages, setAllPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [activeCategory, setActiveCategory] = useState('All Packages');
@@ -41,7 +42,7 @@ export const PackagesPage: React.FC = () => {
       try {
         // Fetch all packages to enable client-side superset filtering across categories and tags
         const list = await api.getPackages();
-        setPackages(list);
+        setAllPackages(list);
       } catch (err) {
         console.error('Failed to load packages:', err);
       } finally {
@@ -49,12 +50,28 @@ export const PackagesPage: React.FC = () => {
       }
     }
     loadPackages();
+
+    const handlePackageRefresh = () => {
+      api.getPackages().then((list) => setAllPackages(list)).catch(() => {});
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tirth-package-changed', handlePackageRefresh);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('tirth-package-changed', handlePackageRefresh);
+      }
+    };
   }, []);
+
+  // Dynamic Category Pills: Derive available category tabs dynamically from unique values in allPackages + custom saved categories
+  const dynamicCategories = useDynamicPackageCategories(allPackages);
 
   // Superset Filter: When 'All Packages' (or 'All' / empty / null) is selected,
   // return the full unfiltered array across categories.
   const filteredPackages = useMemo(() => {
-    return packages.filter((pkg) => {
+    return allPackages.filter((pkg) => {
       // 1. Category / Tag Superset Filter
       const isAllCategory =
         !activeCategory ||
@@ -108,7 +125,7 @@ export const PackagesPage: React.FC = () => {
 
       return true;
     });
-  }, [packages, activeCategory, searchQuery, durationFilter, budgetFilter]);
+  }, [allPackages, activeCategory, searchQuery, durationFilter, budgetFilter]);
 
   return (
     <div id="packages-directory-page" className="min-h-screen bg-[#faf8f5] pb-20">
@@ -152,7 +169,7 @@ export const PackagesPage: React.FC = () => {
           
           {/* Category Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-none">
-            {CATEGORIES.map((cat) => (
+            {dynamicCategories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api, mapPackageRow } from '../../services/api.js';
 import { Package } from '../../types.js';
+import { localStore } from '../../services/localStore.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
 import { supabase } from '../../lib/supabase.js';
@@ -22,7 +23,7 @@ import {
   Radio,
 } from 'lucide-react';
 
-const CATEGORIES = ['Pilgrimage', 'Char Dham', 'Varanasi Ayodhya', 'South India', 'Jyotirlinga'];
+const DEFAULT_CATEGORIES = ['Pilgrimage', 'Char Dham', 'Varanasi Ayodhya', 'South India', 'Jyotirlinga'];
 
 export const AdminPackages: React.FC = () => {
   const [packages, setPackages] = useState<Package[]>([]);
@@ -48,6 +49,8 @@ export const AdminPackages: React.FC = () => {
   // Form State
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Char Dham');
+  const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
   const [duration, setDuration] = useState('9 Days / 8 Nights');
   const [location, setLocation] = useState('Haridwar • Yamunotri • Gangotri • Kedarnath • Badrinath');
   const [startingPrice, setStartingPrice] = useState(38000);
@@ -105,10 +108,51 @@ export const AdminPackages: React.FC = () => {
     }
   }
 
+  // Dynamic Category Pills/Options derived from packages unioned with defaults & custom saved categories
+  const [customCategories, setCustomCategories] = useState<string[]>(() => localStore.getCustomCategories());
+
+  useEffect(() => {
+    const handleCategoryUpdate = () => {
+      setCustomCategories(localStore.getCustomCategories());
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tirth-categories-changed', handleCategoryUpdate);
+      window.addEventListener('storage', handleCategoryUpdate);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('tirth-categories-changed', handleCategoryUpdate);
+        window.removeEventListener('storage', handleCategoryUpdate);
+      }
+    };
+  }, []);
+
+  const dynamicCategories = useMemo(() => {
+    const fromData = Array.from(new Set(packages.map((p) => p.category).filter(Boolean)));
+    return Array.from(new Set([...DEFAULT_CATEGORIES, ...fromData, ...customCategories]));
+  }, [packages, customCategories]);
+
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === '__custom__') {
+      const customCat = window.prompt('Enter new category/tag name:');
+      if (customCat && customCat.trim()) {
+        const normalized = customCat.trim();
+        localStore.addCustomCategory(normalized);
+        setCustomCategories((prev) => Array.from(new Set([...prev, normalized])));
+        setCategory(normalized);
+      }
+    } else {
+      setCategory(val);
+    }
+  };
+
   const handleOpenAdd = () => {
     setEditingPackage(null);
     setTitle('');
     setCategory('Char Dham');
+    setIsCustomCategoryMode(false);
+    setCustomCategoryInput('');
     setDuration('6 Days / 5 Nights');
     setLocation('Sacred Circuit');
     setStartingPrice(24000);
@@ -126,6 +170,8 @@ export const AdminPackages: React.FC = () => {
     setEditingPackage(p);
     setTitle(p.title);
     setCategory(p.category);
+    setIsCustomCategoryMode(false);
+    setCustomCategoryInput('');
     setDuration(p.duration);
     setLocation(p.location);
     setStartingPrice(p.startingPrice);
@@ -242,6 +288,11 @@ export const AdminPackages: React.FC = () => {
     };
 
     try {
+      if (category && category.trim()) {
+        const norm = category.trim();
+        localStore.addCustomCategory(norm);
+        setCustomCategories((prev) => Array.from(new Set([...prev, norm])));
+      }
       if (editingPackage) {
         const updated = await api.updatePackage(editingPackage.id, packageData);
         setPackages((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
@@ -302,7 +353,7 @@ export const AdminPackages: React.FC = () => {
               className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
             >
               <option value="">All Pilgrimage Categories</option>
-              {CATEGORIES.map((c) => (
+              {dynamicCategories.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -427,20 +478,103 @@ export const AdminPackages: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="package-category-select" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Category</label>
-                  <BaseSelect
-                    id="package-category-select"
-                    name="package-category-select"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </BaseSelect>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="package-category-select" className="block text-slate-700 dark:text-slate-400 font-bold">Category</label>
+                    {!isCustomCategoryMode ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomCategoryMode(true);
+                          setCustomCategoryInput('');
+                        }}
+                        className="text-xs font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400 cursor-pointer"
+                      >
+                        + Add Custom
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomCategoryMode(false)}
+                        className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer"
+                      >
+                        Choose existing
+                      </button>
+                    )}
+                  </div>
+                  {!isCustomCategoryMode ? (
+                    <div className="space-y-1.5">
+                      <BaseSelect
+                        id="package-category-select"
+                        name="package-category-select"
+                        value={category}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '__custom_trigger__') {
+                            setIsCustomCategoryMode(true);
+                            setCustomCategoryInput('');
+                          } else {
+                            setCategory(val);
+                          }
+                        }}
+                        className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                      >
+                        {dynamicCategories.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                        <option value="__custom_trigger__">＋ Add Custom Category / Tag...</option>
+                      </BaseSelect>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <BaseInput
+                        id="package-custom-category-input"
+                        name="package-custom-category-input"
+                        type="text"
+                        placeholder="Type custom category name..."
+                        value={customCategoryInput}
+                        onChange={(e) => setCustomCategoryInput(e.target.value)}
+                        className="flex-1 bg-slate-50 dark:bg-[#081220] border border-orange-300 dark:border-orange-500/50 rounded-xl p-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (customCategoryInput.trim()) {
+                              const val = customCategoryInput.trim();
+                              localStore.addCustomCategory(val);
+                              setCustomCategories((prev) => Array.from(new Set([...prev, val])));
+                              setCategory(val);
+                              setIsCustomCategoryMode(false);
+                              setCustomCategoryInput('');
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (customCategoryInput.trim()) {
+                            const val = customCategoryInput.trim();
+                            localStore.addCustomCategory(val);
+                            setCustomCategories((prev) => Array.from(new Set([...prev, val])));
+                            setCategory(val);
+                            setIsCustomCategoryMode(false);
+                            setCustomCategoryInput('');
+                          }
+                        }}
+                        className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
+                      >
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomCategoryMode(false)}
+                        className="text-slate-500 hover:text-slate-700 dark:text-slate-400 text-xs px-2 cursor-pointer shrink-0"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div>
