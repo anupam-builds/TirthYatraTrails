@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
+import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
 import { supabase, supabaseRest, getSupabaseHeaders, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
@@ -1546,31 +1546,37 @@ export const api = {
   // Staff Mgmt & Live Session Monitor via Supabase
   async getStaffMembers(): Promise<StaffMember[]> {
     try {
-      const { data: staffData, error } = await supabase.from('staff_members').select('*');
-      if (error) {
-        console.warn('[api.getStaffMembers] Supabase query notice:', error);
-      }
+      const [staffRes, inqRes, profRes] = await Promise.allSettled([
+        supabase.from('staff_members').select('*'),
+        this.getInquiries(),
+        supabase.from('profiles').select('id, is_online, last_seen'),
+      ]);
+
+      const staffData = staffRes.status === 'fulfilled' && staffRes.value.data ? staffRes.value.data : null;
+      const inquiries: Inquiry[] = inqRes.status === 'fulfilled' && inqRes.value ? inqRes.value : [];
       let profilesMap: Record<string, any> = {};
-      try {
-        const { data: profData } = await supabase.from('profiles').select('id, is_online, last_seen');
-        if (profData) {
-          profData.forEach((p: any) => {
-            profilesMap[String(p.id)] = p;
-          });
-        }
-      } catch {}
+      if (profRes.status === 'fulfilled' && profRes.value?.data) {
+        profRes.value.data.forEach((p: any) => {
+          profilesMap[String(p.id)] = p;
+        });
+      }
 
       if (staffData && staffData.length > 0) {
         return staffData.map((s) => {
           const prof = profilesMap[String(s.id)];
           const isOnline = Boolean(prof?.is_online ?? s.is_online ?? s.is_currently_logged_in);
           const lastSeen = prof?.last_seen || s.last_active_at || s.last_login;
-          return mapStaffRow({
+          const mapped = mapStaffRow({
             ...s,
             is_online: isOnline,
             is_currently_logged_in: isOnline,
             last_seen: lastSeen,
           });
+          const metrics = computeStaffLeadMetrics(mapped, inquiries);
+          return {
+            ...mapped,
+            ...metrics,
+          };
         });
       }
       return localStore.getStaffMembers();
@@ -3024,6 +3030,135 @@ export function mapStaffRow(row: any): StaffMember {
     currentIp: row.current_ip || row.currentIp,
     currentDevice: row.current_device || row.currentDevice,
     permissions,
+  };
+}
+
+export function isLeadAssignedToStaff(lead: Inquiry | Record<string, any>, staff: StaffMember | Record<string, any>): boolean {
+  if (!lead || (lead as any).isDeleted) return false;
+  const l = lead as any;
+  const s = staff as any;
+  const staffId = String(s.id || '').trim().toLowerCase();
+  const staffName = String(s.name || '').trim().toLowerCase();
+  const staffEmail = String(s.email || '').trim().toLowerCase();
+
+  // 1. Check direct ID match
+  const leadStaffId = String(
+    l.assignedStaffId ||
+    l.assigned_staff_id ||
+    l.assigned_staff ||
+    ''
+  ).trim().toLowerCase();
+  if (leadStaffId && staffId && leadStaffId === staffId) return true;
+
+  // 2. Check Name match
+  const leadStaffName = String(
+    l.assignedStaffName ||
+    l.assigned_staff_name ||
+    l.assigned_staff ||
+    l.assignedStaff ||
+    ''
+  ).trim().toLowerCase();
+
+  if (leadStaffName && staffName) {
+    if (leadStaffName === staffName || leadStaffName.includes(staffName) || staffName.includes(leadStaffName)) {
+      return true;
+    }
+  }
+
+  // 3. Check Email match
+  if (leadStaffName && staffEmail && leadStaffName === staffEmail) return true;
+  const leadAssignedEmail = String(
+    l.assigned_email ||
+    l.assignedStaffEmail ||
+    l.staff_email ||
+    ''
+  ).trim().toLowerCase();
+  if (leadAssignedEmail && staffEmail && leadAssignedEmail === staffEmail) return true;
+
+  return false;
+}
+
+export function computeStaffLeadMetrics(
+  staff: StaffMember,
+  inquiries: Inquiry[] = [],
+  activityLogs: StaffActivityLog[] = []
+): { assignedLeadsCount: number; contactedCount: number; closedCount: number; notesCount: number } {
+  const staffId = String(staff.id || '').trim().toLowerCase();
+  const staffName = String(staff.name || '').trim().toLowerCase();
+  const staffEmail = String(staff.email || '').trim().toLowerCase();
+
+  // Leads actively assigned to this staff member
+  const assignedLeads = inquiries.filter((inq) => isLeadAssignedToStaff(inq, staff));
+  const assignedLeadsCount = assignedLeads.length;
+
+  // Contacted count: count of leads where status is 'Contacted' (or equivalent) assigned to staff
+  const isContactedStatus = (statusStr?: string) => {
+    const s = String(statusStr || '').toUpperCase().trim();
+    return s === 'CONTACTED' || s === 'QUOTATION_SENT' || s === 'IN_PROGRESS' || s.includes('CONTACT');
+  };
+  const contactedCount = assignedLeads.filter((inq) => isContactedStatus(inq.status)).length;
+
+  // Closed count: count of leads where status is 'Closed' / 'Confirmed' assigned to staff (or closed by staff)
+  const isClosedStatus = (inq: Inquiry) => {
+    const s = String(inq.status || '').toUpperCase().trim();
+    return s === 'CLOSED' || s === 'CONFIRMED' || s === 'WON' || s.includes('CLOSE') || s.includes('CONFIRM') || inq.isResolved;
+  };
+  const closedCount = inquiries.filter((inq) => {
+    if (inq.isDeleted) return false;
+    const closedBy = String(inq.closedBy || (inq as any).closed_by || '').toLowerCase().trim();
+    if (staffName && closedBy && (closedBy === staffName || closedBy.includes(staffName))) return true;
+    return isLeadAssignedToStaff(inq, staff) && isClosedStatus(inq);
+  }).length;
+
+  // Notes count: count/length of activity notes logged by staff
+  let followUpNotesCount = 0;
+  inquiries.forEach((inq) => {
+    if (inq.isDeleted) return;
+    const notesArr = inq.followUpNotes;
+    if (Array.isArray(notesArr) && notesArr.length > 0) {
+      notesArr.forEach((n: any) => {
+        const authorId = String(n.authorId || n.staffId || '').toLowerCase().trim();
+        const authorName = String(n.authorName || n.staffName || n.author || '').toLowerCase().trim();
+        if (
+          (authorId && authorId === staffId) ||
+          (authorName && staffName && (authorName === staffName || authorName.includes(staffName)))
+        ) {
+          followUpNotesCount++;
+        } else if (!authorId && !authorName && isLeadAssignedToStaff(inq, staff)) {
+          followUpNotesCount++;
+        }
+      });
+    }
+  });
+
+  let rawNotesCount = 0;
+  assignedLeads.forEach((inq) => {
+    if (Array.isArray(inq.notes)) {
+      rawNotesCount += inq.notes.length;
+    } else if (typeof inq.notes === 'string' && inq.notes.trim().length > 0) {
+      const lines = inq.notes.split('\n').filter((l) => l.trim().length > 0);
+      rawNotesCount += Math.max(lines.length, 1);
+    }
+  });
+
+  const staffLogNotesCount = activityLogs.filter((log) => {
+    const isThisStaff =
+      (log.staffId && String(log.staffId).toLowerCase().trim() === staffId) ||
+      (log.staffEmail && String(log.staffEmail).toLowerCase().trim() === staffEmail) ||
+      (log.staffName && staffName && String(log.staffName).toLowerCase().trim() === staffName);
+    if (!isThisStaff) return false;
+    const action = String(log.action || '').toUpperCase();
+    const desc = String(log.description || '').toLowerCase();
+    return action === 'ADD_NOTE' || action === 'NOTE_ADDED' || desc.includes('note') || desc.includes('comment');
+  }).length;
+
+  const notesCount = Math.max(followUpNotesCount, rawNotesCount, staffLogNotesCount, staff.notesCount || 0);
+
+  return {
+    assignedLeadsCount,
+    contactedCount,
+    closedCount,
+    notesCount,
   };
 }
 

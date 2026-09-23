@@ -1106,19 +1106,55 @@ class DatabaseStore {
 
     const inquiries = this.data.inquiries || [];
     return this.data.staff.map((s) => {
-      const assigned = inquiries.filter((inq) => inq.assignedStaffId === s.id);
-      const computedContacted = inquiries.filter(
-        (inq) => (inq.assignedStaffId === s.id || inq.closedBy?.includes(s.name)) && inq.status === 'CONTACTED'
-      ).length;
-      const computedClosed = inquiries.filter(
-        (inq) => (inq.assignedStaffId === s.id || inq.closedBy?.includes(s.name)) && inq.status === 'CLOSED'
-      ).length;
-      const computedNotes = inquiries.reduce((count, inq) => {
+      const staffId = String(s.id || '').toLowerCase().trim();
+      const staffName = String(s.name || '').toLowerCase().trim();
+      const staffEmail = String(s.email || '').toLowerCase().trim();
+
+      const isAssigned = (inq: any) => {
+        if (inq.isDeleted) return false;
+        const inqStaffId = String(inq.assignedStaffId || inq.assigned_staff_id || '').toLowerCase().trim();
+        if (inqStaffId && inqStaffId === staffId) return true;
+        const inqStaffName = String(inq.assignedStaffName || inq.assigned_staff_name || inq.assigned_staff || '').toLowerCase().trim();
+        if (staffName && inqStaffName && (inqStaffName === staffName || inqStaffName.includes(staffName) || staffName.includes(inqStaffName))) return true;
+        if (staffEmail && inqStaffName === staffEmail) return true;
+        return false;
+      };
+
+      const assigned = inquiries.filter(isAssigned);
+      const isContacted = (inq: any) => {
+        const status = String(inq.status || '').toUpperCase().trim();
+        return status === 'CONTACTED' || status === 'QUOTATION_SENT' || status === 'IN_PROGRESS' || status.includes('CONTACT');
+      };
+      const computedContacted = assigned.filter(isContacted).length;
+
+      const isClosed = (inq: any) => {
+        const status = String(inq.status || '').toUpperCase().trim();
+        return status === 'CLOSED' || status === 'CONFIRMED' || status === 'WON' || status.includes('CLOSE') || status.includes('CONFIRM') || inq.isResolved;
+      };
+      const computedClosed = inquiries.filter((inq) => {
+        if (inq.isDeleted) return false;
+        const closedBy = String(inq.closedBy || '').toLowerCase().trim();
+        if (staffName && closedBy && (closedBy === staffName || closedBy.includes(staffName))) return true;
+        return isAssigned(inq) && isClosed(inq);
+      }).length;
+
+      let computedNotes = inquiries.reduce((count, inq) => {
+        if (inq.isDeleted) return count;
         const matching = (inq.followUpNotes || []).filter(
-          (n) => n.authorId === s.id || n.authorName === s.name
+          (n: any) =>
+            (n.authorId && String(n.authorId).toLowerCase().trim() === staffId) ||
+            (n.authorName && staffName && String(n.authorName).toLowerCase().trim() === staffName)
         );
         return count + matching.length;
       }, 0);
+
+      assigned.forEach((inq) => {
+        if (Array.isArray(inq.notes)) {
+          computedNotes += inq.notes.length;
+        } else if (typeof inq.notes === 'string' && inq.notes.trim().length > 0) {
+          computedNotes += Math.max(inq.notes.split('\n').filter((l: string) => l.trim()).length, 1);
+        }
+      });
 
       return {
         ...s,

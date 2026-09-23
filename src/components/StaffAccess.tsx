@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { api, mapStaffRow } from '../services/api.js';
+import React, { useState, useEffect, useCallback } from 'react';
+import { api, mapStaffRow, computeStaffLeadMetrics, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields } from '../services/api.js';
 import { localStore } from '../services/localStore.js';
 import { supabase } from '../lib/supabase.js';
-import { StaffMember, StaffActivityLog, StaffSessionMonitor } from '../types.js';
+import { StaffMember, StaffActivityLog, StaffSessionMonitor, Inquiry } from '../types.js';
 import { useRouter } from '../context/RouterContext.js';
 import { BaseInput, BaseSelect } from './FormField.js';
 import {
@@ -103,6 +103,40 @@ export const StaffAccess: React.FC = () => {
 
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [inquiriesList, setInquiriesList] = useState<Inquiry[]>([]);
+
+  // Realtime handler for live lead & inquiry updates from Supabase
+  const handleInquiryRealtime = useCallback((payload: any) => {
+    const eventType = payload.eventType || payload.event;
+    if (eventType === 'DELETE') {
+      const delId = String(payload.old?.id || '');
+      if (delId) {
+        setInquiriesList((prev) => prev.filter((i) => String(i.id) !== delId));
+      }
+      return;
+    }
+
+    const rawRow = payload.new && Object.keys(payload.new).length > 0 ? payload.new : payload.old;
+    if (!rawRow || !rawRow.id) return;
+
+    if (eventType === 'INSERT') {
+      const mapped = mapInquiryRow(rawRow);
+      setInquiriesList((prev) => {
+        const exists = prev.some((i) => matchLeadId(i, mapped.id));
+        if (exists) return prev;
+        return [mapped, ...prev];
+      });
+    } else if (eventType === 'UPDATE') {
+      setInquiriesList((prev) => {
+        const exists = prev.some((i) => matchLeadId(i, rawRow.id));
+        if (!exists) {
+          const mapped = mapInquiryRow(rawRow);
+          return [mapped, ...prev];
+        }
+        return prev.map((i) => (matchLeadId(i, rawRow.id) ? mergeUpdatedLeadFields(i, rawRow) : i));
+      });
+    }
+  }, []);
 
   useEffect(() => {
     loadAllStaffData();
@@ -133,7 +167,45 @@ export const StaffAccess: React.FC = () => {
     window.addEventListener('tirth-staff-roster-changed', handleRosterSync);
     window.addEventListener('tirth-allowlist-changed', handleRosterSync);
 
-    // Supabase Realtime channel for live presence on profiles, staff_members, and staff_sessions
+    // Instant local event listeners for lead mutations dispatched by Travel Desk CRM
+    const handleLeadEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail) return;
+      const leadItem: Inquiry | undefined = detail.lead || detail.inquiry;
+      if (leadItem && leadItem.id) {
+        setInquiriesList((prev) => {
+          const exists = prev.some((i) => matchLeadId(i, leadItem.id));
+          if (exists) {
+            return prev.map((i) => (matchLeadId(i, leadItem.id) ? { ...i, ...leadItem } : i));
+          }
+          return [leadItem, ...prev];
+        });
+      } else if (detail.leadId || detail.id) {
+        const targetId = String(detail.leadId || detail.id);
+        setInquiriesList((prev) =>
+          prev.map((i) => {
+            if (matchLeadId(i, targetId)) {
+              return {
+                ...i,
+                ...(detail.status ? { status: String(detail.status).toUpperCase() } : {}),
+                ...(detail.staffId !== undefined
+                  ? { assignedStaffId: detail.staffId, assigned_staff_id: detail.staffId }
+                  : {}),
+                ...(detail.staffName !== undefined
+                  ? { assignedStaffName: detail.staffName, assigned_staff_name: detail.staffName }
+                  : {}),
+              };
+            }
+            return i;
+          })
+        );
+      }
+    };
+    window.addEventListener('tirth-lead-changed', handleLeadEvent);
+    window.addEventListener('tirth-inquiry-changed', handleLeadEvent);
+
+    // Supabase Realtime channel for live presence on profiles, staff_members, staff_sessions,
+    // and live inquiry/lead mutations for immediate metrics reactivity
     const channel = supabase
       .channel('schema-db-changes-staff-component')
       .on(
@@ -260,27 +332,76 @@ export const StaffAccess: React.FC = () => {
           }
         }
       )
+      // Leads and Inquiries live mutation hooks for immediate staff card reactivity
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inquiries' },
+        handleInquiryRealtime
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        handleInquiryRealtime
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'travel_desk_leads' },
+        handleInquiryRealtime
+      )
       .subscribe();
 
     return () => {
       window.removeEventListener('tirth-staff-presence-changed', handlePresence);
       window.removeEventListener('tirth-staff-roster-changed', handleRosterSync);
       window.removeEventListener('tirth-allowlist-changed', handleRosterSync);
+      window.removeEventListener('tirth-lead-changed', handleLeadEvent);
+      window.removeEventListener('tirth-inquiry-changed', handleLeadEvent);
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [handleInquiryRealtime]);
+
+  // Dynamically keep staff metrics responsive to lead & activity log changes
+  useEffect(() => {
+    if (staffList.length === 0) return;
+    setStaffList((prev) =>
+      prev.map((s) => {
+        const m = computeStaffLeadMetrics(s, inquiriesList, activityLogs);
+        if (
+          s.assignedLeadsCount === m.assignedLeadsCount &&
+          s.contactedCount === m.contactedCount &&
+          s.closedCount === m.closedCount &&
+          s.notesCount === m.notesCount
+        ) {
+          return s;
+        }
+        return {
+          ...s,
+          ...m,
+        };
+      })
+    );
+  }, [inquiriesList, activityLogs]);
 
   async function loadAllStaffData() {
     setLoading(true);
     try {
-      const [members, sessions, logs] = await Promise.all([
+      const [members, sessions, logs, inqs] = await Promise.all([
         api.getStaffMembers(),
         api.getStaffSessions().catch(() => null),
         api.getStaffLogs().catch(() => []),
+        api.getInquiries().catch(() => []),
       ]);
-      setStaffList(members);
-      if (sessions) setSessionMonitor(sessions);
+      setInquiriesList(inqs);
       setActivityLogs(logs);
+      if (sessions) setSessionMonitor(sessions);
+      const computed = members.map((m) => {
+        const metrics = computeStaffLeadMetrics(m, inqs, logs);
+        return {
+          ...m,
+          ...metrics,
+        };
+      });
+      setStaffList(computed);
     } catch (err) {
       console.error('Failed loading staff information:', err);
     } finally {
@@ -537,10 +658,10 @@ export const StaffAccess: React.FC = () => {
   const totalActive = staffList.filter((s) => s.isActive && !s.isBlocked).length;
   const totalBlocked = staffList.filter((s) => s.isBlocked).length;
   const currentlyOnline = staffList.filter((s) => (s.isCurrentlyLoggedIn || s.isOnline) && !s.isBlocked).length;
-  const totalLeadsHandled = staffList.reduce(
-    (acc, s) => acc + (s.contactedCount || 0) + (s.closedCount || 0),
-    0
-  );
+  const totalLeadsHandled = staffList.reduce((acc, s) => {
+    const m = computeStaffLeadMetrics(s, inquiriesList, activityLogs);
+    return acc + (m.contactedCount || s.contactedCount || 0) + (m.closedCount || s.closedCount || 0);
+  }, 0);
 
   const filteredLogs = activityLogs.filter((log) => {
     if (selectedStaffLogFilter !== 'ALL' && log.staffId !== selectedStaffLogFilter) {
@@ -833,6 +954,12 @@ export const StaffAccess: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {filteredStaff.map((staff) => {
                 const isOnline = staff.isCurrentlyLoggedIn || staff.isOnline;
+                const metrics = computeStaffLeadMetrics(staff, inquiriesList, activityLogs);
+                const assignedCount = metrics.assignedLeadsCount;
+                const contactedCount = metrics.contactedCount;
+                const closedCount = metrics.closedCount;
+                const notesCount = metrics.notesCount;
+
                 return (
                   <div
                     key={staff.id}
@@ -968,30 +1095,30 @@ export const StaffAccess: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Workflow Metrics Badges */}
+                      {/* Workflow Metrics Badges - Real-time Reactive Aggregation */}
                       <div className="grid grid-cols-4 gap-2 mt-4 p-2.5 bg-slate-50 dark:bg-[#081220] rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
-                        <div>
+                        <div title={`${assignedCount} lead(s) assigned to ${staff.name}`}>
                           <p className="text-[10px] font-bold text-slate-400 uppercase">Assigned</p>
                           <p className="text-xs font-black text-slate-800 dark:text-white mt-0.5">
-                            {staff.assignedLeadsCount || 0}
+                            {assignedCount}
                           </p>
                         </div>
-                        <div>
+                        <div title={`${contactedCount} lead(s) contacted / quotation sent`}>
                           <p className="text-[10px] font-bold text-slate-400 uppercase">Contacted</p>
                           <p className="text-xs font-black text-blue-600 dark:text-blue-400 mt-0.5">
-                            {staff.contactedCount || 0}
+                            {contactedCount}
                           </p>
                         </div>
-                        <div>
+                        <div title={`${closedCount} lead(s) closed / confirmed`}>
                           <p className="text-[10px] font-bold text-slate-400 uppercase">Closed</p>
                           <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
-                            {staff.closedCount || 0}
+                            {closedCount}
                           </p>
                         </div>
-                        <div>
+                        <div title={`${notesCount} follow-up note(s) logged`}>
                           <p className="text-[10px] font-bold text-slate-400 uppercase">Notes</p>
                           <p className="text-xs font-black text-orange-600 dark:text-orange-400 mt-0.5">
-                            {staff.notesCount || 0}
+                            {notesCount}
                           </p>
                         </div>
                       </div>

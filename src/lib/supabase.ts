@@ -1,11 +1,15 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export const SUPABASE_URL: string = (
-  import.meta.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co'
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) ||
+  (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_URL) ||
+  'https://tbsvmgmhazsiciimpuim.supabase.co'
 ).trim();
 
 export const SUPABASE_ANON_KEY: string = (
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea'
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) ||
+  (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_ANON_KEY) ||
+  'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea'
 ).trim();
 
 export const isSupabaseConfigured: boolean = Boolean(
