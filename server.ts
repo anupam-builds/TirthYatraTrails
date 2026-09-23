@@ -336,6 +336,138 @@ app.get('/api/admin/administrators', (req, res) => {
   }
 });
 
+// ===================== DEDICATED ADMIN PROVISIONING & CREDENTIAL SYSTEM =====================
+app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async (req, res) => {
+  try {
+    const rawEmail = req.body.admin_email || req.body.email || '';
+    const rawPassword = req.body.admin_password || req.body.password || '';
+    const rawRole = req.body.role || req.body.admin_role || 'Admin (Enterprise Operations)';
+
+    if (!rawEmail || typeof rawEmail !== 'string') {
+      return res.status(400).json({ success: false, error: 'Administrator email address is required.' });
+    }
+    const cleanEmail = rawEmail.toLowerCase().trim();
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid administrator email address.' });
+    }
+
+    if (!rawPassword || typeof rawPassword !== 'string' || rawPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'Initial password must be at least 6 characters in length.' });
+    }
+
+    // 1. Create or update user credentials in internal authentication store (bcrypt hashed)
+    const adminUser = await db.provisionAdminUser(cleanEmail, rawPassword, 'Super Admin');
+
+    // 2. Register/update in admin_allowlist
+    const allowlistEntry = db.addAdminAllowlistEntry(cleanEmail, rawRole, 'Active & Authorized');
+
+    // 3. Sync to Supabase Auth and remote admin_allowlist
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co';
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
+
+    try {
+      // Direct remote allowlist upsert
+      await fetch(`${supabaseUrl}/rest/v1/admin_allowlist`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          role: rawRole,
+        }),
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {});
+
+      // Direct remote Supabase Auth signUp sync
+      await fetch(`${supabaseUrl}/auth/v1/signup`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: rawPassword,
+          data: { role: rawRole, is_admin: true },
+        }),
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {});
+    } catch (syncErr: any) {
+      console.warn('[provision-user] Remote Supabase Auth sync notice:', syncErr?.message);
+    }
+
+    return res.status(201).json({
+      success: true,
+      user: {
+        id: adminUser.id || allowlistEntry.id,
+        email: cleanEmail,
+        role: allowlistEntry.role || rawRole,
+        created_at: allowlistEntry.created_at,
+        status: 'Active & Authorized',
+      },
+      allowlist: allowlistEntry,
+      message: `Administrator account successfully provisioned for ${cleanEmail}. They can now authenticate via /admin/login.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to provision administrator account.' });
+  }
+});
+
+// ===================== ADMIN ALLOWLIST REST ROUTES =====================
+app.get('/api/admin/allowlist', (req, res) => {
+  try {
+    let list = db.getAdminAllowlist();
+    const { email } = req.query;
+    if (email && typeof email === 'string') {
+      const cleanEmail = email.toLowerCase().trim();
+      list = list.filter((e) => e.email.toLowerCase() === cleanEmail);
+    }
+    return res.json(list);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/allowlist', (req, res) => {
+  try {
+    const { email, role } = req.body;
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Valid email address is required.' });
+    }
+    const cleanEmail = email.toLowerCase().trim();
+    if (!cleanEmail.includes('@')) {
+      return res.status(400).json({ error: 'Invalid email address format.' });
+    }
+    const entry = db.addAdminAllowlistEntry(cleanEmail, role || 'admin');
+    // Return array matching PostgREST representation
+    return res.status(201).json([entry]);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/allowlist/:idOrEmail', (req, res) => {
+  try {
+    const { idOrEmail } = req.params;
+    if (!idOrEmail) {
+      return res.status(400).json({ error: 'id or email is required.' });
+    }
+    const clean = idOrEmail.toLowerCase().trim();
+    if (clean === 'anupamsaxena.dev@gmail.com') {
+      return res.status(403).json({ error: 'Root administrator cannot be removed from allowlist.' });
+    }
+    const success = db.removeAdminAllowlistEntry(idOrEmail);
+    return res.status(success ? 200 : 404).json({ success, message: success ? 'Admin removed from allowlist.' : 'Entry not found.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ===================== PUBLIC DATA ROUTES =====================
 app.get('/api/cities', (req, res) => { res.json(db.getCities()); });
 app.get('/api/hotels', (req, res) => {

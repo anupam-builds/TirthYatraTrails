@@ -14,6 +14,31 @@ import {
 } from './seedData.js';
 import bcrypt from 'bcryptjs';
 
+export interface AdminAllowlistEntry {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  status?: string;
+}
+
+export const INITIAL_ADMIN_ALLOWLIST: AdminAllowlistEntry[] = [
+  {
+    id: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+    email: 'anupamsaxena.dev@gmail.com',
+    role: 'Super Admin',
+    created_at: '2026-01-01T00:00:00.000Z',
+    status: 'Active & Authorized',
+  },
+  {
+    id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
+    email: 'admin@tirthyatratrails.com',
+    role: 'Admin (Enterprise Operations)',
+    created_at: '2026-02-15T00:00:00.000Z',
+    status: 'Active & Authorized',
+  },
+];
+
 interface DatabaseSchema {
   users: (User & { password?: string })[];
   staff: StaffMember[];
@@ -26,6 +51,7 @@ interface DatabaseSchema {
   reviews: Review[];
   companions?: CompanionProfile[];
   companionConnections?: CompanionConnection[];
+  admin_allowlist?: AdminAllowlistEntry[];
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -44,6 +70,7 @@ class DatabaseStore {
     reviews: [...INITIAL_REVIEWS],
     companions: [...INITIAL_COMPANIONS],
     companionConnections: [],
+    admin_allowlist: [...INITIAL_ADMIN_ALLOWLIST],
   };
   private isInitialized = false;
 
@@ -278,6 +305,60 @@ class DatabaseStore {
     return this.data.users
       .filter((u) => u.role === 'ADMIN')
       .map(({ password, ...safeUser }) => safeUser);
+  }
+
+  public getAdminAllowlist(): AdminAllowlistEntry[] {
+    if (!this.data.admin_allowlist || this.data.admin_allowlist.length === 0) {
+      this.data.admin_allowlist = [...INITIAL_ADMIN_ALLOWLIST];
+    }
+    return [...this.data.admin_allowlist];
+  }
+
+  public addAdminAllowlistEntry(email: string, role: string = 'Admin (Enterprise Operations)', status: string = 'Active & Authorized'): AdminAllowlistEntry {
+    const cleanEmail = email.toLowerCase().trim();
+    if (!this.data.admin_allowlist) {
+      this.data.admin_allowlist = [...INITIAL_ADMIN_ALLOWLIST];
+    }
+    const existing = this.data.admin_allowlist.find((e) => e.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      existing.role = role || existing.role || 'Admin (Enterprise Operations)';
+      existing.status = status || existing.status || 'Active & Authorized';
+      this.save();
+      return existing;
+    }
+    const newEntry: AdminAllowlistEntry = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `usr-allow-${Date.now()}`,
+      email: cleanEmail,
+      role: role || 'Admin (Enterprise Operations)',
+      created_at: new Date().toISOString(),
+      status: status || 'Active & Authorized',
+    };
+    this.data.admin_allowlist.push(newEntry);
+    this.save();
+    return newEntry;
+  }
+
+  public removeAdminAllowlistEntry(idOrEmail: string): boolean {
+    if (!this.data.admin_allowlist) return false;
+    const clean = idOrEmail.toLowerCase().trim();
+    // Do not remove root admin
+    if (clean === 'anupamsaxena.dev@gmail.com') return false;
+    const initialLen = this.data.admin_allowlist.length;
+    this.data.admin_allowlist = this.data.admin_allowlist.filter(
+      (e) => e.id !== clean && e.email.toLowerCase() !== clean
+    );
+    if (this.data.admin_allowlist.length !== initialLen) {
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  public isEmailInAdminAllowlist(email: string): boolean {
+    const clean = email.toLowerCase().trim();
+    if (clean === 'anupamsaxena.dev@gmail.com' || clean === 'admin@tirthyatratrails.com') return true;
+    const list = this.getAdminAllowlist();
+    return list.some((e) => e.email.toLowerCase() === clean);
   }
 
   public async findOrCreateOAuthUser({

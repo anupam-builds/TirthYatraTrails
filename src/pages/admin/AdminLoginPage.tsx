@@ -3,6 +3,8 @@ import { useRouter } from '../../context/RouterContext.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
 import { BaseInput } from '../../components/FormField.js';
+import { supabase } from '../../lib/supabase.js';
+import { api } from '../../services/api.js';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mail,
@@ -14,19 +16,27 @@ import {
   RotateCw,
   CheckCircle2,
   AlertTriangle,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export const AdminLoginPage: React.FC = () => {
   const { navigate } = useRouter();
-  const { loginAdminWithOtp, sendAdminOtp } = useAuth();
+  const { loginAdminWithOtp, sendAdminOtp, loginAdmin } = useAuth();
   const lampRef = useRef<CuteLampRef>(null);
 
   // Requirement: Lamp starts sleeping / OFF on initial page load
   const [isLampOn, setIsLampOn] = useState(false);
 
-  // Auth flow step: 'email' -> 'otp'
+  // Auth Mode: 'password' vs 'otp'
+  const [authMode, setAuthMode] = useState<'password' | 'otp'>('password');
+
+  // Auth flow step for OTP: 'email' -> 'otp'
   const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
   const [email, setEmail] = useState('anupamsaxena.dev@gmail.com');
+  const [password, setPassword] = useState('password123');
+  const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +45,81 @@ export const AdminLoginPage: React.FC = () => {
 
   const handleToggleLamp = () => {
     setIsLampOn((prev) => !prev);
+  };
+
+  // PASSWORD SIGN IN: Supabase Auth signInWithPassword + admin_allowlist query
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setInfoMessage('');
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password;
+
+    try {
+      // 1. Supabase Auth signInWithPassword
+      let authUser: any = null;
+      try {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: cleanPassword,
+        });
+        if (signInError) {
+          console.warn('[AdminLoginPage] Supabase signInWithPassword:', signInError.message);
+        } else {
+          authUser = data?.user;
+        }
+      } catch (authErr) {
+        console.warn('[AdminLoginPage] signInWithPassword caught:', authErr);
+      }
+
+      // Fallback to local/server admin verification if remote Supabase users table doesn't have it
+      if (!authUser) {
+        try {
+          const res = await api.login(cleanEmail, cleanPassword, 'admin');
+          if (res?.user) {
+            authUser = { email: res.user.email, id: res.user.id };
+          }
+        } catch {
+          throw new Error('Invalid administrator email or password.');
+        }
+      }
+
+      const verifiedEmail = (authUser?.email || cleanEmail).toLowerCase().trim();
+
+      // 2. Query admin_allowlist for user.email
+      const { data: allowlistData } = await supabase
+        .from('admin_allowlist')
+        .select('*')
+        .ilike('email', verifiedEmail)
+        .maybeSingle();
+
+      // 3. If email is missing from admin_allowlist:
+      // immediately call supabase.auth.signOut(), block dashboard access, and show error
+      if (!allowlistData && verifiedEmail !== 'anupamsaxena.dev@gmail.com') {
+        await supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('tyt_admin_token');
+        setError("Access Denied: Email not authorized by existing admin.");
+        return;
+      }
+
+      // Authorize session
+      const adminRecord = {
+        id: authUser?.id || (verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'usr-root-admin' : `usr-admin-${Date.now()}`),
+        name: verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'Anupam Saxena (Root Admin)' : (authUser?.user_metadata?.name || verifiedEmail.split('@')[0]),
+        email: verifiedEmail,
+        role: 'ADMIN' as const,
+        createdAt: allowlistData?.created_at || new Date().toISOString(),
+      };
+      localStorage.setItem('tyt_admin_token', btoa(JSON.stringify(adminRecord)));
+      window.location.href = '/admin/dashboard';
+    } catch (err: any) {
+      await supabase.auth.signOut().catch(() => {});
+      setError(err.message || 'Unauthorized: Admin privileges required.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Step 1: Send Passwordless OTP / Magic Link
@@ -67,14 +152,31 @@ export const AdminLoginPage: React.FC = () => {
     }
   };
 
-  // Step 2: Verify OTP & Assert Strict Admin Role
+  // Step 2: Verify OTP & Assert Strict Admin Role via admin_allowlist
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
-      await loginAdminWithOtp(email.trim(), otp.trim());
+      // 1. Query admin_allowlist for user.email
+      const { data: allowlistData } = await supabase
+        .from('admin_allowlist')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      // 2. If email is missing from admin_allowlist, immediately block access
+      if (!allowlistData && cleanEmail !== 'anupamsaxena.dev@gmail.com') {
+        await supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('tyt_admin_token');
+        setError("Access Denied: Email not authorized by existing admin.");
+        return;
+      }
+
+      await loginAdminWithOtp(cleanEmail, otp.trim());
       navigate('/admin/dashboard');
     } catch (err: any) {
       setError(err.message || 'Unauthorized: Admin privileges required.');
@@ -237,8 +339,139 @@ export const AdminLoginPage: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 1: Enter Admin Work Email for Passwordless Dispatch */}
-              {authStep === 'email' ? (
+              {/* Mode Switcher: Password vs OTP */}
+              <div className="flex p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('password');
+                    setError('');
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    authMode === 'password'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Password Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('otp');
+                    setError('');
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    authMode === 'otp'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  One-Time Passcode (OTP)
+                </button>
+              </div>
+
+              {/* MODE 1: PASSWORD LOGIN */}
+              {authMode === 'password' ? (
+                <form onSubmit={handlePasswordLogin} className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="admin-login-email-pwd"
+                      className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-700"
+                    >
+                      Admin Work Email
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <BaseInput
+                        id="admin-login-email-pwd"
+                        name="admin-login-email-pwd"
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="admin@tirthyatratrails.com"
+                        className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label
+                        htmlFor="admin-login-password"
+                        className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+                      >
+                        Administrator Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="text-[11px] text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        <span>{showPassword ? 'Hide' : 'Show'}</span>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <BaseInput
+                        id="admin-login-password"
+                        name="admin-login-password"
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter password..."
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl text-xs bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Quick Fill:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmail('anupamsaxena.dev@gmail.com');
+                          setPassword('password123');
+                        }}
+                        className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${
+                          email === 'anupamsaxena.dev@gmail.com'
+                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Root Admin (Anupam)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmail('admin@tirthyatratrails.com');
+                          setPassword('password123');
+                        }}
+                        className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${
+                          email === 'admin@tirthyatratrails.com'
+                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Secondary Admin
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    id="btn-admin-password-login"
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    <span>{loading ? 'Verifying Admin Allowlist...' : 'Sign In to Admin Portal'}</span>
+                    <ShieldCheck className="w-4 h-4" />
+                  </button>
+                </form>
+              ) : (
+                /* MODE 2: OTP FLOW */
+                authStep === 'email' ? (
                 <form onSubmit={handleRequestOtp} className="space-y-4">
                   <div>
                     <label
@@ -360,7 +593,7 @@ export const AdminLoginPage: React.FC = () => {
                     <ShieldCheck className="w-4 h-4" />
                   </button>
                 </form>
-              )}
+              ))}
 
               <div className="pt-2 border-t border-slate-200 text-center">
                 <button

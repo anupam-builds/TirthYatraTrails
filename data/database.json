@@ -16,6 +16,15 @@
       "password": "$2b$10$ISkBvTYzhghowZR.afuwJOOkyWPlPrrdPdCTkDE7s9VfhywHwGc8.",
       "role": "ADMIN",
       "createdAt": "2026-09-22T10:24:17.549Z"
+    },
+    {
+      "id": "usr-admin-1790157811339-0nbag",
+      "name": "ops.lead",
+      "email": "ops.lead@tirthyatratrails.com",
+      "phone": "",
+      "password": "$2b$10$mfVK9sJRx3o/wxOEsQDu3uZy8ju18nIlxLOxbWDYaCQkA.w0ytV2q",
+      "role": "ADMIN",
+      "createdAt": "2026-09-23T10:03:31.339Z"
     }
   ],
   "staff": [
@@ -1713,5 +1722,19 @@
       "createdAt": "2026-09-15T16:00:00.000Z"
     }
   ],
-  "companionConnections": []
+  "companionConnections": [],
+  "admin_allowlist": [
+    {
+      "id": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+      "email": "anupamsaxena.dev@gmail.com",
+      "role": "admin",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
+      "email": "admin@tirthyatratrails.com",
+      "role": "admin",
+      "created_at": "2026-02-15T00:00:00.000Z"
+    }
+  ]
 }

@@ -7,6 +7,8 @@ import { StaffMember, StaffActivityLog, StaffSessionMonitor } from '../../types.
 import { useRouter } from '../../context/RouterContext.js';
 import { BaseInput, BaseSelect } from '../../components/FormField.js';
 import { AdminManagerSection } from '../../components/admin/AdminManagerSection.js';
+import { StaffAccess } from '../../components/StaffAccess.js';
+import { AdminAccessPortal } from '../../components/AdminAccessPortal.js';
 import {
   Users,
   UserPlus,
@@ -45,7 +47,7 @@ import {
 
 export const AdminStaff: React.FC = () => {
   const { navigate } = useRouter();
-  const [activeView, setActiveView] = useState<'DIRECTORY' | 'SESSIONS' | 'LOGS' | 'ADMINS'>('DIRECTORY');
+  const [activeView, setActiveView] = useState<'ALLOWLIST' | 'DIRECTORY' | 'SESSIONS' | 'LOGS' | 'ADMINS'>('ALLOWLIST');
 
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [sessionMonitor, setSessionMonitor] = useState<StaffSessionMonitor | null>(null);
@@ -609,7 +611,20 @@ export const AdminStaff: React.FC = () => {
         </div>
 
         {/* Section Navigation Tabs */}
-        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 flex-wrap">
+          <button
+            onClick={() => setActiveView('ALLOWLIST')}
+            id="tab-admin-allowlist-security"
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeView === 'ALLOWLIST'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-white dark:bg-[#0d1d33] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+            <span>Admin Allowlist &amp; Security</span>
+          </button>
+
           <button
             onClick={() => setActiveView('DIRECTORY')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
@@ -665,6 +680,11 @@ export const AdminStaff: React.FC = () => {
             </span>
           </button>
         </div>
+
+        {/* ===================== VIEW 0: ADMIN ACCESS & CREDENTIAL PROVISIONING ===================== */}
+        {activeView === 'ALLOWLIST' && (
+          <AdminAccessPortal />
+        )}
 
         {/* ===================== VIEW 1: STAFF DIRECTORY ===================== */}
         {activeView === 'DIRECTORY' && (

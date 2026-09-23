@@ -673,7 +673,20 @@ export const api = {
       return true;
     }
 
-    // 2. Query users table for role === 'ADMIN'
+    // 2. Query admin_allowlist table
+    try {
+      const { data: allowData } = await supabase
+        .from('admin_allowlist')
+        .select('id, email, role')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      if (allowData && allowData.email) {
+        return true;
+      }
+    } catch {}
+
+    // 3. Query users table for role === 'ADMIN'
     try {
       const { data: userData } = await supabase
         .from('users')
@@ -764,12 +777,12 @@ export const api = {
       }
     }
 
-    // 3. Strict Admin Role Assertion
+    // 3. Strict Admin Role Assertion via allowlist
     const isAuthorized = await this.checkIsAdminEmail(cleanEmail);
     if (!isAuthorized) {
       // Sign out immediately if signed into Supabase auth
       await supabase.auth.signOut().catch(() => {});
-      throw new Error('Unauthorized: Admin privileges required. Your account does not have enterprise administrator status.');
+      throw new Error("Access Denied: Email not authorized by existing admin.");
     }
 
     // Query full user record if available
@@ -861,7 +874,82 @@ export const api = {
       }
     } catch {}
 
+    try {
+      const { data } = await supabase.from('admin_allowlist').select('*');
+      if (data && Array.isArray(data)) {
+        data.forEach((entry: any) => {
+          if (!list.some((a) => a.email.toLowerCase() === entry.email.toLowerCase())) {
+            list.push({
+              id: entry.id,
+              email: entry.email,
+              name: entry.email.split('@')[0],
+              role: (entry.role || 'ADMIN').toUpperCase(),
+              isRoot: entry.email.toLowerCase() === 'anupamsaxena.dev@gmail.com',
+              provisionedAt: entry.created_at,
+            });
+          }
+        });
+      }
+    } catch {}
+
     return list;
+  },
+
+  /**
+   * Fetches the current admin allowlist
+   */
+  async getAdminAllowlist(): Promise<Array<{ id: string; email: string; role: string; created_at: string; status?: string }>> {
+    try {
+      const res = await fetch('/api/admin/allowlist');
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {}
+    return [
+      {
+        id: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        email: 'anupamsaxena.dev@gmail.com',
+        role: 'Super Admin',
+        created_at: '2026-01-01T00:00:00.000Z',
+        status: 'Active & Authorized',
+      },
+    ];
+  },
+
+  /**
+   * Dedicated Admin Provisioning & Credential Creation
+   */
+  async provisionAdminUser(params: {
+    admin_email: string;
+    admin_password: string;
+    role: string;
+  }): Promise<{ success: boolean; user: any; allowlist?: any; message: string }> {
+    const res = await fetch('/api/admin/provision-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to provision administrator credentials.');
+    }
+    return data;
+  },
+
+  /**
+   * Revoke administrator access
+   */
+  async revokeAdminAccess(idOrEmail: string): Promise<boolean> {
+    const res = await fetch(`/api/admin/allowlist/${encodeURIComponent(idOrEmail)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to revoke administrator access.');
+    }
+    return true;
   },
 
   /**

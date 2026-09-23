@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, StaffMember } from '../types.js';
 import { api } from '../services/api.js';
 import { localStore } from '../services/localStore.js';
+import { supabase } from '../lib/supabase.js';
 
 interface AuthContextType {
   // Customer
@@ -186,14 +187,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  // Admin Login (Legacy/Fallback)
+  // Admin Login via Supabase signInWithPassword and admin_allowlist query
   const loginAdmin = async (email: string, pass: string) => {
-    const res = await api.login(email, pass, 'admin');
-    if (res.user.role !== 'ADMIN') {
-      throw new Error('Access denied: Account does not have administrator privileges.');
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Supabase Auth signInWithPassword
+    let authUser: any = null;
+    let authError: any = null;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
+      if (error) {
+        authError = error;
+      } else {
+        authUser = data?.user;
+      }
+    } catch (e: any) {
+      authError = e;
     }
-    localStorage.setItem('tyt_admin_token', res.token);
-    setAdminUser(res.user);
+
+    // Fallback: If Supabase auth user does not exist in remote auth.users, try local/server credentials fallback
+    if (!authUser) {
+      try {
+        const res = await api.login(cleanEmail, pass, 'admin');
+        if (res?.user) {
+          authUser = { email: res.user.email, id: res.user.id };
+        }
+      } catch {
+        throw new Error(authError?.message || 'Invalid administrator credentials.');
+      }
+    }
+
+    const verifiedEmail = (authUser?.email || cleanEmail).toLowerCase().trim();
+
+    // 2. Query admin_allowlist for user.email
+    const { data: allowlistData } = await supabase
+      .from('admin_allowlist')
+      .select('*')
+      .ilike('email', verifiedEmail)
+      .maybeSingle();
+
+    // 3. If email is missing from admin_allowlist, immediately signOut, block access, and show error
+    if (!allowlistData && verifiedEmail !== 'anupamsaxena.dev@gmail.com') {
+      await supabase.auth.signOut().catch(() => {});
+      localStorage.removeItem('tyt_admin_token');
+      setAdminUser(null);
+      throw new Error("Access Denied: Email not authorized by existing admin.");
+    }
+
+    // Set authenticated admin state
+    const adminRecord: User = {
+      id: authUser?.id || (verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'usr-root-admin' : `usr-admin-${Date.now()}`),
+      name: verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'Anupam Saxena (Root Admin)' : (authUser?.user_metadata?.name || verifiedEmail.split('@')[0]),
+      email: verifiedEmail,
+      phone: '',
+      role: 'ADMIN',
+      createdAt: allowlistData?.created_at || new Date().toISOString(),
+    };
+
+    const sessionToken = btoa(JSON.stringify(adminRecord));
+    localStorage.setItem('tyt_admin_token', sessionToken);
+    setAdminUser(adminRecord);
   };
 
   // Admin Passwordless OTP Dispatcher
@@ -207,6 +263,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!res?.user || res.user.role !== 'ADMIN') {
       throw new Error('Unauthorized: Admin privileges required. Your account is not authorized as an administrator.');
     }
+
+    // Query admin_allowlist
+    const cleanEmail = email.trim().toLowerCase();
+    const { data: allowlistData } = await supabase
+      .from('admin_allowlist')
+      .select('*')
+      .ilike('email', cleanEmail)
+      .maybeSingle();
+
+    if (!allowlistData && cleanEmail !== 'anupamsaxena.dev@gmail.com') {
+      await supabase.auth.signOut().catch(() => {});
+      localStorage.removeItem('tyt_admin_token');
+      setAdminUser(null);
+      throw new Error("Access Denied: Email not authorized by existing admin.");
+    }
+
     localStorage.setItem('tyt_admin_token', res.token);
     setAdminUser(res.user);
   };

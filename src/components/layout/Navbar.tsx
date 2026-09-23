@@ -83,6 +83,7 @@ export const CustomerNavbar: React.FC = () => {
   }, []);
 
   const cleanPhone = helplinePhone.replace(/[^0-9]/g, '');
+  const telHref = helplinePhone ? `tel:${helplinePhone.replace(/[^0-9+]/g, '')}` : 'tel:+919876543210';
   const helplineWhatsappUrl = `https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(
     'Namaste TirthYatraTrails Team, I need assistance with pilgrimage booking'
   )}`;
@@ -104,9 +105,7 @@ export const CustomerNavbar: React.FC = () => {
         <div className="hidden md:flex items-center gap-5 text-slate-300 text-[11px]">
           <a
             id="announcement-bar-helpline-link"
-            href={helplineWhatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={telHref}
             className="flex items-center gap-1.5 hover:text-orange-400 transition-colors"
           >
             <PhoneCall className="w-3 h-3 text-orange-400" />

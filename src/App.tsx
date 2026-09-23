@@ -30,6 +30,7 @@ import { AdminPackages } from './pages/admin/AdminPackages.js';
 import { AdminInquiries } from './pages/admin/AdminInquiries.js';
 import SacredCityManager from './components/admin/SacredCityManager';
 import { AdminStaff } from './pages/admin/AdminStaff.js';
+import { AdminAccessPage } from './pages/admin/AdminAccessPage.js';
 import { AdminCities } from './pages/admin/AdminCities.js';
 import { AdminReviews } from './pages/admin/AdminReviews.js';
 import { AdminSettings } from './pages/admin/AdminSettings.js';
@@ -63,6 +64,9 @@ const AppContent: React.FC = () => {
     }
     if (cleanPath === '/admin/inquiries' || cleanPath === '/admin/leads') {
       return <AdminInquiries />;
+    }
+    if (cleanPath === '/admin/access' || cleanPath === '/admin/allowlist') {
+      return <AdminAccessPage />;
     }
     if (cleanPath === '/admin/staff') {
       return <AdminStaff />;

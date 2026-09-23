@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext.js';
+import { supabase } from '../../lib/supabase.js';
 import {
   Phone,
   Mail,
@@ -12,8 +13,74 @@ import {
   Twitter,
 } from 'lucide-react';
 
+const DEFAULT_HELPLINE = '+91 98765 43210';
+
 export const CustomerFooter: React.FC = () => {
   const { navigate } = useRouter();
+
+  // Initialize with cached phone number or default fallback
+  const [helplinePhone, setHelplinePhone] = useState<string>(() => {
+    return localStorage.getItem('tyt_agency_phone') || DEFAULT_HELPLINE;
+  });
+
+  // Fetch current helpline from Supabase agency_settings on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchAgencyHelpline() {
+      try {
+        const { data, error } = await supabase
+          .from('agency_settings')
+          .select('whatsapp_helpline, phone')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.warn('[Footer] Failed to fetch agency_settings helpline:', error.message);
+          return;
+        }
+
+        if (data && data.length > 0 && isMounted) {
+          const row = data[0] as { whatsapp_helpline?: string | null; phone?: string | null };
+          const resolved = (row.whatsapp_helpline || row.phone || '').trim();
+          if (resolved) {
+            setHelplinePhone(resolved);
+            localStorage.setItem('tyt_agency_phone', resolved);
+          }
+        }
+      } catch (err) {
+        console.warn('[Footer] Exception fetching agency_settings helpline:', err);
+      }
+    }
+
+    fetchAgencyHelpline();
+
+    // Listen for local updates across tabs or admin saves
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'tyt_agency_phone' && e.newValue) {
+        setHelplinePhone(e.newValue);
+      }
+    };
+    const handleCustomUpdate = (e: Event) => {
+      const customEv = e as CustomEvent<string>;
+      if (customEv.detail) {
+        setHelplinePhone(customEv.detail);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('tyt_agency_phone_updated', handleCustomUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('tyt_agency_phone_updated', handleCustomUpdate);
+    };
+  }, []);
+
+  const rawDigits = helplinePhone.replace(/[^0-9]/g, '');
+  const telHref = `tel:${rawDigits ? (helplinePhone.trim().startsWith('+') ? `+${rawDigits}` : `+${rawDigits}`) : '+919876543210'}`;
+  const whatsappDigits = rawDigits || '919876543210';
 
   return (
     <>
@@ -53,13 +120,12 @@ export const CustomerFooter: React.FC = () => {
 
               <div className="space-y-1.5 pt-1">
                 <a
-                  href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%20Desk%2C%20I%20need%20assistance%20planning%20our%20pilgrimage"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  id="footer-helpline-tel-link"
+                  href={telHref}
                   className="flex items-center gap-2 text-orange-400 hover:text-orange-300 font-bold transition-colors"
                 >
                   <Phone className="w-4 h-4" />
-                  <span>+91 98765 43210</span>
+                  <span>{helplinePhone}</span>
                 </a>
                 <p className="text-[11px] text-gray-400">Available 24x7 for Pilgrim Inquiries</p>
               </div>
@@ -137,7 +203,7 @@ export const CustomerFooter: React.FC = () => {
                 </li>
                 <li>
                   <a
-                    href="https://wa.me/919876543210?text=Namaste%2C%20I%20would%20like%20to%20book%20a%20pilgrimage%20cab%20service"
+                    href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent('Namaste, I would like to book a pilgrimage cab service')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:text-orange-400 transition-colors block text-left"
@@ -173,7 +239,7 @@ export const CustomerFooter: React.FC = () => {
                 </li>
                 <li>
                   <a
-                    href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%20Support"
+                    href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent('Namaste TirthYatraTrails Support')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:text-orange-400 transition-colors block text-left"
@@ -199,7 +265,7 @@ export const CustomerFooter: React.FC = () => {
                 </li>
                 <li>
                   <a
-                    href="https://wa.me/919876543210?text=Namaste%2C%20I%20am%20interested%20in%20B2B%20Pilgrim%20Partnership"
+                    href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent('Namaste, I am interested in B2B Pilgrim Partnership')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:text-orange-400 transition-colors block text-left"
@@ -278,7 +344,7 @@ export const CustomerFooter: React.FC = () => {
       {/* Floating WhatsApp Circle Icon Button Fixed at Bottom Right */}
       <a
         id="global-floating-whatsapp-btn"
-        href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%20Desk%2C%20I%20am%20exploring%20sacred%20pilgrimage%20options"
+        href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent('Namaste TirthYatraTrails Desk, I am exploring sacred pilgrimage options')}`}
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-[#25D366] text-white rounded-full shadow-2xl hover:scale-110 hover:shadow-green-500/40 transition-all duration-300 group"
