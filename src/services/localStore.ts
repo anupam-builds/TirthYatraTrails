@@ -1014,6 +1014,13 @@ export const localStore = {
   },
 
   // Staff Members Management
+  setStaffMembers(list: StaffMember[]): void {
+    setStored(STORAGE_KEYS.STAFF, list);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed', { detail: list }));
+    }
+  },
+
   getStaffMembers(): StaffMember[] {
     const isCustomized = typeof window !== 'undefined' && localStorage.getItem('tyt_staff_customized');
     let list = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);

@@ -1,11 +1,8 @@
 import React from 'react';
-import { AdminLayout } from './AdminLayout.js';
-import { AdminAccessPortal } from '../../components/AdminAccessPortal.js';
+import { AdminStaff } from './AdminStaff.js';
 
 export const AdminAccessPage: React.FC = () => {
-  return (
-    <AdminLayout activeTab="access">
-      <AdminAccessPortal />
-    </AdminLayout>
-  );
+  return <AdminStaff />;
 };
+
+export default AdminAccessPage;

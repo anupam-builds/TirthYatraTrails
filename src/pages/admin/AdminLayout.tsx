@@ -185,8 +185,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { id: 'inquiries', label: 'Travel Desk Leads', path: '/admin/inquiries', icon: MessageSquare },
-    { id: 'access', label: 'Admin Access', path: '/admin/access', icon: KeyRound },
-    { id: 'staff', label: 'Staff Directory', path: '/admin/staff', icon: Users },
+    { id: 'staff', label: 'Staff & Access', path: '/admin/staff', icon: Users },
     { id: 'hotels', label: 'Hotels Inventory', path: '/admin/hotels', icon: Building },
     { id: 'packages', label: 'Yatra Packages', path: '/admin/packages', icon: Compass },
     { id: 'cities', label: 'Cities & Hubs', path: '/admin/cities', icon: MapPin },
@@ -223,7 +222,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
           <nav className="p-4 space-y-1.5">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = activeTab === item.id || (item.id === 'staff' && (activeTab as string) === 'access');
               return (
                 <button
                   key={item.id}

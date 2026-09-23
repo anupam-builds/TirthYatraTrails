@@ -1545,7 +1545,10 @@ export const api = {
   // Staff Mgmt & Live Session Monitor via Supabase
   async getStaffMembers(): Promise<StaffMember[]> {
     try {
-      const { data: staffData } = await supabase.from('staff_members').select('*');
+      const { data: staffData, error } = await supabase.from('staff_members').select('*');
+      if (error) {
+        console.warn('[api.getStaffMembers] Supabase query notice:', error);
+      }
       let profilesMap: Record<string, any> = {};
       try {
         const { data: profData } = await supabase.from('profiles').select('id, is_online, last_seen');
@@ -1556,7 +1559,7 @@ export const api = {
         }
       } catch {}
 
-      if (staffData && staffData.length) {
+      if (staffData && staffData.length > 0) {
         return staffData.map((s) => {
           const prof = profilesMap[String(s.id)];
           const isOnline = Boolean(prof?.is_online ?? s.is_online ?? s.is_currently_logged_in);
@@ -1574,7 +1577,29 @@ export const api = {
       return localStore.getStaffMembers();
     }
   },
+
   async createStaffMember(staff: Partial<StaffMember>) {
+    try {
+      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const res = await fetch('/api/admin/staff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(staff),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        localStore.createStaffMember(created);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        }
+        return created;
+      }
+    } catch {}
+
     const payload = {
       id: staff.id || `stf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: staff.name,
@@ -1585,37 +1610,134 @@ export const api = {
       is_active: (staff as any).isActive !== false,
       is_blocked: Boolean((staff as any).isBlocked),
     };
-    const { data } = await supabase.from('staff_members').insert([payload]).select().maybeSingle();
-    const mapped = data ? mapStaffRow(data) : localStore.createStaffMember(staff);
-    localStore.createStaffMember(mapped);
-    return mapped;
-  },
-  async updateStaffMember(id: string, staff: Partial<StaffMember>) {
-    const payload: Record<string, any> = {};
-    if (staff.name !== undefined) payload.name = staff.name;
-    if (staff.email !== undefined) payload.email = staff.email;
-    if (staff.password !== undefined) payload.password = staff.password;
-    if (staff.role !== undefined) payload.role = staff.role;
-    if ((staff as any).department !== undefined) payload.department = (staff as any).department;
-    if ((staff as any).isActive !== undefined) payload.is_active = (staff as any).isActive;
-    if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
+    try {
+      const { data } = await supabase.from('staff_members').insert([payload]).select().maybeSingle();
+      if (data) {
+        const mapped = mapStaffRow(data);
+        localStore.createStaffMember(mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        }
+        return mapped;
+      }
+    } catch {}
 
-    const { data } = await supabase.from('staff_members').update(payload).eq('id', id).select().maybeSingle();
-    const mapped = data ? mapStaffRow(data) : localStore.updateStaffMember(id, staff);
-    localStore.updateStaffMember(id, mapped);
+    const mapped = localStore.createStaffMember(staff);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+      window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+    }
     return mapped;
   },
+
+  async updateStaffMember(id: string, staff: Partial<StaffMember>) {
+    try {
+      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(staff),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStore.updateStaffMember(id, data);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        }
+        return data;
+      }
+    } catch {}
+
+    try {
+      const payload: Record<string, any> = {};
+      if (staff.name !== undefined) payload.name = staff.name;
+      if (staff.email !== undefined) payload.email = staff.email;
+      if (staff.password !== undefined) payload.password = staff.password;
+      if (staff.role !== undefined) payload.role = staff.role;
+      if ((staff as any).department !== undefined) payload.department = (staff as any).department;
+      if ((staff as any).isActive !== undefined) payload.is_active = (staff as any).isActive;
+      if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
+
+      const { data } = await supabase.from('staff_members').update(payload).eq('id', id).select().maybeSingle();
+      if (data) {
+        const mapped = mapStaffRow(data);
+        localStore.updateStaffMember(id, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        }
+        return mapped;
+      }
+    } catch {}
+
+    const mapped = localStore.updateStaffMember(id, staff);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+      window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+    }
+    return mapped;
+  },
+
   async toggleStaffStatus(id: string) {
+    try {
+      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStore.updateStaffMember(id, data);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        }
+        return data;
+      }
+    } catch {}
     const list = await this.getStaffMembers();
     const target = list.find(s => s.id === id);
     return this.updateStaffMember(id, { isActive: !target?.isActive } as any);
   },
+
   async blockStaffMember(id: string, isBlocked: boolean, reason?: string) {
-    return this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked } as any);
+    try {
+      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}/block`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isBlocked, reason }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStore.updateStaffMember(id, data);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        }
+        return data;
+      }
+    } catch {}
+    const updated = this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked } as any);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+      window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+    }
+    return updated;
   },
+
   async toggleStaffBlock(staffId: string, isBlocked: boolean) {
     return toggleStaffBlock(staffId, isBlocked);
   },
+
   async getStaffSessions() {
     try {
       const { data, error } = await supabase.from('staff_sessions').select('*');
@@ -1632,11 +1754,29 @@ export const api = {
       return localStore.getStaffSessionMonitor();
     }
   },
+
   async getStaffLogs() { return localStore.getStaffLogs(); },
   async resetStaffPassword(id: string, newPassword: string) { return this.updateStaffMember(id, { password: newPassword }); },
+
   async deleteStaffMember(id: string) {
-    await supabase.from('staff_members').delete().eq('id', id);
+    try {
+      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      await fetch(`/api/admin/staff/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {}
+    try {
+      await supabase.from('staff_members').delete().eq('id', id);
+    } catch {}
+    try {
+      await supabase.from('admin_allowlist').delete().eq('id', id);
+    } catch {}
     localStore.deleteStaffMember(id);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+      window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+    }
     return true;
   },
 
@@ -2861,6 +3001,12 @@ export function mergeUpdatedLeadFields(existing: Inquiry, newRow: Record<string,
 
 export function mapStaffRow(row: any): StaffMember {
   const isOnline = Boolean(row.is_online ?? row.isOnline ?? row.is_currently_logged_in ?? row.isCurrentlyLoggedIn);
+  const rawPerms = (typeof row.permissions === 'object' && row.permissions !== null) ? row.permissions : {};
+  const permissions = {
+    canViewInquiries: rawPerms.canViewInquiries !== undefined ? Boolean(rawPerms.canViewInquiries) : true,
+    canUpdateStatus: rawPerms.canUpdateStatus !== undefined ? Boolean(rawPerms.canUpdateStatus) : true,
+    canAddNotes: rawPerms.canAddNotes !== undefined ? Boolean(rawPerms.canAddNotes) : true,
+  };
   return {
     ...row,
     id: String(row.id),
@@ -2876,6 +3022,7 @@ export function mapStaffRow(row: any): StaffMember {
     isCurrentlyLoggedIn: isOnline,
     currentIp: row.current_ip || row.currentIp,
     currentDevice: row.current_device || row.currentDevice,
+    permissions,
   };
 }
 

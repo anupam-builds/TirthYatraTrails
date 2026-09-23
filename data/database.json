@@ -25,9 +25,49 @@
       "password": "$2b$10$mfVK9sJRx3o/wxOEsQDu3uZy8ju18nIlxLOxbWDYaCQkA.w0ytV2q",
       "role": "ADMIN",
       "createdAt": "2026-09-23T10:03:31.339Z"
+    },
+    {
+      "id": "usr-admin-1790158082659-vm4m5",
+      "name": "amitmodi229",
+      "email": "amitmodi229@gmail.com",
+      "phone": "",
+      "password": "$2b$10$0tZZ.Ml3f2mt.yUS..bLUukzNJ0S1XpbG7Xoyh.wo.Gx4vqBPlWQG",
+      "role": "ADMIN",
+      "createdAt": "2026-09-23T10:08:02.659Z"
+    },
+    {
+      "id": "usr-admin-1790161092125-5xofe",
+      "name": "test.ops",
+      "email": "test.ops@tirthyatratrails.com",
+      "phone": "",
+      "password": "$2b$10$wSjKytBMr8QhvPkKXHjzCOEPaYo9zfnj9/WWkVXL12.qGe.8c/w2W",
+      "role": "ADMIN",
+      "createdAt": "2026-09-23T10:58:12.125Z"
     }
   ],
   "staff": [
+    {
+      "id": "stf-priya-01",
+      "name": "Priya Sharma",
+      "email": "priya.staff@tirthyatra.com",
+      "password": "Staff@123",
+      "phone": "+91 98111 22334",
+      "designation": "Senior Pilgrimage Coordinator",
+      "role": "STAFF",
+      "isActive": true,
+      "isBlocked": false,
+      "permissions": {
+        "canViewInquiries": true,
+        "canUpdateStatus": true,
+        "canAddNotes": true
+      },
+      "assignedLeadsCount": 0,
+      "contactedCount": 0,
+      "closedCount": 0,
+      "notesCount": 0,
+      "isCurrentlyLoggedIn": false,
+      "createdAt": "2026-01-15T09:00:00.000Z"
+    },
     {
       "id": "stf-1789650332146-gd1g",
       "name": "Atharv",
@@ -48,37 +88,7 @@
       "closedCount": 0,
       "notesCount": 0,
       "isCurrentlyLoggedIn": false,
-      "createdAt": "2026-09-17T13:05:32.146Z",
-      "lastLogin": "2026-09-17T13:06:12.060Z",
-      "lastActiveAt": "2026-09-17T13:17:16.023Z",
-      "lastLoginIp": "127.0.0.1",
-      "lastLoginDevice": "Chrome on Windows 11/10"
-    },
-    {
-      "id": "stf-1789650143124-5mgu",
-      "name": "Anupam",
-      "email": "anupamsaxena.dev@gmail.com",
-      "password": "Staff@123",
-      "phone": "1234567890",
-      "designation": "Pilgrim Operations Specialist",
-      "role": "STAFF",
-      "isActive": true,
-      "isBlocked": false,
-      "permissions": {
-        "canViewInquiries": true,
-        "canUpdateStatus": true,
-        "canAddNotes": true
-      },
-      "assignedLeadsCount": 0,
-      "contactedCount": 0,
-      "closedCount": 0,
-      "notesCount": 0,
-      "isCurrentlyLoggedIn": true,
-      "createdAt": "2026-09-17T13:02:23.124Z",
-      "lastLogin": "2026-09-17T13:04:29.770Z",
-      "lastActiveAt": "2026-09-17T13:04:29.770Z",
-      "lastLoginIp": "127.0.0.1",
-      "lastLoginDevice": "Chrome on Windows 11/10"
+      "createdAt": "2026-09-17T13:05:32.146Z"
     }
   ],
   "staffLogs": [

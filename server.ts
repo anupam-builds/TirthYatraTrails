@@ -356,7 +356,7 @@ app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async 
     }
 
     // 1. Create or update user credentials in internal authentication store (bcrypt hashed)
-    const adminUser = await db.provisionAdminUser(cleanEmail, rawPassword, 'Super Admin');
+    const adminUser = await db.provisionAdminUser(cleanEmail, rawPassword, rawRole);
 
     // 2. Register/update in admin_allowlist
     const allowlistEntry = db.addAdminAllowlistEntry(cleanEmail, rawRole, 'Active & Authorized');

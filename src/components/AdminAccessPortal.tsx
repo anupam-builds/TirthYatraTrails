@@ -121,6 +121,15 @@ export const AdminAccessPortal: React.FC = () => {
 
   useEffect(() => {
     loadAdmins();
+    const handleSync = () => {
+      loadAdmins();
+    };
+    window.addEventListener('tirth-staff-roster-changed', handleSync);
+    window.addEventListener('tirth-allowlist-changed', handleSync);
+    return () => {
+      window.removeEventListener('tirth-staff-roster-changed', handleSync);
+      window.removeEventListener('tirth-allowlist-changed', handleSync);
+    };
   }, []);
 
   const normalizeRole = (r?: string): string => {
@@ -209,6 +218,12 @@ export const AdminAccessPortal: React.FC = () => {
 
       // Refresh table
       await loadAdmins();
+
+      // Dispatch synchronization events to immediately update Staff Directory
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to provision administrator account. Please check inputs and try again.');
     } finally {
@@ -232,6 +247,12 @@ export const AdminAccessPortal: React.FC = () => {
       await api.revokeAdminAccess(revokingAdmin.id || revokingAdmin.email);
       setRevokingAdmin(null);
       await loadAdmins();
+
+      // Dispatch synchronization events to immediately update Staff Directory
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to revoke administrator access.');
     } finally {

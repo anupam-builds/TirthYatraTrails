@@ -1103,6 +1103,7 @@ class DatabaseStore {
     if (!this.data.staff || this.data.staff.length === 0) {
       this.data.staff = [...INITIAL_STAFF];
     }
+
     const inquiries = this.data.inquiries || [];
     return this.data.staff.map((s) => {
       const assigned = inquiries.filter((inq) => inq.assignedStaffId === s.id);
@@ -1147,14 +1148,16 @@ class DatabaseStore {
       throw new Error('Staff Password is required (minimum 6 characters)');
     }
 
+    const isStaffAdmin = staffData.role === 'ADMIN' || Boolean(staffData.designation && staffData.designation.toLowerCase().includes('admin'));
+
     const newStaff: StaffMember = {
       id: `stf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name: (staffData.name || 'Staff Specialist').trim(),
+      name: (staffData.name || (isStaffAdmin ? 'Enterprise Admin' : 'Staff Specialist')).trim(),
       email: email,
       password: staffData.password.trim(),
       phone: (staffData.phone || '').trim(),
-      designation: (staffData.designation || 'Pilgrimage Coordinator').trim(),
-      role: 'STAFF',
+      designation: (staffData.designation || (isStaffAdmin ? 'Admin (Enterprise Operations)' : 'Pilgrimage Coordinator')).trim(),
+      role: isStaffAdmin ? 'ADMIN' : 'STAFF',
       isActive: staffData.isActive !== undefined ? Boolean(staffData.isActive) : true,
       isBlocked: false,
       permissions: {
@@ -1171,6 +1174,10 @@ class DatabaseStore {
     };
 
     this.data.staff.unshift(newStaff);
+
+    if (isStaffAdmin) {
+      this.addAdminAllowlistEntry(email, newStaff.designation, 'Active & Authorized');
+    }
 
     // Audit log
     this.addStaffLog({
@@ -1241,6 +1248,14 @@ class DatabaseStore {
       staff.blockedReason = undefined;
     }
 
+    // Synchronize with admin allowlist if this is an administrator account
+    if (this.data.admin_allowlist) {
+      const allowMatch = this.data.admin_allowlist.find((a) => a.email.toLowerCase() === staff.email.toLowerCase());
+      if (allowMatch) {
+        allowMatch.status = isBlocked ? 'Blocked' : 'Active & Authorized';
+      }
+    }
+
     // Add immediate audit log
     this.addStaffLog({
       staffId: staff.id,
@@ -1278,7 +1293,18 @@ class DatabaseStore {
       return true;
     }
     const staff = this.data.staff[index];
+    if (staff.email.toLowerCase() === 'anupamsaxena.dev@gmail.com') {
+      throw new Error('Root administrator account cannot be deleted.');
+    }
+
     this.data.staff.splice(index, 1);
+
+    // Also remove from admin allowlist if administrator
+    if (this.data.admin_allowlist) {
+      this.data.admin_allowlist = this.data.admin_allowlist.filter(
+        (a) => a.id !== staff.id && a.email.toLowerCase() !== staff.email.toLowerCase()
+      );
+    }
     
     this.addStaffLog({
       staffId: staff.id,

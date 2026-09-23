@@ -13,7 +13,7 @@ export interface StaffMember {
   password?: string;
   phone?: string;
   designation?: string;
-  role: 'STAFF';
+  role: 'STAFF' | 'ADMIN';
   isActive: boolean;
   isBlocked?: boolean;
   blockedAt?: string;
