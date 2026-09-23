@@ -1,44 +1,44 @@
 import { useEffect } from 'react';
-
-const SUPABASE_URL = 'https://tbsvmgmhazsiciimpuim.supabase.co';
-const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
+import { api } from '../services/api.js';
 
 export function useStaffPresence(staffId?: string) {
   useEffect(() => {
-    // Skip admin IDs or unassigned tokens
-    if (!staffId || staffId.startsWith('usr-')) return;
+    // Skip unassigned tokens or root admin IDs
+    if (!staffId || staffId.startsWith('usr-root')) return;
 
-    const targetTable = staffId.startsWith('stf-') ? 'staff_members' : 'profiles';
+    const currentId = staffId;
 
     const syncPresence = async (online: boolean) => {
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(staffId)}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
-          },
-          body: JSON.stringify({
-            is_online: online,
-            is_currently_logged_in: online,
-            last_seen: new Date().toISOString(),
-          }),
-        });
+        await api.setStaffOnlineStatus(currentId, online);
       } catch (err) {
-        console.warn('Presence sync dropped:', err);
+        console.warn('[useStaffPresence] sync error:', err);
       }
     };
 
+    // 1. Mark online immediately on session active / component mount
     syncPresence(true);
-    const handleUnload = () => syncPresence(false);
+
+    // 2. Continuous heartbeat every 30 seconds to refresh last_seen and maintain live presence
+    const heartbeatInterval = setInterval(() => {
+      syncPresence(true);
+    }, 30000);
+
+    // 3. Mark offline when user closes tab, navigates away, or unloads
+    const handleUnload = () => {
+      syncPresence(false);
+    };
+
     window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
 
     return () => {
-      syncPresence(false);
+      clearInterval(heartbeatInterval);
       window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
+      syncPresence(false);
     };
   }, [staffId]);
 }
+
+export default useStaffPresence;

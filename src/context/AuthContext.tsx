@@ -103,6 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const check = await api.checkStaffSession();
             if (check?.ok && check.staff && !check.staff.isBlocked && check.staff.isActive) {
               setStaffUser(check.staff);
+              api.setStaffOnlineStatus(check.staff.id, true).catch(() => {});
             } else {
               localStorage.removeItem('tyt_staff_token');
               setStaffUser(null);

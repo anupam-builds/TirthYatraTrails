@@ -66,7 +66,10 @@
       "closedCount": 0,
       "notesCount": 0,
       "isCurrentlyLoggedIn": false,
-      "createdAt": "2026-01-15T09:00:00.000Z"
+      "createdAt": "2026-01-15T09:00:00.000Z",
+      "isOnline": false,
+      "lastActiveAt": "2026-09-23T11:38:23.214Z",
+      "lastSeen": "2026-09-23T11:38:23.214Z"
     },
     {
       "id": "stf-1789650332146-gd1g",

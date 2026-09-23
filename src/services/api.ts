@@ -486,38 +486,33 @@ export async function updateLeadOrInquiryStatus(
  * Ignores admin/user IDs (usr-*) and safely updates schema fields.
  */
 export async function setStaffOnlineStatus(id: string, online: boolean): Promise<void> {
-  if (!id || id.startsWith('usr-')) return;
-  const targetTable = id.startsWith('stf-') ? 'staff_members' : 'profiles';
+  if (!id || id.startsWith('usr-root')) return;
   const timestamp = new Date().toISOString();
 
   try {
-    const updatePayload: Record<string, any> = {
-      is_online: online,
-      last_active_at: timestamp,
-    };
-    if (targetTable === 'profiles') {
-      updatePayload.last_seen = timestamp;
-    } else {
-      updatePayload.is_currently_logged_in = online;
-    }
-
-    const { error } = await supabase.from(targetTable)
-      .update(updatePayload)
+    // 1. Update staff_members table in Supabase
+    await supabase.from('staff_members')
+      .update({
+        is_online: online,
+        is_currently_logged_in: online,
+        last_seen: timestamp,
+        last_active_at: timestamp,
+      })
       .eq('id', id);
 
-    if (error && targetTable === 'profiles') {
-      await supabase.from('profiles')
-        .update({
-          is_online: online,
-          last_seen: timestamp,
-        })
-        .eq('id', id);
-    }
+    // 2. Also update profiles table for schema compatibility
+    await supabase.from('profiles')
+      .update({
+        is_online: online,
+        is_currently_logged_in: online,
+        last_seen: timestamp,
+      })
+      .eq('id', id);
   } catch (err) {
-    console.warn(`[Presence] update failed on ${targetTable}:`, err);
+    console.warn(`[Presence] update failed for ${id}:`, err);
   }
 
-  // Sync local store and window event for responsive UI feedback
+  // 3. Sync local store and window event for instant responsive UI feedback
   try {
     localStore.updateStaffMember(id, {
       isCurrentlyLoggedIn: online,
@@ -528,6 +523,12 @@ export async function setStaffOnlineStatus(id: string, online: boolean): Promise
   } catch {}
 
   if (typeof window !== 'undefined') {
+    fetch(`/api/admin/staff/${encodeURIComponent(id)}/presence`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isOnline: online, lastSeen: timestamp }),
+    }).catch(() => {});
+
     window.dispatchEvent(
       new CustomEvent('tirth-staff-presence-changed', {
         detail: { staffId: id, isOnline: online, lastSeen: timestamp },

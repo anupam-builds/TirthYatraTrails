@@ -664,6 +664,21 @@ app.post('/api/admin/staff/:id/reset-password', verifyAdminToken, (req, res) => 
 app.patch('/api/admin/staff/:id/status', verifyAdminToken, (req, res) => {
   res.json(db.toggleStaffStatus(req.params.id));
 });
+app.patch('/api/admin/staff/:id/presence', (req, res) => {
+  try {
+    const isOnline = Boolean(req.body.isOnline ?? req.body.is_online);
+    const timestamp = req.body.lastSeen || new Date().toISOString();
+    const updated = db.updateStaffMember(req.params.id, {
+      isOnline,
+      isCurrentlyLoggedIn: isOnline,
+      lastActiveAt: timestamp,
+      lastSeen: timestamp,
+    } as any);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
 app.delete('/api/admin/staff/:id', verifyAdminToken, (req, res) => {
   db.deleteStaffMember(req.params.id); res.json({ success: true });
 });

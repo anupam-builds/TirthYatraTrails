@@ -1170,6 +1170,7 @@ class DatabaseStore {
       closedCount: 0,
       notesCount: 0,
       isCurrentlyLoggedIn: false,
+      isOnline: false,
       createdAt: new Date().toISOString(),
     };
 

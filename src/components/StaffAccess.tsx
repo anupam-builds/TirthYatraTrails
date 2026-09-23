@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../services/api.js';
+import { api, mapStaffRow } from '../services/api.js';
 import { localStore } from '../services/localStore.js';
 import { supabase } from '../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor } from '../types.js';
@@ -133,47 +133,131 @@ export const StaffAccess: React.FC = () => {
     window.addEventListener('tirth-staff-roster-changed', handleRosterSync);
     window.addEventListener('tirth-allowlist-changed', handleRosterSync);
 
-    // Supabase Realtime channel for profiles & staff_members
+    // Supabase Realtime channel for live presence on profiles, staff_members, and staff_sessions
     const channel = supabase
       .channel('schema-db-changes-staff-component')
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        { event: '*', schema: 'public', table: 'staff_members' },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            const newRow = payload.new;
+            if (!newRow?.id) return;
+            setStaffList((prev) => {
+              if (
+                prev.some(
+                  (s) =>
+                    String(s.id) === String(newRow.id) ||
+                    (s.email && s.email.toLowerCase() === (newRow.email || '').toLowerCase())
+                )
+              ) {
+                return prev;
+              }
+              return [...prev, mapStaffRow(newRow)];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const staffRow = payload.new;
+            if (!staffRow?.id) return;
+            setStaffList((prev) =>
+              prev.map((s) => {
+                if (
+                  String(s.id) === String(staffRow.id) ||
+                  (s.email && staffRow.email && s.email.toLowerCase() === staffRow.email.toLowerCase())
+                ) {
+                  const isOnline = Boolean(
+                    staffRow.is_online !== undefined
+                      ? staffRow.is_online
+                      : staffRow.is_currently_logged_in !== undefined
+                      ? staffRow.is_currently_logged_in
+                      : s.isOnline
+                  );
+                  const lastSeen = staffRow.last_seen || staffRow.last_active_at || s.lastSeen;
+                  return {
+                    ...s,
+                    name: staffRow.name || s.name,
+                    email: staffRow.email || s.email,
+                    designation: staffRow.department || staffRow.designation || s.designation,
+                    role: staffRow.role || s.role,
+                    isOnline,
+                    isCurrentlyLoggedIn: isOnline,
+                    isActive: staffRow.is_active !== undefined ? Boolean(staffRow.is_active) : s.isActive,
+                    isBlocked: staffRow.is_blocked !== undefined ? Boolean(staffRow.is_blocked) : s.isBlocked,
+                    blockedReason:
+                      staffRow.blocked_reason !== undefined ? staffRow.blocked_reason : s.blockedReason,
+                    lastSeen,
+                    lastActiveAt: staffRow.last_active_at || lastSeen,
+                  };
+                }
+                return s;
+              })
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const oldRow = payload.old;
+            if (oldRow?.id) {
+              setStaffList((prev) => prev.filter((s) => String(s.id) !== String(oldRow.id)));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
         (payload: any) => {
           const profile = payload.new;
           if (!profile?.id) return;
           setStaffList((prev) =>
-            prev.map((s) =>
-              String(s.id) === String(profile.id)
-                ? {
-                    ...s,
-                    isOnline: Boolean(profile.is_online ?? profile.is_currently_logged_in),
-                    isCurrentlyLoggedIn: Boolean(profile.is_online ?? profile.is_currently_logged_in),
-                    lastSeen: profile.last_seen || profile.last_active_at,
-                  }
-                : s
-            )
+            prev.map((s) => {
+              if (
+                String(s.id) === String(profile.id) ||
+                (s.email && profile.email && s.email.toLowerCase() === profile.email.toLowerCase())
+              ) {
+                const isOnline = Boolean(profile.is_online ?? profile.is_currently_logged_in ?? s.isOnline);
+                const lastSeen = profile.last_seen || profile.last_active_at || s.lastSeen;
+                return {
+                  ...s,
+                  isOnline,
+                  isCurrentlyLoggedIn: isOnline,
+                  lastSeen,
+                  lastActiveAt: lastSeen,
+                };
+              }
+              return s;
+            })
           );
         }
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'staff_members' },
+        { event: '*', schema: 'public', table: 'staff_sessions' },
         (payload: any) => {
-          const staffRow = payload.new;
-          if (!staffRow?.id) return;
-          setStaffList((prev) =>
-            prev.map((s) =>
-              String(s.id) === String(staffRow.id)
-                ? {
-                    ...s,
-                    isOnline: Boolean(staffRow.is_online ?? staffRow.is_currently_logged_in),
-                    isCurrentlyLoggedIn: Boolean(staffRow.is_online ?? staffRow.is_currently_logged_in),
-                    lastSeen: staffRow.last_seen || staffRow.last_active_at,
-                  }
-                : s
-            )
-          );
+          if (payload.eventType === 'DELETE') {
+            const oldSession = payload.old;
+            if (oldSession?.staff_id) {
+              setStaffList((prev) =>
+                prev.map((s) =>
+                  String(s.id) === String(oldSession.staff_id)
+                    ? { ...s, isOnline: false, isCurrentlyLoggedIn: false }
+                    : s
+                )
+              );
+            }
+          } else if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const newSession = payload.new;
+            if (newSession?.staff_id) {
+              setStaffList((prev) =>
+                prev.map((s) =>
+                  String(s.id) === String(newSession.staff_id)
+                    ? {
+                        ...s,
+                        isOnline: true,
+                        isCurrentlyLoggedIn: true,
+                        lastActiveAt: newSession.last_active || new Date().toISOString(),
+                      }
+                    : s
+                )
+              );
+            }
+          }
         }
       )
       .subscribe();
@@ -486,10 +570,15 @@ export const StaffAccess: React.FC = () => {
             <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white font-serif tracking-tight">
               Staff Access &amp; Security Controls
             </h1>
-            {currentlyOnline > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 animate-pulse">
+            {currentlyOnline > 0 ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-xs animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                {currentlyOnline} Staff Active Now
+                <span>🟢 {currentlyOnline} Staff Active Now</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800/80 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                <span>0 Staff Active Now</span>
               </span>
             )}
           </div>
@@ -778,18 +867,18 @@ export const StaffAccess: React.FC = () => {
                                 .toUpperCase()}
                             </div>
                             <span
-                              className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#0d1d33] ${
+                              className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#0d1d33] transition-colors duration-300 ${
                                 staff.isBlocked
                                   ? 'bg-red-500'
                                   : isOnline
-                                  ? 'bg-emerald-500'
+                                  ? 'bg-emerald-500 ring-2 ring-emerald-400/40 animate-pulse'
                                   : 'bg-slate-400'
                               }`}
                               title={
                                 staff.isBlocked
                                   ? 'Access Blocked'
                                   : isOnline
-                                  ? 'Online Now'
+                                  ? 'Online Now (Active on Staff Portal)'
                                   : 'Offline'
                               }
                             />
@@ -811,6 +900,14 @@ export const StaffAccess: React.FC = () => {
                               >
                                 {staff.role}
                               </span>
+
+                              {/* Live Online Badge */}
+                              {isOnline && !staff.isBlocked && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 animate-pulse">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  <span>Online</span>
+                                </span>
+                              )}
 
                               {/* Status Badge */}
                               {staff.isBlocked ? (
@@ -938,19 +1035,22 @@ export const StaffAccess: React.FC = () => {
                     <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] text-slate-500 dark:text-slate-400">
                         {isOnline ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Session active on {staff.lastLoginDevice || 'Staff Portal'}
+                            <span>Session active on {staff.lastLoginDevice || (staff as any).currentDevice || 'Staff Portal'}</span>
                           </span>
                         ) : (
-                          <span>
-                            Last active:{' '}
-                            {staff.lastActiveAt
-                              ? new Date(staff.lastActiveAt).toLocaleString('en-IN', {
-                                  dateStyle: 'short',
-                                  timeStyle: 'short',
-                                })
-                              : 'Never'}
+                          <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                            <span>
+                              Last active:{' '}
+                              {staff.lastActiveAt || staff.lastSeen
+                                ? new Date(staff.lastActiveAt || staff.lastSeen!).toLocaleString('en-IN', {
+                                    dateStyle: 'short',
+                                    timeStyle: 'short',
+                                  })
+                                : 'Offline'}
+                            </span>
                           </span>
                         )}
                       </div>
