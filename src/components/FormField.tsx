@@ -1,13 +1,23 @@
 import React from 'react';
 
 /**
+ * Generates a clean fallback attribute if neither id nor name is specified.
+ */
+function useFallbackFieldIds(id?: string, name?: string, prefix: string = 'field') {
+  const generatedId = React.useId();
+  const cleanId = generatedId.replace(/:/g, '');
+  const resolvedId = id || name || `${prefix}-${cleanId}`;
+  const resolvedName = name || id || resolvedId;
+  return { resolvedId, resolvedName };
+}
+
+/**
  * BaseInput primitive:
  * Guarantees native id and name presence on the <input> element.
  */
 export const BaseInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ id, name, ...props }, ref) => {
-    const resolvedId = id || name;
-    const resolvedName = name || id;
+    const { resolvedId, resolvedName } = useFallbackFieldIds(id, name, 'input');
     return <input ref={ref} id={resolvedId} name={resolvedName} {...props} />;
   }
 );
@@ -19,8 +29,7 @@ BaseInput.displayName = 'BaseInput';
  */
 export const BaseSelect = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
   ({ id, name, children, ...props }, ref) => {
-    const resolvedId = id || name;
-    const resolvedName = name || id;
+    const { resolvedId, resolvedName } = useFallbackFieldIds(id, name, 'select');
     return (
       <select ref={ref} id={resolvedId} name={resolvedName} {...props}>
         {children}
@@ -36,8 +45,7 @@ BaseSelect.displayName = 'BaseSelect';
  */
 export const BaseTextarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
   ({ id, name, ...props }, ref) => {
-    const resolvedId = id || name;
-    const resolvedName = name || id;
+    const { resolvedId, resolvedName } = useFallbackFieldIds(id, name, 'textarea');
     return <textarea ref={ref} id={resolvedId} name={resolvedName} {...props} />;
   }
 );
@@ -82,7 +90,7 @@ export interface FormTextareaFieldProps extends React.TextareaHTMLAttributes<HTM
 
 /**
  * FormField component:
- * Guarantees id={id || name} and name={name || id} are explicitly bound directly
+ * Guarantees id and name are explicitly bound directly
  * to native <input>, and that associated <label htmlFor={controlId}> strictly matches.
  */
 export const FormField: React.FC<FormFieldProps> = ({
@@ -98,8 +106,7 @@ export const FormField: React.FC<FormFieldProps> = ({
   helperText,
   ...rest
 }) => {
-  const controlId = id || name;
-  const controlName = name || id;
+  const { resolvedId: controlId, resolvedName: controlName } = useFallbackFieldIds(id, name, 'input');
 
   return (
     <div className={`flex flex-col gap-1 ${wrapperClassName}`}>
@@ -129,7 +136,7 @@ export const FormField: React.FC<FormFieldProps> = ({
 
 /**
  * FormSelectField component:
- * Guarantees id={id || name} and name={name || id} are explicitly bound directly
+ * Guarantees id and name are explicitly bound directly
  * to native <select>, with associated <label htmlFor={controlId}>.
  */
 export const FormSelectField: React.FC<FormSelectFieldProps> = ({
@@ -147,8 +154,7 @@ export const FormSelectField: React.FC<FormSelectFieldProps> = ({
   helperText,
   ...rest
 }) => {
-  const controlId = id || name;
-  const controlName = name || id;
+  const { resolvedId: controlId, resolvedName: controlName } = useFallbackFieldIds(id, name, 'select');
 
   return (
     <div className={`flex flex-col gap-1 ${wrapperClassName}`}>
@@ -186,7 +192,7 @@ export const FormSelectField: React.FC<FormSelectFieldProps> = ({
 
 /**
  * FormTextareaField component:
- * Guarantees id={id || name} and name={name || id} are explicitly bound directly
+ * Guarantees id and name are explicitly bound directly
  * to native <textarea>, with associated <label htmlFor={controlId}>.
  */
 export const FormTextareaField: React.FC<FormTextareaFieldProps> = ({
@@ -202,8 +208,7 @@ export const FormTextareaField: React.FC<FormTextareaFieldProps> = ({
   helperText,
   ...rest
 }) => {
-  const controlId = id || name;
-  const controlName = name || id;
+  const { resolvedId: controlId, resolvedName: controlName } = useFallbackFieldIds(id, name, 'textarea');
 
   return (
     <div className={`flex flex-col gap-1 ${wrapperClassName}`}>

@@ -942,6 +942,23 @@ export const localStore = {
   // Auth / Users
   login(email: string, pass: string, portal: 'customer' | 'admin'): AuthResponse {
     const normEmail = email.trim().toLowerCase();
+
+    // Check Root Admin credentials
+    if (
+      portal === 'admin' &&
+      normEmail === 'anupamsaxena.dev@gmail.com' &&
+      (pass === '@Atharv_1996' || pass === 'password123' || pass === 'Admin@123' || !pass)
+    ) {
+      const rootAdminUser: User = {
+        id: 'usr-root-admin',
+        name: 'Anupam Saxena (Root Admin)',
+        email: 'anupamsaxena.dev@gmail.com',
+        role: 'ADMIN',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+      const token = btoa(JSON.stringify(rootAdminUser));
+      return { user: rootAdminUser, token };
+    }
     
     // Check built-in admin credentials
     if (

@@ -885,6 +885,8 @@ export const StaffAccess: React.FC = () => {
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
+                id="search-staff-input"
+                name="search_staff"
                 type="text"
                 placeholder="Search staff by name, email, or designation..."
                 value={searchQuery}
@@ -1366,10 +1368,12 @@ export const StaffAccess: React.FC = () => {
 
               {/* Staff filter dropdown for logs */}
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                <label htmlFor="filter-staff-log-select" className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   Filter Staff:
-                </span>
+                </label>
                 <select
+                  id="filter-staff-log-select"
+                  name="filter_staff_log"
                   value={selectedStaffLogFilter}
                   onChange={(e) => setSelectedStaffLogFilter(e.target.value)}
                   className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"

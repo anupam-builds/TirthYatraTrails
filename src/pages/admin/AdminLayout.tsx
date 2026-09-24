@@ -40,7 +40,7 @@ import { useStaffPresence } from '../../hooks/useStaffPresence.js';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
-  activeTab: 'dashboard' | 'hotels' | 'packages' | 'inquiries' | 'staff' | 'access' | 'cities' | 'users' | 'reviews' | 'settings';
+  activeTab: 'dashboard' | 'hotels' | 'packages' | 'inquiries' | 'staff' | 'access' | 'admins' | 'cities' | 'users' | 'reviews' | 'settings';
 }
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab }) => {
@@ -184,8 +184,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+    { id: 'admins', label: 'Admin Access / Management', path: '/admin/admins', icon: ShieldCheck },
     { id: 'inquiries', label: 'Travel Desk Leads', path: '/admin/inquiries', icon: MessageSquare },
-    { id: 'staff', label: 'Staff & Access', path: '/admin/staff', icon: Users },
+    { id: 'staff', label: 'Staff Directory', path: '/admin/staff', icon: Users },
     { id: 'hotels', label: 'Hotels Inventory', path: '/admin/hotels', icon: Building },
     { id: 'packages', label: 'Yatra Packages', path: '/admin/packages', icon: Compass },
     { id: 'cities', label: 'Cities & Hubs', path: '/admin/cities', icon: MapPin },
@@ -222,7 +223,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
           <nav className="p-4 space-y-1.5">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id || (item.id === 'staff' && (activeTab as string) === 'access');
+              const isActive = activeTab === item.id || (item.id === 'admins' && (activeTab as string) === 'access');
               return (
                 <button
                   key={item.id}

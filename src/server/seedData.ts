@@ -1483,10 +1483,19 @@ export const INITIAL_COMPANIONS: CompanionProfile[] = [
 ];
 
 export async function getInitialSeedData() {
+  const rootAdminPasswordHash = await bcrypt.hash('@Atharv_1996', 10);
   const adminPasswordHash = await bcrypt.hash('Admin@123', 10);
   const userPasswordHash = await bcrypt.hash('User@123', 10);
 
   const users: (User & { password?: string })[] = [
+    {
+      id: 'usr-root-admin',
+      name: 'Anupam Saxena (Root Admin)',
+      email: 'anupamsaxena.dev@gmail.com',
+      password: rootAdminPasswordHash,
+      role: 'ADMIN',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
     {
       id: 'usr-admin-1',
       name: 'Enterprise Yatra Admin',

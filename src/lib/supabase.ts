@@ -38,6 +38,14 @@ export const getSupabaseHeaders = (extraHeaders: Record<string, string> = {}): R
   return { ...headers, ...extraHeaders };
 };
 
+let isTableInSchemaCache: boolean | null = null;
+let lastSchemaCacheCheck = 0;
+
+export function markSchemaReloaded() {
+  isTableInSchemaCache = null;
+  lastSchemaCacheCheck = 0;
+}
+
 /**
  * Custom fetch wrapper that intercepts every outgoing fetch request made by @supabase/supabase-js
  * (PostgREST queries, Auth tokens, Realtime WebSocket handshakes, and Storage calls)
@@ -182,27 +190,41 @@ export const customFetch: typeof fetch = async (input, init) => {
 
   // Server-enforced REST proxy for admin_allowlist
   if (urlStr.includes('/rest/v1/admin_allowlist')) {
-    try {
-      reqInit.headers = headers;
-      const remoteRes = await fetch(input, reqInit);
-      if (remoteRes.ok) {
-        return remoteRes;
+    const isSingleObjectRequested = (headers.get('accept') || '').includes('application/vnd.pgrst.object+json');
+    const now = Date.now();
+
+    // If schema cache was previously verified missing (PGRST205) within the last 60 seconds,
+    // route directly to the backend allowlist API to avoid redundant 404 console errors.
+    const shouldAttemptRemote = isTableInSchemaCache === true || (isTableInSchemaCache === null && now - lastSchemaCacheCheck > 30000);
+
+    if (shouldAttemptRemote) {
+      try {
+        lastSchemaCacheCheck = now;
+        reqInit.headers = headers;
+        const remoteRes = await fetch(input, reqInit);
+        if (remoteRes.ok) {
+          isTableInSchemaCache = true;
+          return remoteRes;
+        }
+        const errText = await remoteRes.clone().text();
+        if (errText.includes('PGRST205') || errText.includes('Could not find the table') || remoteRes.status === 404) {
+          isTableInSchemaCache = false;
+        } else {
+          return remoteRes;
+        }
+      } catch {
+        isTableInSchemaCache = false;
       }
-      const errText = await remoteRes.clone().text();
-      // If table is missing from schema cache (PGRST205), seamlessly route to server allowlist API
-      if (!errText.includes('PGRST205') && !errText.includes('Could not find the table')) {
-        return remoteRes;
-      }
-    } catch {}
+    }
 
     // Fallback to Express backend /api/admin/allowlist
     try {
       const method = (reqInit.method || 'GET').toUpperCase();
       let serverUrl = '/api/admin/allowlist';
+      const urlObj = new URL(urlStr, 'http://localhost');
+      const search = urlObj.searchParams;
 
       if (method === 'GET') {
-        const urlObj = new URL(urlStr, 'http://localhost');
-        const search = urlObj.searchParams;
         let emailFilter = '';
         for (const [key, value] of search.entries()) {
           if (key === 'email' || key.startsWith('email.')) {
@@ -217,7 +239,14 @@ export const customFetch: typeof fetch = async (input, init) => {
         const serverRes = await fetch(serverUrl, { method: 'GET' });
         if (serverRes.ok) {
           const list = await serverRes.json();
-          return new Response(JSON.stringify(list), {
+          if (isSingleObjectRequested) {
+            const singleItem = Array.isArray(list) ? (list[0] || null) : list;
+            return new Response(JSON.stringify(singleItem), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify(Array.isArray(list) ? list : (list ? [list] : [])), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           });
@@ -233,8 +262,24 @@ export const customFetch: typeof fetch = async (input, init) => {
           status: serverRes.ok ? 201 : serverRes.status,
           headers: { 'Content-Type': 'application/json' },
         });
+      } else if (method === 'PATCH' || method === 'PUT') {
+        const idOrEmail = urlObj.searchParams.get('id')?.replace(/^(eq\.|ilike\.)/i, '') ||
+                          urlObj.searchParams.get('email')?.replace(/^(eq\.|ilike\.)/i, '');
+        let patchUrl = serverUrl;
+        if (idOrEmail) {
+          patchUrl += `/${encodeURIComponent(idOrEmail)}`;
+        }
+        const serverRes = await fetch(patchUrl, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: reqInit.body,
+        });
+        const updated = await serverRes.json();
+        return new Response(JSON.stringify(updated), {
+          status: serverRes.ok ? 200 : serverRes.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
       } else if (method === 'DELETE') {
-        const urlObj = new URL(urlStr, 'http://localhost');
         const idOrEmail = urlObj.searchParams.get('id')?.replace(/^(eq\.|ilike\.)/i, '') ||
                           urlObj.searchParams.get('email')?.replace(/^(eq\.|ilike\.)/i, '');
         if (idOrEmail) {
@@ -250,22 +295,36 @@ export const customFetch: typeof fetch = async (input, init) => {
       console.warn('[supabase customFetch] admin_allowlist fallback notice:', fallbackErr?.message);
     }
 
-    // Default static fallback for uninterrupted offline development
+    // Default static fallback with Root Admin and Operations Lead
+    const defaultData = [
+      {
+        id: 'usr-root-admin',
+        email: 'anupamsaxena.dev@gmail.com',
+        role: 'Super Admin',
+        status: 'Active & Authorized',
+        created_at: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
+        email: 'admin@tirthyatratrails.com',
+        role: 'Admin (Enterprise Operations)',
+        status: 'Active & Authorized',
+        created_at: '2026-02-15T00:00:00.000Z',
+      },
+    ];
+
+    if (isSingleObjectRequested) {
+      const urlObj = new URL(urlStr, 'http://localhost');
+      const emailFilter = urlObj.searchParams.get('email')?.replace(/^(eq\.|ilike\.|like\.)/i, '').replace(/%/g, '').toLowerCase();
+      const matched = emailFilter ? defaultData.find((d) => d.email.toLowerCase() === emailFilter) : defaultData[0];
+      return new Response(JSON.stringify(matched || null), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(
-      JSON.stringify([
-        {
-          id: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
-          email: 'anupamsaxena.dev@gmail.com',
-          role: 'admin',
-          created_at: '2026-01-01T00:00:00.000Z',
-        },
-        {
-          id: 'c56a4180-65aa-42ec-a945-5fd21dec0538',
-          email: 'admin@tirthyatratrails.com',
-          role: 'admin',
-          created_at: '2026-02-15T00:00:00.000Z',
-        },
-      ]),
+      JSON.stringify(defaultData),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   }

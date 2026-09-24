@@ -1,6 +1,14 @@
 {
   "users": [
     {
+      "id": "usr-root-admin",
+      "name": "Anupam Saxena (Root Admin)",
+      "email": "anupamsaxena.dev@gmail.com",
+      "password": "$2b$10$fwmnwZ0fJkwg35y/BP3l5OQMkx/IDGC8qEFrtwWrHmbnPKN/3K/yu",
+      "role": "ADMIN",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
       "id": "usr-admin-1",
       "name": "Enterprise Yatra Admin",
       "email": "admin@tirthyatratrails.com",
@@ -1740,8 +1748,9 @@
     {
       "id": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
       "email": "anupamsaxena.dev@gmail.com",
-      "role": "admin",
-      "created_at": "2026-01-01T00:00:00.000Z"
+      "role": "Super Admin",
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "status": "Active & Authorized"
     },
     {
       "id": "c56a4180-65aa-42ec-a945-5fd21dec0538",

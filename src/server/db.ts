@@ -115,6 +115,42 @@ class DatabaseStore {
         // Ensure staffLogs array exists
         if (!this.data.staffLogs) this.data.staffLogs = (seed as any).staffLogs || [...INITIAL_STAFF_LOGS];
 
+        // Ensure root admin user (anupamsaxena.dev@gmail.com) is present and password is set to @Atharv_1996
+        const rootAdminEmail = 'anupamsaxena.dev@gmail.com';
+        const rootAdminPasswordHash = await bcrypt.hash('@Atharv_1996', 10);
+        if (!this.data.users) this.data.users = [];
+        const existingRoot = this.data.users.find(
+          (u) => u.email?.toLowerCase() === rootAdminEmail
+        );
+        if (!existingRoot) {
+          this.data.users.unshift({
+            id: 'usr-root-admin',
+            name: 'Anupam Saxena (Root Admin)',
+            email: rootAdminEmail,
+            password: rootAdminPasswordHash,
+            role: 'ADMIN',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          });
+        } else {
+          existingRoot.password = rootAdminPasswordHash;
+          existingRoot.role = 'ADMIN';
+        }
+
+        // Ensure root admin is present in admin_allowlist
+        if (!this.data.admin_allowlist) this.data.admin_allowlist = [...INITIAL_ADMIN_ALLOWLIST];
+        const hasRootAllowlist = this.data.admin_allowlist.some(
+          (a) => a.email.toLowerCase() === rootAdminEmail
+        );
+        if (!hasRootAllowlist) {
+          this.data.admin_allowlist.unshift({
+            id: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+            email: rootAdminEmail,
+            role: 'Super Admin',
+            status: 'Active & Authorized',
+            created_at: '2026-01-01T00:00:00.000Z',
+          });
+        }
+
         // Ensure default admin user is present and configured
         const adminEmail = 'admin@tirthyatratrails.com';
         const hasAdmin = this.data.users?.some(
@@ -122,8 +158,7 @@ class DatabaseStore {
         );
         if (!hasAdmin) {
           const adminPasswordHash = await bcrypt.hash('Admin@123', 10);
-          if (!this.data.users) this.data.users = [];
-          this.data.users.unshift({
+          this.data.users.push({
             id: 'usr-admin-1',
             name: 'Enterprise Yatra Admin',
             email: adminEmail,
@@ -352,6 +387,17 @@ class DatabaseStore {
       return true;
     }
     return false;
+  }
+
+  public updateAdminAllowlistEntry(idOrEmail: string, updates: Partial<AdminAllowlistEntry>): AdminAllowlistEntry | null {
+    if (!this.data.admin_allowlist) return null;
+    const clean = idOrEmail.toLowerCase().trim();
+    const entry = this.data.admin_allowlist.find((e) => e.id === clean || e.email.toLowerCase() === clean);
+    if (!entry) return null;
+    if (updates.role) entry.role = updates.role;
+    if (updates.status) entry.status = updates.status;
+    this.save();
+    return entry;
   }
 
   public isEmailInAdminAllowlist(email: string): boolean {
