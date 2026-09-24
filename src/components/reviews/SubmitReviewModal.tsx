@@ -201,10 +201,10 @@ export const SubmitReviewModal: React.FC<SubmitReviewModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Pilgrimage Satisfaction Rating
-                </label>
-                <div className="flex items-center gap-1.5 pt-1.5">
+                </span>
+                <div className="flex items-center gap-1.5 pt-1.5" role="group" aria-label="Pilgrimage Satisfaction Rating">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}

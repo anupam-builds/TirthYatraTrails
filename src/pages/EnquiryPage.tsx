@@ -728,9 +728,9 @@ export const EnquiryPage: React.FC = () => {
 
                   {/* Adults and Children Counters */}
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                    <span className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                       Pilgrims &amp; Travellers (Group Size)
-                    </label>
+                    </span>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Adults counter */}
@@ -832,7 +832,7 @@ export const EnquiryPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Pickup City */}
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                        <label htmlFor="enquire-pickup-city" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                           Pickup City / Airport / Station
                         </label>
                         <LocationAutocompleteInput
@@ -849,7 +849,7 @@ export const EnquiryPage: React.FC = () => {
                       {/* Drop City */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                          <label htmlFor="enquire-drop-city" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Drop City / Airport / Station
                           </label>
                           <label htmlFor="enquire-same-drop-city-checkbox" className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">

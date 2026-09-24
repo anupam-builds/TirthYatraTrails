@@ -136,11 +136,13 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
     setShowUrlInput(false);
   };
 
+  const activeFileInputId = !multiple && images.length > 0 ? `${id}-file-input` : `${id}-multi-file-input`;
+
   return (
-    <div id={id} className="space-y-3">
+    <div id={id ? `${id}-field-container` : undefined} className="space-y-3">
       {/* Label & Counter */}
       <div className="flex items-center justify-between">
-        <label className="block text-slate-800 dark:text-slate-200 font-bold text-sm">
+        <label htmlFor={activeFileInputId} className="block text-slate-800 dark:text-slate-200 font-bold text-sm cursor-pointer">
           {label}
         </label>
         <div className="flex items-center gap-2">

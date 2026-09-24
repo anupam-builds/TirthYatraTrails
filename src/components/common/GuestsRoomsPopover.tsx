@@ -85,7 +85,16 @@ export const GuestsRoomsPopover: React.FC<GuestsRoomsPopoverProps> = ({
       {/* Trigger Area */}
       <div
         id="guests-rooms-trigger"
+        role="button"
+        tabIndex={0}
+        aria-label="Guests and rooms selector"
         onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
         className={`flex items-center justify-between cursor-pointer py-0.5 select-none ${triggerClassName}`}
       >
         <div className="flex items-center gap-1.5 truncate">

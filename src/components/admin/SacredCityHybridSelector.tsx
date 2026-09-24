@@ -199,7 +199,7 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
     <div className="relative" ref={containerRef}>
       {/* Label and Inline Add Trigger */}
       <div className="flex items-center justify-between mb-1">
-        <label className="block text-slate-700 dark:text-slate-300 font-bold text-xs">
+        <label htmlFor="sacred-city-hybrid-trigger" className="block text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer">
           {label} {required && <span className="text-orange-500">*</span>}
         </label>
         <button
@@ -217,7 +217,17 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
 
       {/* Main Trigger Button */}
       <div
+        id="sacred-city-hybrid-trigger"
+        role="button"
+        tabIndex={0}
+        aria-label={label || 'Select Sacred City'}
         onClick={handleOpenDropdown}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleOpenDropdown();
+          }
+        }}
         className={`w-full flex items-center justify-between gap-2 bg-slate-50 dark:bg-[#081220] border rounded-xl p-2.5 text-xs text-slate-900 dark:text-white cursor-pointer transition-all ${
           isOpen
             ? 'ring-2 ring-orange-500 border-orange-500'

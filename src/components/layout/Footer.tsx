@@ -29,24 +29,46 @@ export const CustomerFooter: React.FC = () => {
 
     async function fetchAgencyHelpline() {
       try {
+        let resolved = '';
+
         const { data, error } = await supabase
           .from('agency_settings')
           .select('whatsapp_helpline, phone')
           .order('updated_at', { ascending: false })
           .limit(1);
 
-        if (error) {
-          console.warn('[Footer] Failed to fetch agency_settings helpline:', error.message);
-          return;
+        if (!error && data && data.length > 0) {
+          const row = data[0] as { whatsapp_helpline?: string | null; phone?: string | null };
+          resolved = (row.whatsapp_helpline || row.phone || '').trim();
+        } else if (error) {
+          // Safe fallback if 'phone' column triggers an error in PostgREST schema cache
+          console.warn('[Footer] agency_settings column notice:', error.message);
+          const fallbackQuery = await supabase
+            .from('agency_settings')
+            .select('whatsapp_helpline')
+            .order('updated_at', { ascending: false })
+            .limit(1);
+
+          if (!fallbackQuery.error && fallbackQuery.data && fallbackQuery.data.length > 0) {
+            const row = fallbackQuery.data[0] as { whatsapp_helpline?: string | null };
+            resolved = (row.whatsapp_helpline || '').trim();
+          }
         }
 
-        if (data && data.length > 0 && isMounted) {
-          const row = data[0] as { whatsapp_helpline?: string | null; phone?: string | null };
-          const resolved = (row.whatsapp_helpline || row.phone || '').trim();
-          if (resolved) {
-            setHelplinePhone(resolved);
-            localStorage.setItem('tyt_agency_phone', resolved);
-          }
+        // Secondary fallback to Express backend /api/agency-settings if Supabase returns nothing or errors
+        if (!resolved) {
+          try {
+            const res = await fetch('/api/agency-settings');
+            if (res.ok) {
+              const json = await res.json();
+              resolved = (json.whatsapp_helpline || json.phone || json.contact_phone || '').trim();
+            }
+          } catch {}
+        }
+
+        if (resolved && isMounted) {
+          setHelplinePhone(resolved);
+          localStorage.setItem('tyt_agency_phone', resolved);
         }
       } catch (err) {
         console.warn('[Footer] Exception fetching agency_settings helpline:', err);

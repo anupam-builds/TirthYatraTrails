@@ -448,9 +448,9 @@ export const AdminSettings: React.FC = () => {
             
             {/* Tone Selector & Preview */}
             <div className="md:col-span-2 space-y-4">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                 Notification Tone Selection
-              </label>
+              </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {toneOptions.map((tone) => {

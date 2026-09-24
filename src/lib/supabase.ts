@@ -343,7 +343,14 @@ export const customFetch: typeof fetch = async (input, init) => {
         return remoteRes;
       }
       const errText = await remoteRes.clone().text();
-      if (!errText.includes('PGRST205') && !errText.includes('Could not find the table') && remoteRes.status !== 404) {
+      if (
+        !errText.includes('PGRST205') &&
+        !errText.includes('PGRST204') &&
+        !errText.includes('Could not find') &&
+        !errText.includes('column') &&
+        remoteRes.status !== 404 &&
+        remoteRes.status !== 400
+      ) {
         return remoteRes;
       }
     } catch {}

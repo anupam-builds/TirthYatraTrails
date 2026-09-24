@@ -163,12 +163,21 @@ export const HeroSearchBar: React.FC<HeroSearchBarProps> = ({
           ref={cityDropdownRef}
           className="relative flex-1 border-b lg:border-b-0 lg:border-r border-slate-100 px-3.5 py-2"
         >
-          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <label htmlFor="city-area-selector-trigger" className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer">
             City / Area
           </label>
           <div
             id="city-area-selector-trigger"
+            role="button"
+            tabIndex={0}
+            aria-label="Select City or Area"
             onClick={() => setShowCityDropdown(!showCityDropdown)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setShowCityDropdown(!showCityDropdown);
+              }
+            }}
             className="flex items-center justify-between cursor-pointer py-1 group"
           >
             <div className="flex items-center gap-2 truncate">
@@ -340,7 +349,7 @@ export const HeroSearchBar: React.FC<HeroSearchBarProps> = ({
 
         {/* 4. Guests & Rooms Selector Popup */}
         <div className="flex-1 px-3.5 py-2 relative">
-          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <label htmlFor="guests-rooms-trigger" className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer">
             Guests &amp; Rooms
           </label>
           <GuestsRoomsPopover

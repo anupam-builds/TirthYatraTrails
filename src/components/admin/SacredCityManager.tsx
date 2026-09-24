@@ -320,7 +320,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
       <div className={`relative ${className}`} ref={dropdownRef}>
         {label && (
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+            <label htmlFor="sacred-city-manager-trigger" className="block text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
               {label}
             </label>
             <button
@@ -339,7 +339,17 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
 
         {/* Trigger Box */}
         <div
+          id="sacred-city-manager-trigger"
+          role="button"
+          tabIndex={0}
+          aria-label={label || 'Select Sacred City'}
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsDropdownOpen(!isDropdownOpen);
+            }
+          }}
           className={`w-full flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white cursor-pointer transition-all ${isDropdownOpen
             ? 'ring-2 ring-orange-500 border-orange-500'
             : 'border-slate-300 dark:border-slate-700 hover:border-slate-400'

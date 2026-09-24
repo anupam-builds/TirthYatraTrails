@@ -160,10 +160,10 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
   };
 
   return (
-    <div className={`relative ${className}`} ref={containerRef} id={id}>
+    <div className={`relative ${className}`} ref={containerRef} id={id ? `${id}-container` : undefined}>
       {label && (
         <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+          <label htmlFor={id || 'sacred-city-selector-trigger'} className="block text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
             {label} {required && <span className="text-orange-500">*</span>}
           </label>
           {allowQuickAdd && !isOpen && (
@@ -185,9 +185,20 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
 
       {/* Select Box Trigger */}
       <div
+        id={id || 'sacred-city-selector-trigger'}
+        role="button"
+        tabIndex={0}
+        aria-label={label || 'Select Sacred City'}
         onClick={() => {
           setIsOpen(!isOpen);
           setIsAdding(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+            setIsAdding(false);
+          }
         }}
         className={`w-full flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white cursor-pointer transition-all ${
           error

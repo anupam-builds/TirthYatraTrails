@@ -150,14 +150,26 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
   return (
     <div ref={containerRef} className={`relative select-none ${className}`}>
       {/* Label */}
-      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+      <label
+        htmlFor={id}
+        className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer"
+      >
         {label}
       </label>
 
       {/* Field Trigger Display */}
       <div
         id={`${id}-trigger`}
+        role="button"
+        tabIndex={0}
+        aria-label={label}
         onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+          }
+        }}
         className="flex items-center justify-between cursor-pointer py-1 group"
       >
         <div className="flex items-center gap-2 truncate">
