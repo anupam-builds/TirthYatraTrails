@@ -4,7 +4,7 @@
       "id": "usr-root-admin",
       "name": "Anupam Saxena (Root Admin)",
       "email": "anupamsaxena.dev@gmail.com",
-      "password": "$2b$10$n5sH.qYh13y4qB2imBQ2JeEnbmCfH6X207soDePlTQLJlu62vIdOu",
+      "password": "$2b$10$J4htaTBIN1DWSwaQaB2cUefiLFA41cd8xs1lWrCBP.8wcgl2Qy6/i",
       "role": "ADMIN",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
@@ -69,6 +69,15 @@
       "password": "$2b$10$Rq6SkGlzt4EBRlsU1byML..b4QqkFvk1xCdKzp9JTuYjXFDxx5S2q",
       "role": "ADMIN",
       "createdAt": "2026-09-24T10:49:05.676Z"
+    },
+    {
+      "id": "usr-admin-1790248172485-o2k9v",
+      "name": "test.admin.provision",
+      "email": "test.admin.provision@tirthyatratrails.in",
+      "phone": "",
+      "password": "$2b$10$Ti1pHBPC0uggzOV4Ak.mIuV3IwYX53Oyrp8Rnb/ek0Eqw6GC0XeC6",
+      "role": "ADMIN",
+      "createdAt": "2026-09-24T11:09:32.485Z"
     }
   ],
   "staff": [
@@ -1826,6 +1835,13 @@
       "email": "test.admin.verify2@tirthyatratrails.in",
       "role": "Super Admin",
       "created_at": "2026-09-24T10:49:05.682Z",
+      "status": "Active & Authorized"
+    },
+    {
+      "id": "f834e917-a5ec-4390-ae41-97363510cb90",
+      "email": "test.admin.provision@tirthyatratrails.in",
+      "role": "Super Admin",
+      "created_at": "2026-09-24T11:09:32.491Z",
       "status": "Active & Authorized"
     }
   ],
