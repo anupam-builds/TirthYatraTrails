@@ -4,7 +4,7 @@
       "id": "usr-root-admin",
       "name": "Anupam Saxena (Root Admin)",
       "email": "anupamsaxena.dev@gmail.com",
-      "password": "$2b$10$A6UEWaaacZU6HcIRH/jsKeAIqFb8IcXbMR8Q3CACIkBJAcsz3gOEm",
+      "password": "$2b$10$MAF7ivkSkXpX2h/hic3pnuBFNUpGyPn2QlF/rHwoY1dqZ551TFgPK",
       "role": "ADMIN",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
@@ -39,7 +39,7 @@
       "name": "amitmodi229",
       "email": "amitmodi229@gmail.com",
       "phone": "",
-      "password": "$2b$10$0tZZ.Ml3f2mt.yUS..bLUukzNJ0S1XpbG7Xoyh.wo.Gx4vqBPlWQG",
+      "password": "$2b$10$qzvrNqTf5syKmU5XJyWR6uLfAQgbB5jHcbpPSNB9PvjjWZYr3B.Re",
       "role": "ADMIN",
       "createdAt": "2026-09-23T10:08:02.659Z"
     },
@@ -96,6 +96,15 @@
       "password": "$2b$10$2JeoCA.0deEi3rACR9AEi.inaLDHkPUf2DT23fFAOiwGateBzRTsy",
       "role": "ADMIN",
       "createdAt": "2026-09-24T11:22:41.251Z"
+    },
+    {
+      "id": "usr-admin-1790250380916-bp9pa",
+      "name": "test.allowlist.admin",
+      "email": "test.allowlist.admin@tirthyatratrails.in",
+      "phone": "",
+      "password": "$2b$10$.qggNoA.anXZr4nAkVzW8eII7mf8/q0s1gjvTYT2lEfWocOlbrhNO",
+      "role": "ADMIN",
+      "createdAt": "2026-09-24T11:46:20.916Z"
     }
   ],
   "staff": [
@@ -1856,24 +1865,10 @@
       "status": "Active & Authorized"
     },
     {
-      "id": "f834e917-a5ec-4390-ae41-97363510cb90",
-      "email": "test.admin.provision@tirthyatratrails.in",
+      "id": "87d33a62-75fc-451e-ae8c-3620318b98a4",
+      "email": "test.allowlist.admin@tirthyatratrails.in",
       "role": "Super Admin",
-      "created_at": "2026-09-24T11:09:32.491Z",
-      "status": "Active & Authorized"
-    },
-    {
-      "id": "4f5e46df-d0d6-4626-afd4-2994207bf7de",
-      "email": "superadmin.verify@tirthyatratrails.in",
-      "role": "Super Admin",
-      "created_at": "2026-09-24T11:21:01.386Z",
-      "status": "Active & Authorized"
-    },
-    {
-      "id": "2516c8db-f8f4-4e68-824a-f0968bc64a30",
-      "email": "provision.final.check@tirthyatratrails.in",
-      "role": "Super Admin",
-      "created_at": "2026-09-24T11:22:41.257Z",
+      "created_at": "2026-09-24T11:46:20.923Z",
       "status": "Active & Authorized"
     }
   ],

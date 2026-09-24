@@ -239,7 +239,13 @@ export const customFetch: typeof fetch = async (input, init) => {
 
         const serverRes = await fetch(serverUrl, { method: 'GET' });
         if (serverRes.ok) {
-          const list = await serverRes.json();
+          let rawData: any = null;
+          try {
+            rawData = await serverRes.json();
+          } catch {
+            rawData = null;
+          }
+          const list = Array.isArray(rawData) ? rawData : (Array.isArray(rawData?.data) ? rawData.data : (rawData ? [rawData] : []));
           if (isSingleObjectRequested) {
             const singleItem = Array.isArray(list) ? (list[0] || null) : list;
             return new Response(JSON.stringify(singleItem), {
@@ -247,7 +253,7 @@ export const customFetch: typeof fetch = async (input, init) => {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          return new Response(JSON.stringify(Array.isArray(list) ? list : (list ? [list] : [])), {
+          return new Response(JSON.stringify(Array.isArray(list) ? list : []), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           });

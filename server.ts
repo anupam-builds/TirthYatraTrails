@@ -573,15 +573,26 @@ app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async 
 });
 
 // ===================== ADMIN ALLOWLIST REST ROUTES =====================
-app.get('/api/admin/allowlist', (req, res) => {
+app.get('/api/admin/allowlist', async (req, res) => {
   try {
     let list = db.getAdminAllowlist();
     const { email } = req.query;
+    try {
+      let query = supabaseAdmin.from('admin_allowlist').select('*').order('created_at', { ascending: false });
+      if (email && typeof email === 'string') {
+        query = query.eq('email', (email as string).toLowerCase().trim());
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        list = data;
+      }
+    } catch {}
+
     if (email && typeof email === 'string') {
       const cleanEmail = email.toLowerCase().trim();
       list = list.filter((e) => e.email.toLowerCase() === cleanEmail);
     }
-    return res.json(list);
+    return res.json({ data: list, success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

@@ -966,8 +966,11 @@ export const api = {
   async getAdminAllowlist(): Promise<Array<{ id: string; email: string; role: string; created_at: string; status?: string }>> {
     try {
       const res = await fetch('/api/admin/allowlist');
-      if (res.ok) {
-        return await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const json = await res.json();
+        if (Array.isArray(json)) return json;
+        if (Array.isArray(json?.data)) return json.data;
       }
     } catch {}
     return [
@@ -1014,7 +1017,12 @@ export const api = {
       },
       body: JSON.stringify(params),
     });
-    const data = await res.json();
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server returned non-JSON response (${res.status}). Ensure API route is deployed.`);
+    }
     if (!res.ok || !data.success) {
       throw new Error(data.error || 'Failed to provision administrator credentials.');
     }
