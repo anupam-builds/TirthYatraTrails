@@ -884,10 +884,12 @@ export const StaffAccess: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-xs">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
+              <BaseInput
                 id="search-staff-input"
                 name="search_staff"
-                type="text"
+                type="search"
+                autoComplete="off"
+                aria-label="Search staff by name, email, or designation"
                 placeholder="Search staff by name, email, or designation..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1371,9 +1373,10 @@ export const StaffAccess: React.FC = () => {
                 <label htmlFor="filter-staff-log-select" className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   Filter Staff:
                 </label>
-                <select
+                <BaseSelect
                   id="filter-staff-log-select"
                   name="filter_staff_log"
+                  aria-label="Filter Staff Logs"
                   value={selectedStaffLogFilter}
                   onChange={(e) => setSelectedStaffLogFilter(e.target.value)}
                   className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -1384,7 +1387,7 @@ export const StaffAccess: React.FC = () => {
                       {s.name || s.email}
                     </option>
                   ))}
-                </select>
+                </BaseSelect>
               </div>
             </div>
 

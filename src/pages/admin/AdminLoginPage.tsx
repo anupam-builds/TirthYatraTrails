@@ -598,7 +598,7 @@ export const AdminLoginPage: React.FC = () => {
               {step === 'PASSWORD' && (
                 <form onSubmit={handleCompleteLogin} className="space-y-4">
                   {/* Hidden email input for browser autofill compliance */}
-                  <input
+                  <BaseInput
                     id="hidden-admin-email"
                     type="hidden"
                     name="admin_email"

@@ -21,6 +21,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { BaseInput } from '../FormField.js';
 
 interface AdministratorItem {
   id: string;
@@ -272,10 +273,11 @@ export const AdminManagerSection: React.FC = () => {
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-500">
                   <Mail className="w-4 h-4" />
                 </div>
-                <input
+                <BaseInput
                   id="new-admin-email"
                   name="target_email"
                   type="email"
+                  autoComplete="email"
                   required
                   value={targetEmail}
                   onChange={(e) => setTargetEmail(e.target.value)}
@@ -301,10 +303,11 @@ export const AdminManagerSection: React.FC = () => {
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-500">
                   <Lock className="w-4 h-4" />
                 </div>
-                <input
+                <BaseInput
                   id="new-admin-password"
                   name="target_password"
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
                   required
                   value={targetPassword}
                   onChange={(e) => setTargetPassword(e.target.value)}

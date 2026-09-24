@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * Generates a clean fallback attribute if neither id nor name is specified.
+ * Generates a clean, unique fallback attribute if neither id nor name is specified.
  */
 function useFallbackFieldIds(id?: string, name?: string, prefix: string = 'field') {
   const generatedId = React.useId();
@@ -12,26 +12,70 @@ function useFallbackFieldIds(id?: string, name?: string, prefix: string = 'field
 }
 
 /**
+ * Infers an appropriate autocomplete attribute if not explicitly specified.
+ */
+function inferAutoComplete(type?: string, name?: string, id?: string, currentAuto?: string): string | undefined {
+  if (currentAuto !== undefined) return currentAuto;
+  const n = (name || id || '').toLowerCase();
+  const t = (type || '').toLowerCase();
+
+  if (t === 'password') {
+    if (n.includes('new') || n.includes('confirm') || n.includes('create')) return 'new-password';
+    return 'current-password';
+  }
+  if (t === 'email' || n.includes('email')) return 'email';
+  if (t === 'tel' || n.includes('phone') || n.includes('mobile') || n.includes('whatsapp')) return 'tel';
+  if (n.includes('name') && !n.includes('hotel') && !n.includes('city') && !n.includes('room') && !n.includes('file')) {
+    return 'name';
+  }
+  if (t === 'search' || n.includes('search') || n.includes('filter') || n.includes('query')) {
+    return 'off';
+  }
+  return undefined;
+}
+
+/**
  * BaseInput primitive:
- * Guarantees native id and name presence on the <input> element.
+ * Guarantees native id, name, and accessibility attributes on the <input> element.
  */
 export const BaseInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ id, name, ...props }, ref) => {
+  ({ id, name, type, autoComplete, 'aria-label': ariaLabel, placeholder, ...props }, ref) => {
     const { resolvedId, resolvedName } = useFallbackFieldIds(id, name, 'input');
-    return <input ref={ref} id={resolvedId} name={resolvedName} {...props} />;
+    const computedAutoComplete = inferAutoComplete(type, resolvedName, resolvedId, autoComplete);
+    const resolvedAriaLabel = ariaLabel || (placeholder && typeof placeholder === 'string' ? placeholder : resolvedName);
+
+    return (
+      <input
+        ref={ref}
+        id={resolvedId}
+        name={resolvedName}
+        type={type}
+        autoComplete={computedAutoComplete}
+        aria-label={resolvedAriaLabel}
+        placeholder={placeholder}
+        {...props}
+      />
+    );
   }
 );
 BaseInput.displayName = 'BaseInput';
 
 /**
  * BaseSelect primitive:
- * Guarantees native id and name presence on the <select> element.
+ * Guarantees native id, name, and accessibility attributes on the <select> element.
  */
 export const BaseSelect = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ id, name, children, ...props }, ref) => {
+  ({ id, name, children, 'aria-label': ariaLabel, ...props }, ref) => {
     const { resolvedId, resolvedName } = useFallbackFieldIds(id, name, 'select');
+    const resolvedAriaLabel = ariaLabel || resolvedName;
     return (
-      <select ref={ref} id={resolvedId} name={resolvedName} {...props}>
+      <select
+        ref={ref}
+        id={resolvedId}
+        name={resolvedName}
+        aria-label={resolvedAriaLabel}
+        {...props}
+      >
         {children}
       </select>
     );
@@ -41,12 +85,22 @@ BaseSelect.displayName = 'BaseSelect';
 
 /**
  * BaseTextarea primitive:
- * Guarantees native id and name presence on the <textarea> element.
+ * Guarantees native id, name, and accessibility attributes on the <textarea> element.
  */
 export const BaseTextarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
-  ({ id, name, ...props }, ref) => {
+  ({ id, name, 'aria-label': ariaLabel, placeholder, ...props }, ref) => {
     const { resolvedId, resolvedName } = useFallbackFieldIds(id, name, 'textarea');
-    return <textarea ref={ref} id={resolvedId} name={resolvedName} {...props} />;
+    const resolvedAriaLabel = ariaLabel || (placeholder && typeof placeholder === 'string' ? placeholder : resolvedName);
+    return (
+      <textarea
+        ref={ref}
+        id={resolvedId}
+        name={resolvedName}
+        aria-label={resolvedAriaLabel}
+        placeholder={placeholder}
+        {...props}
+      />
+    );
   }
 );
 BaseTextarea.displayName = 'BaseTextarea';
@@ -90,13 +144,15 @@ export interface FormTextareaFieldProps extends React.TextareaHTMLAttributes<HTM
 
 /**
  * FormField component:
- * Guarantees id and name are explicitly bound directly
- * to native <input>, and that associated <label htmlFor={controlId}> strictly matches.
+ * Guarantees id, name, and autofill compliance directly
+ * to native <input>, with associated <label htmlFor={controlId}>.
  */
 export const FormField: React.FC<FormFieldProps> = ({
   label,
   id,
   name,
+  type,
+  autoComplete,
   value,
   onChange,
   className = '',
@@ -104,9 +160,11 @@ export const FormField: React.FC<FormFieldProps> = ({
   labelClassName = '',
   error,
   helperText,
+  placeholder,
   ...rest
 }) => {
   const { resolvedId: controlId, resolvedName: controlName } = useFallbackFieldIds(id, name, 'input');
+  const computedAutoComplete = inferAutoComplete(type, controlName, controlId, autoComplete);
 
   return (
     <div className={`flex flex-col gap-1 ${wrapperClassName}`}>
@@ -121,6 +179,10 @@ export const FormField: React.FC<FormFieldProps> = ({
       <input
         id={controlId}
         name={controlName}
+        type={type}
+        autoComplete={computedAutoComplete}
+        aria-label={label || placeholder || controlName}
+        placeholder={placeholder}
         value={value}
         onChange={onChange}
         className={`bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all ${
@@ -169,6 +231,7 @@ export const FormSelectField: React.FC<FormSelectFieldProps> = ({
       <select
         id={controlId}
         name={controlName}
+        aria-label={label || controlName}
         value={value}
         onChange={onChange}
         className={`bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all ${
@@ -206,6 +269,7 @@ export const FormTextareaField: React.FC<FormTextareaFieldProps> = ({
   labelClassName = '',
   error,
   helperText,
+  placeholder,
   ...rest
 }) => {
   const { resolvedId: controlId, resolvedName: controlName } = useFallbackFieldIds(id, name, 'textarea');
@@ -223,6 +287,8 @@ export const FormTextareaField: React.FC<FormTextareaFieldProps> = ({
       <textarea
         id={controlId}
         name={controlName}
+        aria-label={label || placeholder || controlName}
+        placeholder={placeholder}
         value={value}
         onChange={onChange}
         className={`bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all ${

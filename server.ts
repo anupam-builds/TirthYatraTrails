@@ -5,6 +5,20 @@ import { createServer as createViteServer } from 'vite';
 import { db } from './src/server/db.js';
 import bcrypt from 'bcryptjs';
 import { generateGoogleAuthUrl, handleGoogleOAuthCallback } from './src/server/auth.js';
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
+export const supabaseServer = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
+
+export const withTimeout = <T>(promise: PromiseLike<T>, ms: number = 2500): Promise<T> => {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)),
+  ]);
+};
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -923,108 +937,260 @@ app.get('/api/hotels', (req, res) => {
   const { cityId, city, query } = req.query;
   res.json(db.getHotels((cityId || city) as string, query as string));
 });
-app.get('/api/hotels/:id', (req, res) => {
-  const hotel = db.getHotelById(req.params.id);
-  if (!hotel) return res.status(404).json({ error: 'Hotel not found' });
-  res.json(hotel);
+app.get('/api/hotels/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    let hotel = db.getHotelById(id);
+    if (hotel) {
+      return res.json(hotel);
+    }
+
+    // Check Supabase if not found in local db
+    try {
+      const { data, error } = await withTimeout(
+        supabaseServer
+          .from('hotels')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle(),
+        2000
+      );
+
+      if (!error && data) {
+        hotel = db.createHotel(data);
+        return res.json(hotel || data);
+      }
+    } catch (supErr: any) {
+      console.warn('[API /api/hotels/:id] Supabase query fallback warning:', supErr?.message || supErr);
+    }
+
+    return res.status(404).json({ error: 'Hotel not found', id });
+  } catch (err: any) {
+    console.error('[API /api/hotels/:id] Error:', err);
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
 });
-app.post('/api/hotels', (req, res) => {
+
+app.post('/api/hotels', async (req, res) => {
   try {
     const created = db.createHotel(req.body);
-    res.status(201).json(created);
+    try {
+      await withTimeout(
+        supabaseServer.from('hotels').upsert({
+          id: created.id,
+          name: created.name,
+          city_id: created.cityId,
+          city_name: created.cityName,
+          address: created.address,
+          description: created.description,
+          base_price: created.basePrice,
+          star_rating: created.starRating,
+          distance_to_temple: created.distanceToTemple,
+          darshan_type: created.darshanType,
+          images: created.images,
+          amenities: created.amenities,
+          rooms: created.rooms,
+        }),
+        2000
+      );
+    } catch (supErr: any) {
+      console.warn('[API /api/hotels] Supabase sync warning:', supErr?.message || supErr);
+    }
+    return res.status(201).json(created);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API /api/hotels] POST error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to create hotel' });
   }
 });
-app.put('/api/hotels/:id', (req, res) => {
+
+const handleUpdateHotel = async (req: express.Request, res: express.Response) => {
   try {
-    const updated = db.updateHotel(req.params.id, req.body);
-    res.json(updated);
+    const id = req.params.id;
+    const body = req.body || {};
+    const updated = db.updateHotel(id, body);
+
+    // Sync to Supabase
+    try {
+      const payload: Record<string, any> = {
+        name: updated.name,
+        city_id: updated.cityId,
+        city_name: updated.cityName,
+        address: updated.address,
+        description: updated.description,
+        base_price: updated.basePrice,
+        star_rating: updated.starRating,
+        distance_to_temple: updated.distanceToTemple,
+        darshan_type: updated.darshanType,
+        is_featured: (updated as any).isFeatured ?? false,
+        is_top_rated: updated.isTopRated,
+      };
+      if (updated.images) payload.images = updated.images;
+      if (updated.amenities) payload.amenities = updated.amenities;
+      if (updated.rooms) payload.rooms = updated.rooms;
+
+      await withTimeout(
+        supabaseServer.from('hotels').update(payload).eq('id', id),
+        2000
+      );
+    } catch (supErr: any) {
+      console.warn('[API /api/hotels/:id] Supabase update warning:', supErr?.message || supErr);
+    }
+
+    return res.json(updated);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API /api/hotels/:id] Update error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to update hotel' });
   }
-});
-app.patch('/api/hotels/:id', (req, res) => {
+};
+
+app.put('/api/hotels/:id', handleUpdateHotel);
+app.patch('/api/hotels/:id', handleUpdateHotel);
+
+app.delete('/api/hotels/:id', async (req, res) => {
   try {
-    const updated = db.updateHotel(req.params.id, req.body);
-    res.json(updated);
+    const id = req.params.id;
+    db.deleteHotel(id);
+    try {
+      await withTimeout(
+        supabaseServer.from('hotels').delete().eq('id', id),
+        2000
+      );
+    } catch (supErr: any) {
+      console.warn('[API /api/hotels/:id] Supabase delete warning:', supErr?.message || supErr);
+    }
+    return res.json({ success: true, id });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-app.delete('/api/hotels/:id', (req, res) => {
-  try {
-    db.deleteHotel(req.params.id);
-    res.json({ success: true, id: req.params.id });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API /api/hotels/:id] DELETE error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to delete hotel' });
   }
 });
 
 // Hotel Inventory endpoints
-app.get('/api/hotel-inventory', (req, res) => {
+app.get('/api/hotel-inventory', async (req, res) => {
   try {
     const hotelId = req.query.hotel_id || req.query.hotelId;
+
+    if (hotelId) {
+      try {
+        const { data, error } = await supabaseServer
+          .from('hotel_inventory')
+          .select('*')
+          .eq('hotel_id', String(hotelId));
+
+        if (!error && data && data.length > 0) {
+          for (const item of data) {
+            db.createOrUpdateHotelInventory(item);
+          }
+          return res.json(data);
+        }
+      } catch (supErr: any) {
+        console.warn('[API /api/hotel-inventory] Supabase inventory fetch warning:', supErr?.message || supErr);
+      }
+    }
+
     const inventory = db.getHotelInventory(hotelId ? String(hotelId) : undefined);
-    res.json(inventory);
+    return res.json(inventory);
   } catch (err: any) {
     console.error('[API /api/hotel-inventory] GET error:', err);
-    res.status(200).json([]);
+    return res.status(200).json([]);
   }
 });
 
-app.get('/api/hotel-inventory/:id', (req, res) => {
+app.get('/api/hotel-inventory/:id', async (req, res) => {
   try {
     const all = db.getHotelInventory();
     const item = all.find((inv: any) => inv.id === req.params.id);
     if (!item) {
       return res.status(200).json({ id: req.params.id, status: 'AVAILABLE', rooms_count: 10 });
     }
-    res.json(item);
+    return res.json(item);
   } catch (err: any) {
-    res.status(200).json({ id: req.params.id, status: 'AVAILABLE', rooms_count: 10 });
+    return res.status(200).json({ id: req.params.id, status: 'AVAILABLE', rooms_count: 10 });
   }
 });
 
-app.post('/api/hotel-inventory', (req, res) => {
+app.post('/api/hotel-inventory', async (req, res) => {
   try {
     const body = req.body || {};
     const created = db.createOrUpdateHotelInventory(body);
-    res.status(201).json(created);
+
+    try {
+      await supabaseServer.from('hotel_inventory').upsert({
+        id: created.id,
+        hotel_id: created.hotel_id,
+        rooms_count: created.rooms_count,
+        allocation_status: created.allocation_status,
+        room_id: created.room_id,
+        room_type: created.room_type,
+        date: created.date,
+        total_inventory: created.total_inventory,
+        booked_count: created.booked_count,
+        blocked_count: created.blocked_count,
+        available_count: created.available_count,
+        base_rate: created.base_rate,
+        price_override: created.price_override,
+        status: created.status,
+        updated_by: created.updated_by,
+      });
+    } catch (supErr: any) {
+      console.warn('[API /api/hotel-inventory] Supabase inventory upsert warning:', supErr?.message || supErr);
+    }
+
+    return res.status(201).json(created);
   } catch (err: any) {
     console.error('[API /api/hotel-inventory] POST error:', err);
-    res.status(200).json({ success: true, ...req.body, id: req.body?.id || `inv-${Date.now()}` });
+    return res.status(200).json({ success: true, ...req.body, id: req.body?.id || `inv-${Date.now()}` });
   }
 });
 
-app.put(['/api/hotel-inventory', '/api/hotel-inventory/:id'], (req, res) => {
+const handleUpdateInventory = async (req: express.Request, res: express.Response) => {
   try {
     const id = req.params.id || req.body?.id || `inv-${Date.now()}`;
     const updated = db.updateHotelInventory(id, req.body || {});
-    res.json(updated);
+
+    try {
+      await supabaseServer.from('hotel_inventory').upsert({
+        id: updated.id,
+        hotel_id: updated.hotel_id,
+        rooms_count: updated.rooms_count,
+        allocation_status: updated.allocation_status,
+        room_id: updated.room_id,
+        room_type: updated.room_type,
+        date: updated.date,
+        total_inventory: updated.total_inventory,
+        booked_count: updated.booked_count,
+        blocked_count: updated.blocked_count,
+        available_count: updated.available_count,
+        base_rate: updated.base_rate,
+        price_override: updated.price_override,
+        status: updated.status,
+        updated_by: updated.updated_by,
+      });
+    } catch (supErr: any) {
+      console.warn('[API /api/hotel-inventory] Supabase inventory update warning:', supErr?.message || supErr);
+    }
+
+    return res.json(updated);
   } catch (err: any) {
     console.error('[API /api/hotel-inventory] PUT error:', err);
-    res.status(200).json({ success: true, ...req.body, id: req.params.id || req.body?.id || `inv-${Date.now()}` });
+    return res.status(200).json({ success: true, ...req.body, id: req.params.id || req.body?.id || `inv-${Date.now()}` });
   }
-});
+};
 
-app.patch(['/api/hotel-inventory', '/api/hotel-inventory/:id'], (req, res) => {
-  try {
-    const id = req.params.id || req.body?.id || `inv-${Date.now()}`;
-    const updated = db.updateHotelInventory(id, req.body || {});
-    res.json(updated);
-  } catch (err: any) {
-    console.error('[API /api/hotel-inventory] PATCH error:', err);
-    res.status(200).json({ success: true, ...req.body, id: req.params.id || req.body?.id || `inv-${Date.now()}` });
-  }
-});
+app.put(['/api/hotel-inventory', '/api/hotel-inventory/:id'], handleUpdateInventory);
+app.patch(['/api/hotel-inventory', '/api/hotel-inventory/:id'], handleUpdateInventory);
 
-app.delete('/api/hotel-inventory/:id', (req, res) => {
+app.delete('/api/hotel-inventory/:id', async (req, res) => {
   try {
     db.deleteHotelInventory(req.params.id);
-    res.json({ success: true, id: req.params.id });
+    try {
+      await supabaseServer.from('hotel_inventory').delete().eq('id', req.params.id);
+    } catch (supErr: any) {
+      console.warn('[API /api/hotel-inventory] Supabase inventory delete warning:', supErr?.message || supErr);
+    }
+    return res.json({ success: true, id: req.params.id });
   } catch (err: any) {
-    res.json({ success: true, id: req.params.id });
+    return res.json({ success: true, id: req.params.id });
   }
 });
 app.get('/api/packages', (req, res) => {

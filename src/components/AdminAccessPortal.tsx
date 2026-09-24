@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
+import { BaseInput, BaseSelect } from './FormField.js';
 import {
   ShieldCheck,
   UserPlus,
@@ -522,10 +523,11 @@ export const AdminAccessPortal: React.FC = () => {
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
+                <BaseInput
                   id="provision-admin-email"
                   name="admin_email"
                   type="email"
+                  autoComplete="email"
                   required
                   value={adminEmail}
                   onChange={(e) => setAdminEmail(e.target.value)}
@@ -559,10 +561,11 @@ export const AdminAccessPortal: React.FC = () => {
 
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
+                <BaseInput
                   id="provision-admin-password"
                   name="admin_password"
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
                   required
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
@@ -589,7 +592,7 @@ export const AdminAccessPortal: React.FC = () => {
               </label>
               <div className="relative">
                 <Layers className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
-                <select
+                <BaseSelect
                   id="provision-role-selection"
                   name="role"
                   value={role}
@@ -601,7 +604,7 @@ export const AdminAccessPortal: React.FC = () => {
                     Admin (Enterprise Operations) - Standard Management
                   </option>
                   <option value="Operations Lead">Operations Lead - Inquiries & Logistics</option>
-                </select>
+                </BaseSelect>
               </div>
 
               {/* Role description hint */}
@@ -664,10 +667,12 @@ export const AdminAccessPortal: React.FC = () => {
             {/* Search Input */}
             <div className="relative w-full sm:w-60">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-              <input
+              <BaseInput
                 id="search-administrators-input"
                 name="search_administrators"
-                type="text"
+                type="search"
+                autoComplete="off"
+                aria-label="Search administrators"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search administrators..."
@@ -885,9 +890,10 @@ export const AdminAccessPortal: React.FC = () => {
                 <label htmlFor="edit-role-selection" className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
                   Elevated Role Tier
                 </label>
-                <select
+                <BaseSelect
                   id="edit-role-selection"
                   name="edit_role"
+                  aria-label="Elevated Role Tier"
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-[#071322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
@@ -897,7 +903,7 @@ export const AdminAccessPortal: React.FC = () => {
                     Admin (Enterprise Operations) - Standard Management
                   </option>
                   <option value="Operations Lead">Operations Lead - Inquiries & Logistics</option>
-                </select>
+                </BaseSelect>
               </div>
 
               {/* Status Selection */}
@@ -905,16 +911,17 @@ export const AdminAccessPortal: React.FC = () => {
                 <label htmlFor="edit-status-selection" className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
                   Allowlist Authorization Status
                 </label>
-                <select
+                <BaseSelect
                   id="edit-status-selection"
                   name="edit_status"
+                  aria-label="Allowlist Authorization Status"
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-[#071322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
                 >
                   <option value="Active & Authorized">Active & Authorized</option>
                   <option value="Suspended / Inactive">Suspended / Inactive</option>
-                </select>
+                </BaseSelect>
               </div>
 
               <div className="flex items-center gap-3 pt-2">
