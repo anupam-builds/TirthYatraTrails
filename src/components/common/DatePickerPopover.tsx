@@ -150,12 +150,12 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
   return (
     <div ref={containerRef} className={`relative select-none ${className}`}>
       {/* Label */}
-      <label
-        htmlFor={id}
+      <span
+        onClick={() => setIsOpen(!isOpen)}
         className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer"
       >
         {label}
-      </label>
+      </span>
 
       {/* Field Trigger Display */}
       <div

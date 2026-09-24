@@ -369,14 +369,16 @@ export const LocationAutocompleteInput: React.FC<LocationAutocompleteInputProps>
 
   return (
     <div className="relative w-full" ref={containerRef}>
-      <label htmlFor={id} className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between cursor-pointer">
-        <span>{label}</span>
-        {isPinCodeMode && (
-          <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
-            PIN Code Detected
-          </span>
-        )}
-      </label>
+      {label && (
+        <label htmlFor={id} className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between cursor-pointer">
+          <span>{label}</span>
+          {isPinCodeMode && (
+            <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+              PIN Code Detected
+            </span>
+          )}
+        </label>
+      )}
 
       <div className="relative">
         {/* Left Indicator Icon */}

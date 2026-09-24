@@ -199,9 +199,9 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
     <div className="relative" ref={containerRef}>
       {/* Label and Inline Add Trigger */}
       <div className="flex items-center justify-between mb-1">
-        <label htmlFor="sacred-city-hybrid-trigger" className="block text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer">
+        <span className="block text-slate-700 dark:text-slate-300 font-bold text-xs">
           {label} {required && <span className="text-orange-500">*</span>}
-        </label>
+        </span>
         <button
           type="button"
           onClick={() => {

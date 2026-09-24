@@ -320,9 +320,9 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
       <div className={`relative ${className}`} ref={dropdownRef}>
         {label && (
           <div className="flex items-center justify-between mb-1">
-            <label htmlFor="sacred-city-manager-trigger" className="block text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+            <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
               {label}
-            </label>
+            </span>
             <button
               type="button"
               onClick={() => {

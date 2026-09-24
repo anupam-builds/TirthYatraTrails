@@ -163,9 +163,9 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
     <div className={`relative ${className}`} ref={containerRef} id={id ? `${id}-container` : undefined}>
       {label && (
         <div className="flex items-center justify-between mb-1.5">
-          <label htmlFor={id || 'sacred-city-selector-trigger'} className="block text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+          <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
             {label} {required && <span className="text-orange-500">*</span>}
-          </label>
+          </span>
           {allowQuickAdd && !isOpen && (
             <button
               type="button"

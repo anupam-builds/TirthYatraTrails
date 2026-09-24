@@ -832,12 +832,9 @@ export const EnquiryPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Pickup City */}
                       <div className="space-y-1.5">
-                        <label htmlFor="enquire-pickup-city" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                          Pickup City / Airport / Station
-                        </label>
                         <LocationAutocompleteInput
                           id="enquire-pickup-city"
-                          label="Pickup City"
+                          label="Pickup City / Airport / Station"
                           placeholder="e.g. Delhi, Haridwar, Dehradun, Lucknow..."
                           value={pickupCity}
                           onChange={setPickupCity}
@@ -849,9 +846,9 @@ export const EnquiryPage: React.FC = () => {
                       {/* Drop City */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <label htmlFor="enquire-drop-city" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                          <span className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Drop City / Airport / Station
-                          </label>
+                          </span>
                           <label htmlFor="enquire-same-drop-city-checkbox" className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
                             <BaseInput
                               id="enquire-same-drop-city-checkbox"
@@ -869,7 +866,6 @@ export const EnquiryPage: React.FC = () => {
                         </div>
                         <LocationAutocompleteInput
                           id="enquire-drop-city"
-                          label="Drop City"
                           placeholder="e.g. Delhi, Rishikesh, Varanasi..."
                           value={dropCity}
                           onChange={(val) => {
