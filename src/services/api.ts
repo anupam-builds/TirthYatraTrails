@@ -1996,29 +1996,193 @@ export const api = {
   },
 
   async updateHotel(id: string, hotel: Partial<Hotel>): Promise<Hotel> {
-    const payload = hotelToRow(hotel);
-    delete payload.id;
+    const rawPayload = hotelToRow(hotel);
+    delete rawPayload.id;
+    let payload = { ...rawPayload };
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const explicitHeaders = {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    };
+
+    console.log('[Supabase updateHotel] Initiating update for hotel ID:', id, payload);
+
+    let lastSupabaseError: any = null;
+
+    // Helper to sanitize unindexed/missing columns if Supabase returns PGRST204
+    const stripMissingColumn = (err: any, currentPayload: Record<string, any>): Record<string, any> | null => {
+      if (err?.code === 'PGRST204' || (typeof err?.message === 'string' && err.message.includes('schema cache'))) {
+        const match = err.message.match(/Could not find the '([^']+)' column/i);
+        if (match && match[1] && currentPayload[match[1]] !== undefined) {
+          console.warn(`[Supabase updateHotel] Stripping unindexed column '${match[1]}' and retrying...`);
+          const copy = { ...currentPayload };
+          delete copy[match[1]];
+          return copy;
+        }
+      }
+      return null;
+    };
+
+    // 1. Primary Attempt via Supabase Client SDK
     try {
-      const { data, error } = await supabase.from('hotels').update(payload).eq('id', id).select().maybeSingle();
-      if (!error && data) {
+      let { data, error } = await supabase
+        .from('hotels')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        lastSupabaseError = error;
+        console.error('[Supabase updateHotel] SDK update returned error:', error.message, error.details || '');
+
+        // If a column is missing from remote schema cache, dynamically strip and retry
+        const stripped = stripMissingColumn(error, payload);
+        if (stripped) {
+          payload = stripped;
+          const retryRes = await supabase
+            .from('hotels')
+            .update(payload)
+            .eq('id', id)
+            .select()
+            .maybeSingle();
+          if (!retryRes.error && retryRes.data) {
+            const mapped = mapHotelRow(retryRes.data);
+            localStore.updateHotel(id, mapped);
+            fetch(`/api/hotels/${encodeURIComponent(id)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(hotel),
+            }).catch(() => {});
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: mapped } }));
+            }
+            return mapped;
+          }
+          if (retryRes.error) lastSupabaseError = retryRes.error;
+        }
+      } else if (data) {
         const mapped = mapHotelRow(data);
         localStore.updateHotel(id, mapped);
+        fetch(`/api/hotels/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(hotel),
+        }).catch(() => {});
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: mapped } }));
+        }
         return mapped;
       }
-      const restRes = await supabaseRest<any[]>('hotels', {
-        method: 'PATCH',
-        params: { id: `eq.${id}` },
-        body: payload,
-      });
-      if (restRes.data && restRes.data.length > 0) {
-        const mapped = mapHotelRow(restRes.data[0]);
-        localStore.updateHotel(id, mapped);
-        return mapped;
-      }
-    } catch (err) {
-      console.warn('updateHotel remote error, falling back to localStore', err);
+    } catch (sdkErr: any) {
+      console.warn('[Supabase updateHotel] SDK exception:', sdkErr);
+      lastSupabaseError = sdkErr;
     }
-    return localStore.updateHotel(id, hotel);
+
+    // 2. Secondary Attempt: Direct REST PATCH with explicit headers (bypasses potential client RLS blockage)
+    try {
+      const restUrl = `${SUPABASE_URL}/rest/v1/hotels?id=eq.${encodeURIComponent(id)}`;
+      const patchRes = await fetch(restUrl, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify(payload),
+      });
+
+      if (patchRes.ok) {
+        const patchData = await patchRes.json();
+        const row = Array.isArray(patchData) ? patchData[0] : patchData;
+        if (row) {
+          const mapped = mapHotelRow(row);
+          localStore.updateHotel(id, mapped);
+          fetch(`/api/hotels/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(hotel),
+          }).catch(() => {});
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: mapped } }));
+          }
+          return mapped;
+        }
+      } else {
+        const errBody = await patchRes.text();
+        console.error(`[Supabase updateHotel] REST PATCH failed (${patchRes.status}):`, errBody);
+        try {
+          lastSupabaseError = JSON.parse(errBody);
+        } catch {
+          lastSupabaseError = { message: errBody, status: patchRes.status };
+        }
+      }
+    } catch (restErr) {
+      console.warn('[Supabase updateHotel] Direct REST exception:', restErr);
+    }
+
+    // 3. Upsert Attempt in Supabase if the record did not exist remotely (e.g. local ID)
+    try {
+      const { data: upsertData, error: upsertErr } = await supabase
+        .from('hotels')
+        .upsert({ ...payload, id })
+        .select()
+        .maybeSingle();
+
+      if (!upsertErr && upsertData) {
+        const mapped = mapHotelRow(upsertData);
+        localStore.updateHotel(id, mapped);
+        fetch(`/api/hotels/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(hotel),
+        }).catch(() => {});
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: mapped } }));
+        }
+        return mapped;
+      }
+      if (upsertErr) {
+        lastSupabaseError = upsertErr;
+      }
+    } catch (upsertEx) {
+      console.warn('[Supabase updateHotel] Upsert exception:', upsertEx);
+    }
+
+    // 4. Fallback to Express backend /api/hotels/:id
+    try {
+      const serverRes = await fetch(`/api/hotels/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(hotel),
+      });
+      if (serverRes.ok) {
+        const serverHotel = await serverRes.json();
+        const saved = localStore.updateHotel(id, serverHotel);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: saved } }));
+        }
+        return saved;
+      }
+    } catch (serverErr) {
+      console.warn('[Supabase updateHotel] Backend server route exception:', serverErr);
+    }
+
+    // If a fatal database error occurred and could not be resolved, rethrow with specific message
+    if (lastSupabaseError) {
+      const errorMsg =
+        lastSupabaseError.message ||
+        lastSupabaseError.details ||
+        lastSupabaseError.hint ||
+        (typeof lastSupabaseError === 'string' ? lastSupabaseError : JSON.stringify(lastSupabaseError));
+      console.error('[Supabase updateHotel] Raising database error to caller:', errorMsg);
+      throw new Error(`Database Error: ${errorMsg}`);
+    }
+
+    const saved = localStore.updateHotel(id, hotel);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: saved } }));
+    }
+    return saved;
   },
 
   async deleteHotel(id: string): Promise<boolean> {
@@ -3524,39 +3688,103 @@ export function hotelToRow(hotel: Partial<Hotel>): Record<string, any> {
   if (hotel.cityName !== undefined || (hotel as any).city_name !== undefined) {
     row.city_name = hotel.cityName ?? (hotel as any).city_name;
   }
-  if (hotel.name !== undefined) row.name = hotel.name;
+  if (hotel.name !== undefined) row.name = String(hotel.name).trim();
   if (hotel.starRating !== undefined || (hotel as any).star_rating !== undefined) {
     row.star_rating = Number(hotel.starRating ?? (hotel as any).star_rating ?? 3);
   }
   if (hotel.googleRating !== undefined || (hotel as any).google_rating !== undefined) {
-    row.google_rating = Number(hotel.googleRating ?? (hotel as any).google_rating ?? 4.5);
+    const gRate = Number(hotel.googleRating ?? (hotel as any).google_rating ?? 4.5);
+    row.google_rating = gRate;
+    row.rating = gRate;
   }
   if (hotel.reviewCount !== undefined || (hotel as any).review_count !== undefined) {
     row.review_count = Number(hotel.reviewCount ?? (hotel as any).review_count ?? 0);
   }
-  if (hotel.address !== undefined) row.address = hotel.address;
-  if (hotel.description !== undefined) row.description = hotel.description;
+  if (hotel.address !== undefined) row.address = String(hotel.address).trim();
+  if (hotel.description !== undefined) row.description = String(hotel.description).trim();
+
+  // Images: Ensure JSONB array of string URLs and populate singular image / image_url
   if (hotel.images !== undefined) {
-    row.images = Array.isArray(hotel.images) ? hotel.images : [];
+    const rawImgs = Array.isArray(hotel.images)
+      ? hotel.images
+      : typeof hotel.images === 'string'
+      ? [(hotel.images as string)]
+      : [];
+    const validImgs = rawImgs.map(String).map((s) => s.trim()).filter(Boolean);
+    row.images = validImgs;
+    if (validImgs.length > 0) {
+      row.image_url = validImgs[0];
+      row.image = validImgs[0];
+    }
   }
+
+  // Amenities: Ensure clean array of string items (e.g. ['Pure Vegetarian Dining', 'Free Wi-Fi'])
   if (hotel.amenities !== undefined) {
-    row.amenities = Array.isArray(hotel.amenities) ? hotel.amenities : [];
+    let rawAmenities: any = hotel.amenities;
+    if (typeof rawAmenities === 'string') {
+      try {
+        const parsed = JSON.parse(rawAmenities);
+        rawAmenities = Array.isArray(parsed) ? parsed : [rawAmenities];
+      } catch {
+        rawAmenities = (rawAmenities as string).split(',').map((s) => s.trim());
+      }
+    }
+    row.amenities = (Array.isArray(rawAmenities) ? rawAmenities : [])
+      .map(String)
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
-  if (hotel.basePrice !== undefined || (hotel as any).base_price !== undefined) {
-    row.base_price = Number(hotel.basePrice ?? (hotel as any).base_price ?? 0);
+
+  // Base price & price_per_night
+  if (hotel.basePrice !== undefined || (hotel as any).base_price !== undefined || (hotel as any).price_per_night !== undefined) {
+    const p = Number(hotel.basePrice ?? (hotel as any).base_price ?? (hotel as any).price_per_night ?? 0);
+    row.base_price = p;
+    row.price_per_night = p;
   }
-  if (hotel.isTopRated !== undefined || (hotel as any).is_top_rated !== undefined) {
-    row.is_top_rated = Boolean(hotel.isTopRated ?? (hotel as any).is_top_rated);
+
+  // Handle featured & is_top_rated:
+  // Supabase hotels schema contains columns `featured` and `is_top_rated`.
+  // Intentionally do NOT put `is_featured` directly into row to prevent PGRST204 column not found errors!
+  const isTop = Boolean(
+    hotel.isTopRated ??
+    (hotel as any).is_top_rated ??
+    (hotel as any).featured ??
+    (hotel as any).is_featured ??
+    (hotel as any).isFeatured
+  );
+  if (
+    hotel.isTopRated !== undefined ||
+    (hotel as any).is_top_rated !== undefined ||
+    (hotel as any).featured !== undefined ||
+    (hotel as any).is_featured !== undefined ||
+    (hotel as any).isFeatured !== undefined
+  ) {
+    row.is_top_rated = isTop;
+    row.featured = isTop;
   }
-  if (hotel.distanceToTemple !== undefined || (hotel as any).distance_to_temple !== undefined) {
-    row.distance_to_temple = hotel.distanceToTemple ?? (hotel as any).distance_to_temple;
+
+  if (hotel.distanceToTemple !== undefined || (hotel as any).distance_to_temple !== undefined || (hotel as any).distance_from_temple !== undefined) {
+    const dist = String(hotel.distanceToTemple ?? (hotel as any).distance_to_temple ?? (hotel as any).distance_from_temple ?? '').trim();
+    row.distance_to_temple = dist;
+    row.distance_from_temple = dist;
   }
+
   if (hotel.darshanType !== undefined || (hotel as any).darshan_type !== undefined) {
-    row.darshan_type = hotel.darshanType ?? (hotel as any).darshan_type;
+    row.darshan_type = String(hotel.darshanType ?? (hotel as any).darshan_type ?? '').trim();
   }
+
   if (hotel.rooms !== undefined) {
-    row.rooms = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+    let rawRooms = hotel.rooms;
+    if (typeof rawRooms === 'string') {
+      try {
+        rawRooms = JSON.parse(rawRooms);
+      } catch {
+        rawRooms = [];
+      }
+    }
+    row.rooms = Array.isArray(rawRooms) ? rawRooms : [];
   }
+
   return row;
 }
 

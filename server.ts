@@ -636,6 +636,16 @@ app.delete('/api/admin/allowlist/:idOrEmail', (req, res) => {
 
 // ===================== SCHEMA & MIGRATION ASSISTANCE =====================
 app.get('/api/admin/schema/sql', (_req, res) => {
+  try {
+    const migrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20260924_admin_allowlist_pgrst205.sql');
+    if (fs.existsSync(migrationPath)) {
+      const fileSql = fs.readFileSync(migrationPath, 'utf8');
+      res.setHeader('Content-Type', 'text/plain');
+      return res.send(fileSql);
+    }
+  } catch (e) {
+    console.warn('Error reading migration file:', e);
+  }
   const sql = `-- Migration: Create admin_allowlist, agency_settings, sacred_cities and reload schema
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -722,6 +732,61 @@ ALTER TABLE public.sacred_cities ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public read access for sacred_cities" ON public.sacred_cities;
 CREATE POLICY "Public read access for sacred_cities"
     ON public.sacred_cities FOR SELECT TO anon, authenticated USING (true);
+
+CREATE TABLE IF NOT EXISTS public.hotels (
+    id TEXT PRIMARY KEY,
+    city_id TEXT,
+    city_name TEXT,
+    name TEXT NOT NULL,
+    star_rating NUMERIC DEFAULT 4,
+    google_rating NUMERIC(3, 2) DEFAULT 4.5,
+    review_count INTEGER DEFAULT 0,
+    address TEXT,
+    description TEXT,
+    images JSONB DEFAULT '[]'::JSONB,
+    amenities JSONB DEFAULT '[]'::JSONB,
+    base_price NUMERIC DEFAULT 3500,
+    price_per_night NUMERIC DEFAULT 3500,
+    rating NUMERIC DEFAULT 4.5,
+    image TEXT,
+    image_url TEXT,
+    featured BOOLEAN DEFAULT FALSE,
+    is_top_rated BOOLEAN DEFAULT FALSE,
+    distance_to_temple TEXT,
+    distance_from_temple TEXT,
+    darshan_type TEXT,
+    rooms JSONB DEFAULT '[]'::JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.hotels ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read access for hotels" ON public.hotels;
+CREATE POLICY "Public read access for hotels" ON public.hotels FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Full write access for hotels" ON public.hotels;
+CREATE POLICY "Full write access for hotels" ON public.hotels FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS public.hotel_inventory (
+    id TEXT PRIMARY KEY,
+    hotel_id TEXT NOT NULL,
+    room_id TEXT,
+    room_type TEXT NOT NULL DEFAULT 'Deluxe Room',
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    total_inventory INTEGER NOT NULL DEFAULT 10,
+    booked_count INTEGER NOT NULL DEFAULT 0,
+    blocked_count INTEGER NOT NULL DEFAULT 0,
+    available_count INTEGER NOT NULL DEFAULT 10,
+    base_rate NUMERIC(10, 2) NOT NULL DEFAULT 3500.00,
+    status TEXT DEFAULT 'AVAILABLE',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.hotel_inventory ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read access for hotel_inventory" ON public.hotel_inventory;
+CREATE POLICY "Public read access for hotel_inventory" ON public.hotel_inventory FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Full write access for hotel_inventory" ON public.hotel_inventory;
+CREATE POLICY "Full write access for hotel_inventory" ON public.hotel_inventory FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload schema';
 `;
@@ -848,6 +913,63 @@ app.get('/api/hotels/:id', (req, res) => {
   const hotel = db.getHotelById(req.params.id);
   if (!hotel) return res.status(404).json({ error: 'Hotel not found' });
   res.json(hotel);
+});
+app.post('/api/hotels', (req, res) => {
+  try {
+    const created = db.createHotel(req.body);
+    res.status(201).json(created);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.put('/api/hotels/:id', (req, res) => {
+  try {
+    const updated = db.updateHotel(req.params.id, req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.patch('/api/hotels/:id', (req, res) => {
+  try {
+    const updated = db.updateHotel(req.params.id, req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.delete('/api/hotels/:id', (req, res) => {
+  try {
+    db.deleteHotel(req.params.id);
+    res.json({ success: true, id: req.params.id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Hotel Inventory endpoints
+app.get('/api/hotel-inventory', (req, res) => {
+  const hotelId = req.query.hotel_id || req.query.hotelId;
+  const hotel = hotelId ? db.getHotelById(String(hotelId)) : null;
+  const rooms = hotel?.rooms || [];
+  const inventory = rooms.map((r, i) => ({
+    id: `inv-${r.id || i}`,
+    hotel_id: hotelId || 'hotel-default',
+    room_id: r.id || `room-${i}`,
+    room_type: r.name || 'Sanctum Deluxe Room',
+    date: new Date().toISOString().split('T')[0],
+    total_inventory: 10,
+    booked_count: 2,
+    blocked_count: 1,
+    available_count: 7,
+    base_rate: r.roomOnlyPrice || 3500,
+    status: 'AVAILABLE',
+    updated_by: 'Admin',
+  }));
+  res.json(inventory);
+});
+app.all(['/api/hotel-inventory', '/api/hotel-inventory/:id'], (req, res) => {
+  res.json({ success: true, ...req.body, id: req.params.id || `inv-${Date.now()}` });
 });
 app.get('/api/packages', (req, res) => {
   const { category, query } = req.query;

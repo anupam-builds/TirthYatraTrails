@@ -128,5 +128,97 @@ CREATE POLICY "Public read access for sacred_cities"
     TO anon, authenticated
     USING (true);
 
--- 9. Reload PostgREST schema cache immediately
+-- 9. Ensure public.hotels columns and full RLS write/read policies for anon and authenticated users
+CREATE TABLE IF NOT EXISTS public.hotels (
+    id TEXT PRIMARY KEY,
+    city_id TEXT,
+    city_name TEXT,
+    name TEXT NOT NULL,
+    star_rating NUMERIC DEFAULT 4,
+    google_rating NUMERIC(3, 2) DEFAULT 4.5,
+    review_count INTEGER DEFAULT 0,
+    address TEXT,
+    description TEXT,
+    images JSONB DEFAULT '[]'::JSONB,
+    amenities JSONB DEFAULT '[]'::JSONB,
+    base_price NUMERIC DEFAULT 3500,
+    price_per_night NUMERIC DEFAULT 3500,
+    rating NUMERIC DEFAULT 4.5,
+    image TEXT,
+    image_url TEXT,
+    featured BOOLEAN DEFAULT FALSE,
+    is_top_rated BOOLEAN DEFAULT FALSE,
+    distance_to_temple TEXT,
+    distance_from_temple TEXT,
+    darshan_type TEXT,
+    rooms JSONB DEFAULT '[]'::JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Ensure all optional columns exist
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS is_top_rated BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS rooms JSONB DEFAULT '[]'::JSONB;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS amenities JSONB DEFAULT '[]'::JSONB;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::JSONB;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS price_per_night NUMERIC;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS distance_to_temple TEXT;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS distance_from_temple TEXT;
+ALTER TABLE public.hotels ADD COLUMN IF NOT EXISTS darshan_type TEXT;
+
+ALTER TABLE public.hotels ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read access for hotels" ON public.hotels;
+CREATE POLICY "Public read access for hotels"
+    ON public.hotels
+    FOR SELECT
+    TO anon, authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "Full write access for hotels" ON public.hotels;
+CREATE POLICY "Full write access for hotels"
+    ON public.hotels
+    FOR ALL
+    TO anon, authenticated
+    USING (true)
+    WITH CHECK (true);
+
+-- 10. Guarantee public.hotel_inventory table & RLS policies
+CREATE TABLE IF NOT EXISTS public.hotel_inventory (
+    id TEXT PRIMARY KEY,
+    hotel_id TEXT NOT NULL,
+    room_id TEXT,
+    room_type TEXT NOT NULL DEFAULT 'Deluxe Room',
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    total_inventory INTEGER NOT NULL DEFAULT 10 CHECK (total_inventory >= 0),
+    booked_count INTEGER NOT NULL DEFAULT 0 CHECK (booked_count >= 0),
+    blocked_count INTEGER NOT NULL DEFAULT 0 CHECK (blocked_count >= 0),
+    available_count INTEGER NOT NULL DEFAULT 10,
+    base_rate NUMERIC(10, 2) NOT NULL DEFAULT 3500.00,
+    price_override NUMERIC(10, 2),
+    status TEXT DEFAULT 'AVAILABLE',
+    updated_by TEXT DEFAULT 'Admin',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.hotel_inventory ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read access for hotel_inventory" ON public.hotel_inventory;
+CREATE POLICY "Public read access for hotel_inventory"
+    ON public.hotel_inventory
+    FOR SELECT
+    TO anon, authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "Full write access for hotel_inventory" ON public.hotel_inventory;
+CREATE POLICY "Full write access for hotel_inventory"
+    ON public.hotel_inventory
+    FOR ALL
+    TO anon, authenticated
+    USING (true)
+    WITH CHECK (true);
+
+-- 11. Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';

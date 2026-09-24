@@ -4,7 +4,7 @@
       "id": "usr-root-admin",
       "name": "Anupam Saxena (Root Admin)",
       "email": "anupamsaxena.dev@gmail.com",
-      "password": "$2b$10$fwmnwZ0fJkwg35y/BP3l5OQMkx/IDGC8qEFrtwWrHmbnPKN/3K/yu",
+      "password": "$2b$10$LtAUiFhOaxaEnSKDgJ9h7un55MRSX6s8MvGlvn.ol6pNH9dclwktm",
       "role": "ADMIN",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
@@ -466,7 +466,7 @@
       "googleRating": 4.8,
       "reviewCount": 95,
       "address": "Near Main Temple Gate",
-      "description": "Serene pilgrimage stay offering pure vegetarian dining, warm hospitalities, and walking distance to sacred morning aarti.",
+      "description": "Serene pilgrimage stay offering pure vegetarian dining, warm hospitalities, and walking distance to sacred morning aarti. (Verified)",
       "images": [
         "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
         "https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80"

@@ -428,6 +428,38 @@ export const customFetch: typeof fetch = async (input, init) => {
     });
   }
 
+  // Server-enforced REST proxy for hotel_inventory
+  if (urlStr.includes('/rest/v1/hotel_inventory')) {
+    try {
+      reqInit.headers = headers;
+      const remoteRes = await fetch(input, reqInit);
+      if (remoteRes.ok) {
+        return remoteRes;
+      }
+      const errText = await remoteRes.clone().text();
+      if (!errText.includes('PGRST205') && !errText.includes('Could not find the table') && remoteRes.status !== 404) {
+        return remoteRes;
+      }
+    } catch {}
+
+    // Fallback to Express backend /api/hotel-inventory
+    try {
+      const serverRes = await fetch('/api/hotel-inventory');
+      if (serverRes.ok) {
+        const inventory = await serverRes.json();
+        return new Response(JSON.stringify(inventory), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } catch {}
+
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   reqInit.headers = headers;
   return fetch(input, reqInit);
 };

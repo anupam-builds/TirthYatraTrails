@@ -289,6 +289,7 @@ export const AdminHotels: React.FC = () => {
 
     try {
       if (editingHotel) {
+        console.log('[AdminHotels] Submitting hotel update for ID:', editingHotel.id, hotelData);
         const updated = await api.updateHotel(editingHotel.id, hotelData);
         setHotels((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
         await refreshCities();
@@ -299,6 +300,7 @@ export const AdminHotels: React.FC = () => {
           message: `Changes to "${updated.name}" have been saved successfully.`,
         });
       } else {
+        console.log('[AdminHotels] Creating new hotel listing:', hotelData);
         const created = await api.createHotel(hotelData);
         setHotels((prev) => reconcileRealtimeList(prev, 'INSERT', created));
         await refreshCities();
@@ -311,12 +313,20 @@ export const AdminHotels: React.FC = () => {
       }
       setIsModalOpen(false);
       setTimeout(() => setToast(null), 5000);
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[AdminHotels] Supabase save failure:', err);
+      // Extract specific Supabase error message, hint, or details
+      const specificError =
+        err?.message ||
+        err?.details ||
+        err?.error_description ||
+        err?.hint ||
+        (typeof err === 'string' ? err : 'Failed saving hotel details.');
       setToast({
         id: String(Date.now()),
         type: 'error',
         title: 'Save Failed',
-        message: 'Failed saving hotel details.',
+        message: specificError,
       });
     }
   };
