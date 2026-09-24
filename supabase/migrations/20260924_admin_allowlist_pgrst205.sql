@@ -1,6 +1,7 @@
 -- ==============================================================================
 -- Migration: 20260924_admin_allowlist_pgrst205.sql
--- Description: Creates the public.admin_allowlist table to resolve PGRST205,
+-- Description: Creates public.admin_allowlist, public.agency_settings, and
+--              public.sacred_cities tables to resolve PGRST205 / 404 errors,
 --              seeds root admin anupamsaxena.dev@gmail.com, configures RLS,
 --              and notifies PostgREST to reload schema cache.
 -- ==============================================================================
@@ -44,10 +45,9 @@ VALUES (
 )
 ON CONFLICT (email) DO NOTHING;
 
--- 6. Enable Row Level Security (RLS)
+-- 6. Enable Row Level Security (RLS) for admin_allowlist
 ALTER TABLE public.admin_allowlist ENABLE ROW LEVEL SECURITY;
 
--- 7. RLS Policies
 DROP POLICY IF EXISTS "Public read access for admin allowlist" ON public.admin_allowlist;
 CREATE POLICY "Public read access for admin allowlist"
     ON public.admin_allowlist
@@ -63,5 +63,70 @@ CREATE POLICY "Authenticated write access for admin allowlist"
     USING (true)
     WITH CHECK (true);
 
--- 8. Reload PostgREST schema cache immediately
+-- 7. Create public.agency_settings table
+CREATE TABLE IF NOT EXISTS public.agency_settings (
+    id TEXT PRIMARY KEY DEFAULT 'agency-settings-default',
+    contact_phone TEXT NOT NULL DEFAULT '+91 98765 43210',
+    emergency_phone TEXT NOT NULL DEFAULT '+91 98765 43211',
+    support_email TEXT NOT NULL DEFAULT 'support@tirthyatratrails.com',
+    whatsapp_helpline TEXT NOT NULL DEFAULT '+91 98765 43210',
+    desk_name TEXT NOT NULL DEFAULT 'TirthYatraTrails Central Travel Desk',
+    email TEXT NOT NULL DEFAULT 'support@tirthyatratrails.com',
+    phone TEXT NOT NULL DEFAULT '+91 98765 43210',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Seed initial agency settings row
+INSERT INTO public.agency_settings (id, contact_phone, emergency_phone, support_email, whatsapp_helpline, desk_name, email, phone)
+VALUES (
+    'agency-settings-default',
+    '+91 98765 43210',
+    '+91 98765 43211',
+    'support@tirthyatratrails.com',
+    '+91 98765 43210',
+    'TirthYatraTrails Central Travel Desk',
+    'support@tirthyatratrails.com',
+    '+91 98765 43210'
+)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.agency_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read access for agency_settings" ON public.agency_settings;
+CREATE POLICY "Public read access for agency_settings"
+    ON public.agency_settings
+    FOR SELECT
+    TO anon, authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "Write access for agency_settings" ON public.agency_settings;
+CREATE POLICY "Write access for agency_settings"
+    ON public.agency_settings
+    FOR ALL
+    TO anon, authenticated
+    USING (true)
+    WITH CHECK (true);
+
+-- 8. Create public.sacred_cities view / table alias
+CREATE TABLE IF NOT EXISTS public.sacred_cities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    state TEXT,
+    popular_for TEXT,
+    image_url TEXT,
+    hotel_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.sacred_cities ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read access for sacred_cities" ON public.sacred_cities;
+CREATE POLICY "Public read access for sacred_cities"
+    ON public.sacred_cities
+    FOR SELECT
+    TO anon, authenticated
+    USING (true);
+
+-- 9. Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';

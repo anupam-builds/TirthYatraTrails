@@ -329,6 +329,105 @@ export const customFetch: typeof fetch = async (input, init) => {
     );
   }
 
+  // Server-enforced REST proxy for agency_settings
+  if (urlStr.includes('/rest/v1/agency_settings')) {
+    const isSingleObjectRequested = (headers.get('accept') || '').includes('application/vnd.pgrst.object+json');
+    const method = (reqInit.method || 'GET').toUpperCase();
+
+    // Check remote Supabase first, but gracefully fallback if table is missing in schema cache (PGRST205)
+    try {
+      reqInit.headers = headers;
+      const remoteRes = await fetch(input, reqInit);
+      if (remoteRes.ok) {
+        return remoteRes;
+      }
+      const errText = await remoteRes.clone().text();
+      if (!errText.includes('PGRST205') && !errText.includes('Could not find the table') && remoteRes.status !== 404) {
+        return remoteRes;
+      }
+    } catch {}
+
+    // Fallback to Express backend /api/agency-settings
+    try {
+      if (method === 'GET') {
+        const serverRes = await fetch('/api/agency-settings');
+        if (serverRes.ok) {
+          const settings = await serverRes.json();
+          return new Response(
+            JSON.stringify(isSingleObjectRequested ? settings : [settings]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      } else if (method === 'PATCH' || method === 'PUT' || method === 'POST') {
+        const serverRes = await fetch('/api/agency-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: reqInit.body,
+        });
+        if (serverRes.ok) {
+          const updated = await serverRes.json();
+          return new Response(
+            JSON.stringify(isSingleObjectRequested ? updated : [updated]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    } catch (fallbackErr: any) {
+      console.warn('[supabase customFetch] agency_settings fallback notice:', fallbackErr?.message);
+    }
+
+    // Default static agency configuration
+    const defaultAgency = {
+      id: 'agency-settings-default',
+      contact_phone: '+91 98765 43210',
+      emergency_phone: '+91 98765 43211',
+      support_email: 'support@tirthyatratrails.com',
+      whatsapp_helpline: '+91 98765 43210',
+      desk_name: 'TirthYatraTrails Central Travel Desk',
+      email: 'support@tirthyatratrails.com',
+      phone: '+91 98765 43210',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    };
+
+    return new Response(
+      JSON.stringify(isSingleObjectRequested ? defaultAgency : [defaultAgency]),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Server-enforced REST proxy for sacred_cities
+  if (urlStr.includes('/rest/v1/sacred_cities')) {
+    try {
+      reqInit.headers = headers;
+      const remoteRes = await fetch(input, reqInit);
+      if (remoteRes.ok) {
+        return remoteRes;
+      }
+      const errText = await remoteRes.clone().text();
+      if (!errText.includes('PGRST205') && !errText.includes('Could not find the table') && remoteRes.status !== 404) {
+        return remoteRes;
+      }
+    } catch {}
+
+    // Fallback to Express backend /api/cities
+    try {
+      const serverRes = await fetch('/api/cities');
+      if (serverRes.ok) {
+        const cities = await serverRes.json();
+        return new Response(JSON.stringify(cities), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } catch {}
+
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   reqInit.headers = headers;
   return fetch(input, reqInit);
 };

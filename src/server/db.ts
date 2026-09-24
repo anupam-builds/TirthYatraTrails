@@ -22,6 +22,32 @@ export interface AdminAllowlistEntry {
   status?: string;
 }
 
+export interface AgencySettings {
+  id: string;
+  contact_phone: string;
+  emergency_phone: string;
+  support_email: string;
+  whatsapp_helpline: string;
+  desk_name: string;
+  email: string;
+  phone: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const INITIAL_AGENCY_SETTINGS: AgencySettings = {
+  id: 'agency-settings-default',
+  contact_phone: '+91 98765 43210',
+  emergency_phone: '+91 98765 43211',
+  support_email: 'support@tirthyatratrails.com',
+  whatsapp_helpline: '+91 98765 43210',
+  desk_name: 'TirthYatraTrails Central Travel Desk',
+  email: 'support@tirthyatratrails.com',
+  phone: '+91 98765 43210',
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+};
+
 export const INITIAL_ADMIN_ALLOWLIST: AdminAllowlistEntry[] = [
   {
     id: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
@@ -52,6 +78,7 @@ interface DatabaseSchema {
   companions?: CompanionProfile[];
   companionConnections?: CompanionConnection[];
   admin_allowlist?: AdminAllowlistEntry[];
+  agency_settings?: AgencySettings;
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -405,6 +432,33 @@ class DatabaseStore {
     if (clean === 'anupamsaxena.dev@gmail.com' || clean === 'admin@tirthyatratrails.com') return true;
     const list = this.getAdminAllowlist();
     return list.some((e) => e.email.toLowerCase() === clean);
+  }
+
+  // Agency Settings & Central Helpline
+  public getAgencySettings(): AgencySettings {
+    if (!this.data.agency_settings) {
+      this.data.agency_settings = { ...INITIAL_AGENCY_SETTINGS };
+    }
+    return { ...this.data.agency_settings };
+  }
+
+  public updateAgencySettings(updates: Partial<AgencySettings>): AgencySettings {
+    if (!this.data.agency_settings) {
+      this.data.agency_settings = { ...INITIAL_AGENCY_SETTINGS };
+    }
+    this.data.agency_settings = {
+      ...this.data.agency_settings,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    if (updates.whatsapp_helpline && !updates.phone) {
+      this.data.agency_settings.phone = updates.whatsapp_helpline;
+    }
+    if (updates.desk_name && !updates.email) {
+      this.data.agency_settings.desk_name = updates.desk_name;
+    }
+    this.save();
+    return { ...this.data.agency_settings };
   }
 
   public async findOrCreateOAuthUser({

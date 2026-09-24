@@ -636,7 +636,7 @@ app.delete('/api/admin/allowlist/:idOrEmail', (req, res) => {
 
 // ===================== SCHEMA & MIGRATION ASSISTANCE =====================
 app.get('/api/admin/schema/sql', (_req, res) => {
-  const sql = `-- Migration: Create admin_allowlist and reload schema
+  const sql = `-- Migration: Create admin_allowlist, agency_settings, sacred_cities and reload schema
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS public.admin_allowlist (
@@ -671,6 +671,58 @@ DROP POLICY IF EXISTS "Authenticated write access for admin allowlist" ON public
 CREATE POLICY "Authenticated write access for admin allowlist"
     ON public.admin_allowlist FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
+CREATE TABLE IF NOT EXISTS public.agency_settings (
+    id TEXT PRIMARY KEY DEFAULT 'agency-settings-default',
+    contact_phone TEXT NOT NULL DEFAULT '+91 98765 43210',
+    emergency_phone TEXT NOT NULL DEFAULT '+91 98765 43211',
+    support_email TEXT NOT NULL DEFAULT 'support@tirthyatratrails.com',
+    whatsapp_helpline TEXT NOT NULL DEFAULT '+91 98765 43210',
+    desk_name TEXT NOT NULL DEFAULT 'TirthYatraTrails Central Travel Desk',
+    email TEXT NOT NULL DEFAULT 'support@tirthyatratrails.com',
+    phone TEXT NOT NULL DEFAULT '+91 98765 43210',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+INSERT INTO public.agency_settings (id, contact_phone, emergency_phone, support_email, whatsapp_helpline, desk_name, email, phone)
+VALUES (
+    'agency-settings-default',
+    '+91 98765 43210',
+    '+91 98765 43211',
+    'support@tirthyatratrails.com',
+    '+91 98765 43210',
+    'TirthYatraTrails Central Travel Desk',
+    'support@tirthyatratrails.com',
+    '+91 98765 43210'
+)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.agency_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read access for agency_settings" ON public.agency_settings;
+CREATE POLICY "Public read access for agency_settings"
+    ON public.agency_settings FOR SELECT TO anon, authenticated USING (true);
+
+DROP POLICY IF EXISTS "Write access for agency_settings" ON public.agency_settings;
+CREATE POLICY "Write access for agency_settings"
+    ON public.agency_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS public.sacred_cities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    state TEXT,
+    popular_for TEXT,
+    image_url TEXT,
+    hotel_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.sacred_cities ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read access for sacred_cities" ON public.sacred_cities;
+CREATE POLICY "Public read access for sacred_cities"
+    ON public.sacred_cities FOR SELECT TO anon, authenticated USING (true);
+
 NOTIFY pgrst, 'reload schema';
 `;
   res.setHeader('Content-Type', 'text/plain');
@@ -700,6 +752,93 @@ app.post('/api/admin/schema/notify', (_req, res) => {
 });
 
 // ===================== PUBLIC DATA ROUTES =====================
+// Agency Settings & Central Helpline
+app.get('/api/agency-settings', (_req, res) => {
+  res.json(db.getAgencySettings());
+});
+app.get('/api/settings/agency', (_req, res) => {
+  res.json(db.getAgencySettings());
+});
+app.put('/api/agency-settings', (req, res) => {
+  try {
+    const updated = db.updateAgencySettings(req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/api/agency-settings', (req, res) => {
+  try {
+    const updated = db.updateAgencySettings(req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Geo Autocomplete Proxy for Indian locations & PIN codes
+app.get('/api/geo/autocomplete', async (req, res) => {
+  const query = String(req.query.q || '').trim();
+  if (!query || query.length < 2) {
+    return res.json({ type: 'empty', data: [] });
+  }
+
+  // Check if 6-digit PIN code
+  if (/^\d{6}$/.test(query)) {
+    try {
+      const pinRes = await fetch(`https://api.postalpincode.in/pincode/${query}`, {
+        headers: { 'User-Agent': 'TirthYatraTrails/1.0' },
+      });
+      if (pinRes.ok) {
+        const pinData = await pinRes.json();
+        return res.json({ type: 'pincode', data: pinData });
+      }
+    } catch {}
+  }
+
+  // Match local sacred cities and pilgrimage destinations first
+  const cities = db.getCities();
+  const lowerQ = query.toLowerCase();
+  const matchedCities = cities.filter(
+    (c) =>
+      c.name.toLowerCase().includes(lowerQ) ||
+      (c.state && c.state.toLowerCase().includes(lowerQ)) ||
+      (c.popularFor && c.popularFor.toLowerCase().includes(lowerQ))
+  );
+
+  const localNominatimItems = matchedCities.map((c, idx) => ({
+    place_id: `city-${c.id || idx}`,
+    name: c.name,
+    display_name: `${c.name}, ${c.state || 'India'}`,
+    address: {
+      city: c.name,
+      state: c.state || '',
+      country: 'India',
+    },
+  }));
+
+  // Also query open Nominatim or Photon with timeout if needed
+  if (localNominatimItems.length > 0) {
+    return res.json({ type: 'nominatim', data: localNominatimItems });
+  }
+
+  try {
+    const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&addressdetails=1&limit=6`;
+    const nomRes = await fetch(nomUrl, {
+      headers: {
+        'User-Agent': 'TirthYatraTrails-Pilgrimage-App/1.0 (contact@tirthyatratrails.com)',
+        'Accept-Language': 'en',
+      },
+    });
+    if (nomRes.ok) {
+      const nomData = await nomRes.json();
+      return res.json({ type: 'nominatim', data: nomData });
+    }
+  } catch {}
+
+  return res.json({ type: 'nominatim', data: [] });
+});
+
 app.get('/api/cities', (req, res) => { res.json(db.getCities()); });
 app.get('/api/hotels', (req, res) => {
   const { cityId, city, query } = req.query;
