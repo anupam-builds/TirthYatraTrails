@@ -273,9 +273,25 @@ export const localStore = {
 
   updateHotel(id: string, updates: Partial<Hotel>): Hotel {
     const hotels = this.getHotels();
-    const idx = hotels.findIndex((h) => h.id === id);
-    if (idx === -1) throw new Error('Hotel not found');
-    hotels[idx] = { ...hotels[idx], ...updates };
+    const targetId = String(id || '').trim();
+    let idx = hotels.findIndex((h) => h.id === targetId);
+
+    if (idx === -1 && (updates as any).hotel_id) {
+      idx = hotels.findIndex((h) => h.id === (updates as any).hotel_id);
+    }
+    if (idx === -1) {
+      idx = hotels.findIndex((h) => (h.id || '').toLowerCase() === targetId.toLowerCase());
+    }
+    if (idx === -1 && updates.name) {
+      idx = hotels.findIndex((h) => (h.name || '').toLowerCase() === updates.name!.toLowerCase());
+    }
+
+    if (idx === -1) {
+      console.log(`[localStore.updateHotel] Hotel ID "${targetId}" not found. Executing upsert fallback...`);
+      return this.createHotel({ ...updates, id: targetId || (updates as any).hotel_id });
+    }
+
+    hotels[idx] = { ...hotels[idx], ...updates, id: hotels[idx].id || targetId };
     setStored(STORAGE_KEYS.HOTELS, hotels);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: hotels[idx] } }));

@@ -722,10 +722,29 @@ class DatabaseStore {
   }
 
   public updateHotel(id: string, updates: Partial<Hotel>) {
-    const index = this.data.hotels.findIndex((h) => h.id === id);
-    if (index === -1) throw new Error('Hotel not found');
+    const targetId = String(id || '').trim();
+    let index = this.data.hotels.findIndex((h) => h.id === targetId);
+
+    // Secondary match: check hotel_id alias or case-insensitive ID
+    if (index === -1 && (updates as any).hotel_id) {
+      index = this.data.hotels.findIndex((h) => h.id === (updates as any).hotel_id);
+    }
+    if (index === -1) {
+      index = this.data.hotels.findIndex((h) => (h.id || '').toLowerCase() === targetId.toLowerCase());
+    }
+    // Tertiary match: check by hotel name if available
+    if (index === -1 && updates.name) {
+      index = this.data.hotels.findIndex((h) => (h.name || '').toLowerCase() === updates.name!.toLowerCase());
+    }
+
+    // Upsert fallback if hotel record does not exist
+    if (index === -1) {
+      console.log(`[server db.updateHotel] Hotel ID "${targetId}" not found. Executing upsert fallback...`);
+      return this.createHotel({ ...updates, id: targetId || (updates as any).hotel_id });
+    }
+
     const existing = this.data.hotels[index];
-    const updated = { ...existing, ...updates };
+    const updated = { ...existing, ...updates, id: existing.id || targetId };
     if (updates.cityId && updates.cityId !== existing.cityId) {
       const city = this.getCityById(updates.cityId);
       if (city) updated.cityName = city.name;
