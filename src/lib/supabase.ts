@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
 
 export const SUPABASE_URL: string = (
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) ||
@@ -428,19 +429,39 @@ export const customFetch: typeof fetch = async (input, init) => {
     });
   }
 
-  // Server-enforced REST proxy for hotel_inventory (reconciles remote PGRST205 / 404 errors)
+  // Server-enforced REST proxy for hotel_inventory (reconciles remote PGRST205 / 404 errors & sanitizes payloads)
   if (urlStr.includes('/rest/v1/hotel_inventory')) {
     try {
       reqInit.headers = headers;
+
+      // Sanitize JSON payload to match database columns [id, hotel_id, room_type, allocation_count, price]
+      if (reqInit.body && typeof reqInit.body === 'string') {
+        try {
+          const parsed = JSON.parse(reqInit.body);
+          const sanitized = sanitizeHotelInventoryList(parsed);
+          reqInit.body = JSON.stringify(sanitized);
+        } catch {}
+      }
+
       const remoteRes = await fetch(input, reqInit);
       if (remoteRes.ok) {
         return remoteRes;
       }
       const errText = await remoteRes.clone().text();
-      if (!errText.includes('PGRST205') && !errText.includes('Could not find the table') && remoteRes.status !== 404) {
+      console.error(`[Supabase /rest/v1/hotel_inventory ${remoteRes.status} Error Response]:`, {
+        url: urlStr,
+        method: reqInit.method || 'GET',
+        status: remoteRes.status,
+        statusText: remoteRes.statusText,
+        error: errText,
+      });
+
+      if (!errText.includes('PGRST205') && !errText.includes('Could not find the table') && remoteRes.status !== 404 && remoteRes.status !== 400) {
         return remoteRes;
       }
-    } catch {}
+    } catch (proxyErr) {
+      console.warn('[supabase proxy hotel_inventory direct fetch exception]:', proxyErr);
+    }
 
     // Fallback to local /api/hotel-inventory backend
     try {

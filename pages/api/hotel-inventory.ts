@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { sanitizeHotelInventoryPayload } from '../../src/utils/hotelInventorySanitizer.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
@@ -25,48 +26,57 @@ export default async function handler(req: any, res: any) {
       }
       const { data, error } = await query;
       if (error) {
-        return res.status(500).json({ error: error.message });
+        console.error('[pages/api/hotel-inventory GET error response]:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        return res.status(500).json({ error: error.message, code: error.code, details: error.details });
       }
       return res.status(200).json(data || []);
     }
 
     if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      const id = body.id || `inv-${Date.now()}`;
 
-      const upsertData = {
-        id,
+      // Sanitize payload strictly to match Supabase hotel_inventory database columns:
+      // [id (UUID), hotel_id (UUID), room_type (TEXT), allocation_count (INTEGER), price (NUMERIC)]
+      const sanitizedPayload = sanitizeHotelInventoryPayload({
+        ...body,
         hotel_id: body.hotel_id || body.hotelId,
-        rooms_count: body.rooms_count ?? body.roomsCount ?? 10,
-        allocation_status: body.allocation_status || 'AVAILABLE',
-        room_id: body.room_id || null,
-        room_type: body.room_type || 'Standard Devotee Room',
-        date: body.date || new Date().toISOString().split('T')[0],
-        total_inventory: body.total_inventory ?? 10,
-        booked_count: body.booked_count ?? 0,
-        blocked_count: body.blocked_count ?? 0,
-        available_count: body.available_count ?? 10,
-        base_rate: body.base_rate ?? 2500,
-        price_override: body.price_override ?? null,
-        status: body.status || 'AVAILABLE',
-        updated_by: body.updated_by || 'admin',
-      };
+        room_type: body.room_type || body.roomType || 'Standard Devotee Room',
+        allocation_count: body.allocation_count ?? body.allocationCount ?? body.rooms_count ?? body.roomsCount ?? body.total_inventory ?? body.totalInventory ?? 10,
+        price: body.price ?? body.price_override ?? body.priceOverride ?? body.base_rate ?? body.baseRate ?? 2500,
+      });
 
       const { data, error } = await supabase
         .from('hotel_inventory')
-        .upsert(upsertData)
+        .upsert(sanitizedPayload, { onConflict: 'id' })
         .select()
         .maybeSingle();
 
       if (error) {
-        return res.status(500).json({ error: error.message });
+        console.error('[pages/api/hotel-inventory Supabase error response]:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          payload: sanitizedPayload,
+        });
+        return res.status(400).json({
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
       }
-      return res.status(200).json(data || upsertData);
+      return res.status(200).json(data || sanitizedPayload);
     }
 
     return res.status(405).json({ error: `Method ${req.method} not allowed` });
   } catch (err: any) {
-    console.error('[API /api/hotel-inventory] Error:', err);
+    console.error('[pages/api/hotel-inventory] Exception:', err);
     return res.status(500).json({ error: err.message || 'Internal Server Error' });
   }
 }

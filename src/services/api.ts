@@ -2,6 +2,7 @@ import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Revie
 import { supabase, supabaseRest, getSupabaseHeaders, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
+import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
 
 // ------------------------------------------------------------------------------
 // Sacred Cities & Transit Hubs Persistence
@@ -2046,27 +2047,73 @@ export const api = {
         if (hotel.rooms && Array.isArray(hotel.rooms) && hotel.rooms.length > 0) {
           console.log(`[Supabase updateHotel] Syncing ${hotel.rooms.length} rooms to table 'hotel_inventory' for hotel_id: "${hotelId}"`);
           for (const room of hotel.rooms) {
-            const invId = `inv-${hotelId}-${room.id || 'deluxe'}`;
-            const invRecord: Record<string, any> = {
+            const rawPayload = {
               hotel_id: hotelId,
-              rooms_count: 10,
-              allocation_status: 'Available',
-              room_id: room.id,
               room_type: room.name || 'Deluxe Room',
-              base_rate: room.roomOnlyPrice || hotel.basePrice || 3500,
-              total_inventory: 10,
-              available_count: 10,
-              status: 'AVAILABLE',
-              updated_by: 'Admin Sync',
+              allocation_count: 10,
+              price: room.roomOnlyPrice || hotel.basePrice || 3500,
             };
-            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invId)) {
-              invRecord.id = invId;
+
+            const sanitized = sanitizeHotelInventoryPayload(rawPayload);
+
+            // Check if an inventory row already exists for this hotel and room type
+            const { data: existingRows, error: findErr } = await supabase
+              .from('hotel_inventory')
+              .select('id')
+              .eq('hotel_id', hotelId)
+              .eq('room_type', sanitized.room_type || 'Deluxe Room')
+              .limit(1);
+
+            if (findErr) {
+              console.warn('[Supabase updateHotel] Query check on hotel_inventory:', findErr.message);
             }
-            await supabase.from('hotel_inventory').upsert(invRecord);
+
+            if (existingRows && existingRows.length > 0) {
+              const existingId = existingRows[0].id;
+              const updatePayload = {
+                allocation_count: sanitized.allocation_count,
+                price: sanitized.price,
+              };
+              const { error: updateErr } = await supabase
+                .from('hotel_inventory')
+                .update(updatePayload)
+                .eq('id', existingId);
+
+              if (updateErr) {
+                console.error('[Supabase updateHotel -> hotel_inventory UPDATE error]:', {
+                  message: updateErr.message,
+                  details: updateErr.details,
+                  hint: updateErr.hint,
+                  code: updateErr.code,
+                  id: existingId,
+                  payload: updatePayload,
+                });
+              } else {
+                console.log(`[Supabase updateHotel] Updated hotel_inventory row ${existingId}`);
+              }
+            } else {
+              const { data: insertedData, error: insertErr } = await supabase
+                .from('hotel_inventory')
+                .insert(sanitized)
+                .select()
+                .maybeSingle();
+
+              if (insertErr) {
+                console.error('[Supabase updateHotel -> hotel_inventory INSERT error]:', {
+                  message: insertErr.message,
+                  details: insertErr.details,
+                  hint: insertErr.hint,
+                  code: insertErr.code,
+                  payload: sanitized,
+                });
+              } else {
+                console.log(`[Supabase updateHotel] Inserted hotel_inventory row:`, insertedData?.id);
+              }
+            }
           }
         }
-      } catch (invErr) {
-        console.warn(`[Supabase updateHotel] Non-fatal error syncing to table 'hotel_inventory':`, invErr);
+      } catch (invErr: any) {
+        console.error(`[Supabase updateHotel] Exception syncing to table 'hotel_inventory':`, invErr?.message || invErr);
       }
     };
 
@@ -3073,62 +3120,166 @@ export const api = {
 
   async updateHotelInventory(id: string, updates: Partial<HotelInventory>): Promise<HotelInventory> {
     const targetId = String(id || '').trim();
-    const payload: Record<string, any> = {};
-    if (updates.totalInventory !== undefined) {
-      payload.total_inventory = updates.totalInventory;
-      payload.rooms_count = updates.totalInventory;
-    }
-    if (updates.bookedCount !== undefined) payload.booked_count = updates.bookedCount;
-    if (updates.blockedCount !== undefined) payload.blocked_count = updates.blockedCount;
-    if (updates.priceOverride !== undefined) payload.price_override = updates.priceOverride;
-    if (updates.status !== undefined) {
-      payload.status = updates.status;
-      payload.allocation_status = updates.status;
-    }
-    if (updates.updatedBy !== undefined) payload.updated_by = updates.updatedBy;
-    if (updates.hotelId) payload.hotel_id = updates.hotelId;
-    if (updates.roomId) payload.room_id = updates.roomId;
-    if (updates.roomType) payload.room_type = updates.roomType;
-    if (updates.date) payload.date = updates.date;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
 
-    console.log(`[Supabase updateHotelInventory] Updating table 'hotel_inventory', payload ID: "${targetId}"`, payload);
+    // 1. Construct strictly sanitized payload matching public.hotel_inventory schema columns:
+    // Columns: [id (UUID), hotel_id (UUID), room_type (TEXT), allocation_count (INTEGER), price (NUMERIC)]
+    const sanitizedUpdates = sanitizeHotelInventoryPayload({
+      ...updates,
+      ...(isUUID ? { id: targetId } : {}),
+    });
+
+    const updateFields: Record<string, any> = {};
+    if (sanitizedUpdates.allocation_count !== undefined) {
+      updateFields.allocation_count = sanitizedUpdates.allocation_count;
+    }
+    if (sanitizedUpdates.price !== undefined) {
+      updateFields.price = sanitizedUpdates.price;
+    }
+    if (sanitizedUpdates.room_type) {
+      updateFields.room_type = sanitizedUpdates.room_type;
+    }
+    if (sanitizedUpdates.hotel_id) {
+      updateFields.hotel_id = sanitizedUpdates.hotel_id;
+    }
+
+    console.log(`[Supabase updateHotelInventory] Updating hotel_inventory, targetId: "${targetId}"`, updateFields);
+
+    let finalMappedRow: HotelInventory | null = null;
 
     try {
-      const { data, error } = await supabase
-        .from('hotel_inventory')
-        .update(payload)
-        .eq('id', targetId)
-        .select()
-        .maybeSingle();
+      // If targetId is a valid UUID, attempt direct row update by ID
+      if (isUUID && Object.keys(updateFields).length > 0) {
+        const { data, error } = await supabase
+          .from('hotel_inventory')
+          .update(updateFields)
+          .eq('id', targetId)
+          .select()
+          .maybeSingle();
 
-      if (!error && data) {
-        console.log(`[Supabase updateHotelInventory] Updated row in table 'hotel_inventory' for ID: "${targetId}"`);
-        return mapHotelInventoryRow(data);
+        if (error) {
+          console.error('[Supabase updateHotelInventory UPDATE error response]:', {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            targetId,
+            payload: updateFields,
+          });
+        } else if (data) {
+          console.log(`[Supabase updateHotelInventory] Updated row in hotel_inventory for ID: "${targetId}"`);
+          finalMappedRow = mapHotelInventoryRow(data);
+        }
       }
 
-      // Upsert fallback if row does not exist in table hotel_inventory
-      console.log(`[Supabase updateHotelInventory] Row not found in table 'hotel_inventory' by id="${targetId}". Executing upsert fallback...`);
-      const { data: upsertData, error: upsertErr } = await supabase
-        .from('hotel_inventory')
-        .upsert({ ...payload, id: targetId })
-        .select()
-        .maybeSingle();
+      // If not yet updated (or targetId is not a UUID), search by hotel_id and room_type or insert
+      if (!finalMappedRow) {
+        const queryHotelId = sanitizedUpdates.hotel_id || (updates.hotelId ? String(updates.hotelId) : undefined);
+        const queryRoomType = sanitizedUpdates.room_type || updates.roomType || 'Standard Devotee Room';
 
-      if (!upsertErr && upsertData) {
-        console.log(`[Supabase updateHotelInventory] Upsert succeeded in table 'hotel_inventory' for ID: "${upsertData.id}"`);
-        return mapHotelInventoryRow(upsertData);
+        if (queryHotelId) {
+          const { data: existingRows, error: findErr } = await supabase
+            .from('hotel_inventory')
+            .select('*')
+            .eq('hotel_id', queryHotelId)
+            .eq('room_type', queryRoomType)
+            .limit(1);
+
+          if (findErr) {
+            console.error('[Supabase updateHotelInventory FIND error response]:', {
+              code: findErr.code,
+              message: findErr.message,
+              details: findErr.details,
+              hint: findErr.hint,
+              queryHotelId,
+              queryRoomType,
+            });
+          } else if (existingRows && existingRows.length > 0) {
+            const existingId = existingRows[0].id;
+            const { data: updatedExisting, error: updateExistingErr } = await supabase
+              .from('hotel_inventory')
+              .update(updateFields)
+              .eq('id', existingId)
+              .select()
+              .maybeSingle();
+
+            if (updateExistingErr) {
+              console.error('[Supabase updateHotelInventory UPDATE existing error response]:', {
+                code: updateExistingErr.code,
+                message: updateExistingErr.message,
+                details: updateExistingErr.details,
+                hint: updateExistingErr.hint,
+                existingId,
+                payload: updateFields,
+              });
+            } else if (updatedExisting) {
+              finalMappedRow = mapHotelInventoryRow(updatedExisting);
+            }
+          }
+        }
+
+        // If still not matched, perform insert with sanitized payload
+        if (!finalMappedRow) {
+          const insertPayload: Record<string, any> = {
+            hotel_id: sanitizedUpdates.hotel_id || updates.hotelId || 'fe29faae-3cd6-4dfb-8bad-e54f64199712',
+            room_type: sanitizedUpdates.room_type || updates.roomType || 'Standard Devotee Room',
+            allocation_count: sanitizedUpdates.allocation_count ?? 10,
+            price: sanitizedUpdates.price ?? 3500,
+          };
+          if (isUUID) {
+            insertPayload.id = targetId;
+          }
+
+          const { data: upsertData, error: upsertErr } = await supabase
+            .from('hotel_inventory')
+            .insert(insertPayload)
+            .select()
+            .maybeSingle();
+
+          if (upsertErr) {
+            console.error('[Supabase updateHotelInventory INSERT error response]:', {
+              code: upsertErr.code,
+              message: upsertErr.message,
+              details: upsertErr.details,
+              hint: upsertErr.hint,
+              payload: insertPayload,
+            });
+          } else if (upsertData) {
+            console.log(`[Supabase updateHotelInventory] Insert succeeded in table 'hotel_inventory' for ID: "${upsertData.id}"`);
+            finalMappedRow = mapHotelInventoryRow(upsertData);
+          }
+        }
       }
-
-      const restRes = await supabaseRest<any[]>('hotel_inventory', {
-        method: 'PATCH',
-        params: { id: `eq.${targetId}` },
-        body: payload,
-      });
-      if (restRes.data && restRes.data.length > 0) return mapHotelInventoryRow(restRes.data[0]);
-    } catch (err) {
-      console.warn(`[Supabase updateHotelInventory] Exception updating hotel_inventory:`, err);
+    } catch (err: any) {
+      console.error(`[Supabase updateHotelInventory] Exception updating hotel_inventory:`, err?.message || err);
     }
-    return { ...updates, id: targetId } as HotelInventory;
+
+    // Dual-persistence sync to Express backend
+    try {
+      const baseOrigin = typeof window !== 'undefined' ? '' : (process.env.APP_URL || 'http://localhost:3000');
+      await fetch(`${baseOrigin}/api/hotel-inventory`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...updates,
+          id: targetId,
+          rooms_count: updates.totalInventory ?? updates.allocationCount ?? 10,
+          allocation_status: updates.status || 'AVAILABLE',
+        }),
+      });
+    } catch {}
+
+    if (finalMappedRow) {
+      return finalMappedRow;
+    }
+
+    return {
+      ...updates,
+      id: targetId,
+      totalInventory: updates.totalInventory ?? updates.allocationCount ?? 10,
+      availableCount: updates.availableCount ?? updates.totalInventory ?? 10,
+      status: updates.status || 'AVAILABLE',
+    } as HotelInventory;
   },
 
   async batchUpdateHotelInventory(updates: Array<Partial<HotelInventory>>): Promise<boolean> {
@@ -3628,7 +3779,7 @@ export function mapHotelRow(row: any): Hotel {
 
 export function mapHotelInventoryRow(row: any): HotelInventory {
   if (!row) return {} as HotelInventory;
-  const total = Number(row.total_inventory ?? row.totalInventory ?? row.rooms_count ?? 10);
+  const total = Number(row.allocation_count ?? row.total_inventory ?? row.totalInventory ?? row.rooms_count ?? 10);
   const booked = Number(row.booked_count ?? row.bookedCount ?? 0);
   const blocked = Number(row.blocked_count ?? row.blockedCount ?? 0);
   const available = Math.max(0, total - booked - blocked);
@@ -3636,6 +3787,10 @@ export function mapHotelInventoryRow(row: any): HotelInventory {
   let status: HotelInventory['status'] = row.status || (row.allocation_status ? (String(row.allocation_status).toUpperCase() as any) : 'AVAILABLE');
   if (available === 0) status = 'SOLD_OUT';
   else if (status !== 'BLOCKED' && available <= 2) status = 'FAST_FILLING';
+
+  const priceVal = row.price !== undefined && row.price !== null
+    ? Number(row.price)
+    : (row.price_override !== undefined && row.price_override !== null ? Number(row.price_override) : undefined);
 
   return {
     id: String(row.id),
@@ -3645,10 +3800,12 @@ export function mapHotelInventoryRow(row: any): HotelInventory {
     roomType: row.room_type || row.roomType || 'Deluxe Room',
     date: row.date || new Date().toISOString().split('T')[0],
     totalInventory: total,
+    allocationCount: total,
     bookedCount: booked,
     blockedCount: blocked,
     availableCount: available,
-    priceOverride: row.price_override !== undefined && row.price_override !== null ? Number(row.price_override) : undefined,
+    price: priceVal,
+    priceOverride: priceVal,
     status,
     updatedBy: row.updated_by || row.updatedBy,
     createdAt: row.created_at || row.createdAt,

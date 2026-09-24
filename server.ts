@@ -6,6 +6,7 @@ import { db } from './src/server/db.js';
 import bcrypt from 'bcryptjs';
 import { generateGoogleAuthUrl, handleGoogleOAuthCallback } from './src/server/auth.js';
 import { createClient } from '@supabase/supabase-js';
+import { sanitizeHotelInventoryPayload } from './src/utils/hotelInventorySanitizer.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
@@ -1114,24 +1115,29 @@ app.post('/api/hotel-inventory', async (req, res) => {
     const body = req.body || {};
     const created = db.createOrUpdateHotelInventory(body);
 
+    const sanitizedPayload = sanitizeHotelInventoryPayload({
+      ...body,
+      id: created.id,
+      hotel_id: created.hotel_id,
+      room_type: created.room_type,
+      allocation_count: created.allocation_count ?? created.rooms_count ?? created.total_inventory,
+      price: created.price ?? created.price_override ?? created.base_rate,
+    });
+
     try {
-      await supabaseServer.from('hotel_inventory').upsert({
-        id: created.id,
-        hotel_id: created.hotel_id,
-        rooms_count: created.rooms_count,
-        allocation_status: created.allocation_status,
-        room_id: created.room_id,
-        room_type: created.room_type,
-        date: created.date,
-        total_inventory: created.total_inventory,
-        booked_count: created.booked_count,
-        blocked_count: created.blocked_count,
-        available_count: created.available_count,
-        base_rate: created.base_rate,
-        price_override: created.price_override,
-        status: created.status,
-        updated_by: created.updated_by,
-      });
+      const { data: supData, error: supError } = await withTimeout(
+        supabaseServer.from('hotel_inventory').upsert(sanitizedPayload, { onConflict: 'id' }),
+        2500
+      );
+      if (supError) {
+        console.error('[API /api/hotel-inventory] Supabase inventory upsert error response:', {
+          code: supError.code,
+          message: supError.message,
+          details: supError.details,
+          hint: supError.hint,
+          payload: sanitizedPayload,
+        });
+      }
     } catch (supErr: any) {
       console.warn('[API /api/hotel-inventory] Supabase inventory upsert warning:', supErr?.message || supErr);
     }
@@ -1148,24 +1154,29 @@ const handleUpdateInventory = async (req: express.Request, res: express.Response
     const id = req.params.id || req.body?.id || `inv-${Date.now()}`;
     const updated = db.updateHotelInventory(id, req.body || {});
 
+    const sanitizedPayload = sanitizeHotelInventoryPayload({
+      ...req.body,
+      id: updated.id,
+      hotel_id: updated.hotel_id,
+      room_type: updated.room_type,
+      allocation_count: updated.allocation_count ?? updated.rooms_count ?? updated.total_inventory,
+      price: updated.price ?? updated.price_override ?? updated.base_rate,
+    });
+
     try {
-      await supabaseServer.from('hotel_inventory').upsert({
-        id: updated.id,
-        hotel_id: updated.hotel_id,
-        rooms_count: updated.rooms_count,
-        allocation_status: updated.allocation_status,
-        room_id: updated.room_id,
-        room_type: updated.room_type,
-        date: updated.date,
-        total_inventory: updated.total_inventory,
-        booked_count: updated.booked_count,
-        blocked_count: updated.blocked_count,
-        available_count: updated.available_count,
-        base_rate: updated.base_rate,
-        price_override: updated.price_override,
-        status: updated.status,
-        updated_by: updated.updated_by,
-      });
+      const { data: supData, error: supError } = await withTimeout(
+        supabaseServer.from('hotel_inventory').upsert(sanitizedPayload, { onConflict: 'id' }),
+        2500
+      );
+      if (supError) {
+        console.error('[API /api/hotel-inventory PUT] Supabase inventory update error response:', {
+          code: supError.code,
+          message: supError.message,
+          details: supError.details,
+          hint: supError.hint,
+          payload: sanitizedPayload,
+        });
+      }
     } catch (supErr: any) {
       console.warn('[API /api/hotel-inventory] Supabase inventory update warning:', supErr?.message || supErr);
     }

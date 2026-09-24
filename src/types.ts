@@ -206,9 +206,11 @@ export interface HotelInventory {
   roomType: string;
   date: string; // YYYY-MM-DD
   totalInventory: number;
+  allocationCount?: number;
   bookedCount: number;
   blockedCount: number;
   availableCount: number;
+  price?: number;
   priceOverride?: number;
   status: InventoryStatus;
   updatedBy?: string;
