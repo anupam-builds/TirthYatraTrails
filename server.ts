@@ -10,7 +10,11 @@ import { sanitizeHotelInventoryPayload } from './src/utils/hotelInventorySanitiz
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
 export const supabaseServer = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
+export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
 });
 
@@ -488,7 +492,7 @@ app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async 
   try {
     const rawEmail = req.body.admin_email || req.body.email || '';
     const rawPassword = req.body.admin_password || req.body.password || '';
-    const rawRole = req.body.role || req.body.admin_role || 'Admin (Enterprise Operations)';
+    const rawRole = req.body.role || req.body.admin_role || 'Super Admin';
 
     if (!rawEmail || typeof rawEmail !== 'string') {
       return res.status(400).json({ success: false, error: 'Administrator email address is required.' });
@@ -505,60 +509,63 @@ app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async 
     // 1. Create or update user credentials in internal authentication store (bcrypt hashed)
     const adminUser = await db.provisionAdminUser(cleanEmail, rawPassword, rawRole);
 
-    // 2. Register/update in admin_allowlist
+    // 2. Register/update in local admin_allowlist
     const allowlistEntry = db.addAdminAllowlistEntry(cleanEmail, rawRole, 'Active & Authorized');
 
-    // 3. Sync to Supabase Auth and remote admin_allowlist
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co';
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
-
+    // 3. Sync to Supabase Auth via Admin Client (SUPABASE_SERVICE_ROLE_KEY)
+    let authUser: any = null;
     try {
-      // Direct remote allowlist upsert
-      await fetch(`${supabaseUrl}/rest/v1/admin_allowlist`, {
-        method: 'POST',
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          email: cleanEmail,
-          role: rawRole,
-        }),
-        signal: AbortSignal.timeout(2000),
-      }).catch(() => {});
-
-      // Direct remote Supabase Auth signUp sync
-      await fetch(`${supabaseUrl}/auth/v1/signup`, {
-        method: 'POST',
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: cleanEmail,
-          password: rawPassword,
-          data: { role: rawRole, is_admin: true },
-        }),
-        signal: AbortSignal.timeout(2000),
-      }).catch(() => {});
-    } catch (syncErr: any) {
-      console.warn('[provision-user] Remote Supabase Auth sync notice:', syncErr?.message);
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: rawPassword,
+        email_confirm: true,
+        user_metadata: { role: rawRole, is_admin: true },
+      });
+      if (authError) {
+        console.warn('[provision-user] supabaseAdmin.auth.admin.createUser:', authError.message);
+      } else {
+        authUser = authData?.user;
+      }
+    } catch (adminAuthErr: any) {
+      console.warn('[provision-user] supabaseAdmin auth creation call:', adminAuthErr?.message);
     }
 
-    return res.status(201).json({
+    // 4. Insert or upsert into remote Supabase admin_allowlist
+    let remoteAllowlistData: any = null;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('admin_allowlist')
+        .upsert(
+          {
+            email: cleanEmail,
+            role: rawRole,
+            status: 'Active & Authorized',
+          },
+          { onConflict: 'email' }
+        )
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[provision-user] Supabase admin_allowlist upsert notice:', error.message);
+      } else {
+        remoteAllowlistData = data;
+      }
+    } catch (allowErr: any) {
+      console.warn('[provision-user] admin_allowlist sync notice:', allowErr?.message);
+    }
+
+    return res.status(200).json({
       success: true,
-      user: {
+      message: 'Admin provisioned successfully',
+      user: authUser || {
         id: adminUser.id || allowlistEntry.id,
         email: cleanEmail,
         role: allowlistEntry.role || rawRole,
         created_at: allowlistEntry.created_at,
         status: 'Active & Authorized',
       },
-      allowlist: allowlistEntry,
-      message: `Administrator account successfully provisioned for ${cleanEmail}. They can now authenticate via /admin/login.`,
+      allowlist: remoteAllowlistData || allowlistEntry,
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to provision administrator account.' });

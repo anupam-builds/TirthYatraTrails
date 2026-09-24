@@ -4,7 +4,7 @@
       "id": "usr-root-admin",
       "name": "Anupam Saxena (Root Admin)",
       "email": "anupamsaxena.dev@gmail.com",
-      "password": "$2b$10$c/xd4ZHtwx2LDzelbUuEAekwSrR2gRcMwhLEFDf3VH0dxmtdhtYd2",
+      "password": "$2b$10$n5sH.qYh13y4qB2imBQ2JeEnbmCfH6X207soDePlTQLJlu62vIdOu",
       "role": "ADMIN",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
@@ -51,6 +51,24 @@
       "password": "$2b$10$wSjKytBMr8QhvPkKXHjzCOEPaYo9zfnj9/WWkVXL12.qGe.8c/w2W",
       "role": "ADMIN",
       "createdAt": "2026-09-23T10:58:12.125Z"
+    },
+    {
+      "id": "usr-admin-1790246930244-dyu6s",
+      "name": "test.admin.verify",
+      "email": "test.admin.verify@tirthyatratrails.in",
+      "phone": "",
+      "password": "$2b$10$qZRaqI.5mUWWko10aa9.x.AOPrSI5eUIG1GJGnd6WoxdS3KBuDC0y",
+      "role": "ADMIN",
+      "createdAt": "2026-09-24T10:48:50.244Z"
+    },
+    {
+      "id": "usr-admin-1790246945676-tvvds",
+      "name": "test.admin.verify2",
+      "email": "test.admin.verify2@tirthyatratrails.in",
+      "phone": "",
+      "password": "$2b$10$Rq6SkGlzt4EBRlsU1byML..b4QqkFvk1xCdKzp9JTuYjXFDxx5S2q",
+      "role": "ADMIN",
+      "createdAt": "2026-09-24T10:49:05.676Z"
     }
   ],
   "staff": [
@@ -1795,6 +1813,20 @@
       "email": "admin@tirthyatratrails.com",
       "role": "admin",
       "created_at": "2026-02-15T00:00:00.000Z"
+    },
+    {
+      "id": "73a068f5-10bf-4acc-8643-cf4d11c3c5aa",
+      "email": "test.admin.verify@tirthyatratrails.in",
+      "role": "Super Admin",
+      "created_at": "2026-09-24T10:48:50.251Z",
+      "status": "Active & Authorized"
+    },
+    {
+      "id": "e2f78db2-b147-4755-9596-48de899a4383",
+      "email": "test.admin.verify2@tirthyatratrails.in",
+      "role": "Super Admin",
+      "created_at": "2026-09-24T10:49:05.682Z",
+      "status": "Active & Authorized"
     }
   ],
   "hotelInventory": [
