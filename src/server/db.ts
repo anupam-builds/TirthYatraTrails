@@ -79,6 +79,7 @@ interface DatabaseSchema {
   companionConnections?: CompanionConnection[];
   admin_allowlist?: AdminAllowlistEntry[];
   agency_settings?: AgencySettings;
+  hotelInventory?: any[];
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -98,6 +99,7 @@ class DatabaseStore {
     companions: [...INITIAL_COMPANIONS],
     companionConnections: [],
     admin_allowlist: [...INITIAL_ADMIN_ALLOWLIST],
+    hotelInventory: [],
   };
   private isInitialized = false;
 
@@ -783,6 +785,127 @@ class DatabaseStore {
       this.syncCityHotelCounts();
       this.save();
     }
+    return true;
+  }
+
+  // Hotel Inventory
+  public getHotelInventory(hotelId?: string) {
+    if (!this.data.hotelInventory) {
+      this.data.hotelInventory = [];
+    }
+    if (hotelId) {
+      const targetId = String(hotelId).trim();
+      const filtered = this.data.hotelInventory.filter(
+        (inv) => inv.hotel_id === targetId || inv.hotelId === targetId
+      );
+      if (filtered.length > 0) return filtered;
+
+      // Auto-seed default inventory for this hotel if empty
+      const hotel = this.getHotelById(targetId);
+      let rooms: any[] = [];
+      if (hotel?.rooms) {
+        if (Array.isArray(hotel.rooms)) {
+          rooms = hotel.rooms;
+        } else if (typeof hotel.rooms === 'string') {
+          try {
+            rooms = JSON.parse(hotel.rooms);
+          } catch {
+            rooms = [];
+          }
+        }
+      }
+      if (!rooms || !rooms.length) {
+        rooms = [{ id: 'deluxe', name: 'Sanctum Deluxe Room', roomOnlyPrice: hotel?.basePrice || 3500 }];
+      }
+
+      const generated = rooms.map((r, i) => ({
+        id: `inv-${targetId}-${r.id || i}`,
+        hotel_id: targetId,
+        hotelId: targetId,
+        hotel_name: hotel?.name || 'Sacred Hotel',
+        room_id: r.id || `room-${i}`,
+        room_type: r.name || 'Sanctum Deluxe Room',
+        rooms_count: 10,
+        allocation_status: 'Available',
+        date: new Date().toISOString().split('T')[0],
+        total_inventory: 10,
+        booked_count: 2,
+        blocked_count: 1,
+        available_count: 7,
+        base_rate: r.roomOnlyPrice || hotel?.basePrice || 3500,
+        status: 'AVAILABLE',
+        updated_by: 'Admin',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      this.data.hotelInventory.push(...generated);
+      this.save();
+      return generated;
+    }
+    return this.data.hotelInventory;
+  }
+
+  public createOrUpdateHotelInventory(item: any) {
+    if (!this.data.hotelInventory) {
+      this.data.hotelInventory = [];
+    }
+    const id = item.id || `inv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const hotelId = item.hotel_id || item.hotelId || 'hotel-default';
+    const index = this.data.hotelInventory.findIndex(
+      (inv) => inv.id === id || (inv.hotel_id === hotelId && inv.room_id === item.room_id && inv.date === item.date)
+    );
+
+    const record = {
+      id,
+      hotel_id: hotelId,
+      hotelId,
+      room_id: item.room_id || item.roomId || 'deluxe',
+      room_type: item.room_type || item.roomType || 'Deluxe Room',
+      rooms_count: Number(item.rooms_count ?? item.total_inventory ?? item.totalInventory ?? 10),
+      allocation_status: item.allocation_status || item.status || 'Available',
+      date: item.date || new Date().toISOString().split('T')[0],
+      total_inventory: Number(item.total_inventory ?? item.totalInventory ?? item.rooms_count ?? 10),
+      booked_count: Number(item.booked_count ?? item.bookedCount ?? 0),
+      blocked_count: Number(item.blocked_count ?? item.blockedCount ?? 0),
+      available_count: Number(item.available_count ?? item.availableCount ?? 10),
+      base_rate: Number(item.base_rate ?? item.baseRate ?? 3500),
+      price_override: item.price_override ?? item.priceOverride,
+      status: item.status || (item.allocation_status ? String(item.allocation_status).toUpperCase() : 'AVAILABLE'),
+      updated_by: item.updated_by || item.updatedBy || 'Admin',
+      created_at: item.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (index >= 0) {
+      this.data.hotelInventory[index] = { ...this.data.hotelInventory[index], ...record };
+    } else {
+      this.data.hotelInventory.push(record);
+    }
+    this.save();
+    return index >= 0 ? this.data.hotelInventory[index] : record;
+  }
+
+  public updateHotelInventory(id: string, updates: any) {
+    if (!this.data.hotelInventory) {
+      this.data.hotelInventory = [];
+    }
+    const index = this.data.hotelInventory.findIndex((inv) => inv.id === id);
+    if (index === -1) {
+      return this.createOrUpdateHotelInventory({ ...updates, id });
+    }
+    this.data.hotelInventory[index] = {
+      ...this.data.hotelInventory[index],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    this.save();
+    return this.data.hotelInventory[index];
+  }
+
+  public deleteHotelInventory(id: string) {
+    if (!this.data.hotelInventory) return true;
+    this.data.hotelInventory = this.data.hotelInventory.filter((inv) => inv.id !== id);
+    this.save();
     return true;
   }
 

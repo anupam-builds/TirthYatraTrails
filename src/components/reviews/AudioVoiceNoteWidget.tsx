@@ -32,7 +32,7 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
   initialDuration = 0,
   initialTitle = '',
 }) => {
-  const [mode, setMode] = useState<'record' | 'upload' | 'sample'>('record');
+  const [mode, setMode] = useState<'upload' | 'record' | 'sample'>('upload');
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | undefined>(initialAudioUrl);
@@ -85,10 +85,11 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
     audioChunksRef.current = [];
 
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Microphone recording is not supported in this browser. Please upload an audio file instead.');
+      if (typeof window === 'undefined' || !navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Microphone recording is not supported in this browser or environment. Please upload an audio file instead.');
       }
 
+      // Strictly on-demand: Only triggered by explicit user button click
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -166,9 +167,15 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
         });
       }, 1000);
     } catch (err: any) {
-      console.error('Microphone error:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setMicError('Microphone permission was not granted. Please allow microphone access or upload an audio file below.');
+      console.warn('[AudioVoiceNoteWidget] Microphone access error:', err);
+      const isDenied =
+        err.name === 'NotAllowedError' ||
+        err.name === 'PermissionDeniedError' ||
+        err.name === 'SecurityError' ||
+        (err.message && err.message.toLowerCase().includes('permission'));
+
+      if (isDenied) {
+        setMicError('Microphone permission was not granted or is blocked by browser policy. You can easily upload an audio file or select from our temple audio samples below.');
       } else {
         setMicError(err.message || 'Could not access microphone.');
       }
@@ -318,11 +325,32 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
       {micError && (
         <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-1.5">
             <p className="font-semibold">{micError}</p>
-            <p className="text-[11px] text-amber-800">
-              You can also drag & drop an audio recording or pick one of our sample temple chimes below.
-            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setMicError(null);
+                  setMode('upload');
+                }}
+                className="px-2.5 py-1 bg-amber-200/70 hover:bg-amber-300 text-amber-950 font-bold rounded-lg transition-colors flex items-center gap-1"
+              >
+                <Upload className="w-3 h-3" />
+                <span>Switch to File Upload</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMicError(null);
+                  setMode('sample');
+                }}
+                className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 font-semibold border border-amber-300 rounded-lg transition-colors flex items-center gap-1"
+              >
+                <Sparkles className="w-3 h-3 text-[#ea580c]" />
+                <span>Select Temple Sample</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -423,17 +451,17 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
           </div>
         </div>
       ) : mode === 'record' ? (
-        /* State 3: Record Prompt */
+        /* State 3: Record Prompt (Strictly On-Demand) */
         <div className="bg-white border border-slate-200 rounded-xl p-6 text-center space-y-3">
           <div className="w-16 h-16 rounded-full bg-orange-100 text-[#ea580c] flex items-center justify-center mx-auto shadow-inner">
             <Mic className="w-8 h-8" />
           </div>
           <div>
             <h5 className="font-bold text-slate-900 text-sm sm:text-base">
-              Record a Voice Testimonial
+              Record a Voice Testimonial (On-Demand)
             </h5>
             <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              Click below to start recording. You can record up to 2 minutes of your sacred pilgrimage reflection.
+              Microphone is strictly requested only when you click start below. You can record up to 2 minutes of your sacred pilgrimage reflection.
             </p>
           </div>
           <div className="pt-2">
@@ -443,9 +471,12 @@ export const AudioVoiceNoteWidget: React.FC<AudioVoiceNoteWidgetProps> = ({
               className="px-6 py-3 rounded-full bg-[#ea580c] hover:bg-[#d44e0a] text-white font-bold text-xs sm:text-sm inline-flex items-center gap-2 shadow-md hover:shadow-orange-500/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Mic className="w-4 h-4" />
-              <span>Start Recording Now</span>
+              <span>Allow Mic & Start Recording</span>
             </button>
           </div>
+          <p className="text-[11px] text-slate-400">
+            Microphone access is never requested automatically.
+          </p>
         </div>
       ) : mode === 'upload' ? (
         /* State 4: Upload Tab */

@@ -2047,9 +2047,10 @@ export const api = {
           console.log(`[Supabase updateHotel] Syncing ${hotel.rooms.length} rooms to table 'hotel_inventory' for hotel_id: "${hotelId}"`);
           for (const room of hotel.rooms) {
             const invId = `inv-${hotelId}-${room.id || 'deluxe'}`;
-            await supabase.from('hotel_inventory').upsert({
-              id: invId,
+            const invRecord: Record<string, any> = {
               hotel_id: hotelId,
+              rooms_count: 10,
+              allocation_status: 'Available',
               room_id: room.id,
               room_type: room.name || 'Deluxe Room',
               base_rate: room.roomOnlyPrice || hotel.basePrice || 3500,
@@ -2057,7 +2058,11 @@ export const api = {
               available_count: 10,
               status: 'AVAILABLE',
               updated_by: 'Admin Sync',
-            });
+            };
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invId)) {
+              invRecord.id = invId;
+            }
+            await supabase.from('hotel_inventory').upsert(invRecord);
           }
         }
       } catch (invErr) {
@@ -3069,11 +3074,17 @@ export const api = {
   async updateHotelInventory(id: string, updates: Partial<HotelInventory>): Promise<HotelInventory> {
     const targetId = String(id || '').trim();
     const payload: Record<string, any> = {};
-    if (updates.totalInventory !== undefined) payload.total_inventory = updates.totalInventory;
+    if (updates.totalInventory !== undefined) {
+      payload.total_inventory = updates.totalInventory;
+      payload.rooms_count = updates.totalInventory;
+    }
     if (updates.bookedCount !== undefined) payload.booked_count = updates.bookedCount;
     if (updates.blockedCount !== undefined) payload.blocked_count = updates.blockedCount;
     if (updates.priceOverride !== undefined) payload.price_override = updates.priceOverride;
-    if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.status !== undefined) {
+      payload.status = updates.status;
+      payload.allocation_status = updates.status;
+    }
     if (updates.updatedBy !== undefined) payload.updated_by = updates.updatedBy;
     if (updates.hotelId) payload.hotel_id = updates.hotelId;
     if (updates.roomId) payload.room_id = updates.roomId;
@@ -3617,12 +3628,12 @@ export function mapHotelRow(row: any): Hotel {
 
 export function mapHotelInventoryRow(row: any): HotelInventory {
   if (!row) return {} as HotelInventory;
-  const total = Number(row.total_inventory ?? row.totalInventory ?? 10);
+  const total = Number(row.total_inventory ?? row.totalInventory ?? row.rooms_count ?? 10);
   const booked = Number(row.booked_count ?? row.bookedCount ?? 0);
   const blocked = Number(row.blocked_count ?? row.blockedCount ?? 0);
   const available = Math.max(0, total - booked - blocked);
 
-  let status: HotelInventory['status'] = row.status || 'AVAILABLE';
+  let status: HotelInventory['status'] = row.status || (row.allocation_status ? (String(row.allocation_status).toUpperCase() as any) : 'AVAILABLE');
   if (available === 0) status = 'SOLD_OUT';
   else if (status !== 'BLOCKED' && available <= 2) status = 'FAST_FILLING';
 

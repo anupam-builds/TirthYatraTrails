@@ -4,7 +4,7 @@
       "id": "usr-root-admin",
       "name": "Anupam Saxena (Root Admin)",
       "email": "anupamsaxena.dev@gmail.com",
-      "password": "$2b$10$Xsfmzyz.VkXJRjBO4rVgm.2ITB7YcbrorzB5JcJKSCy3NHpPtdP16",
+      "password": "$2b$10$5Kmver7XWQfaKjgkiXIpO.3qxPztcmNDdFRFav.A29R3xA.kPh3U6",
       "role": "ADMIN",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
@@ -457,6 +457,44 @@
     }
   ],
   "hotels": [
+    {
+      "id": "htl-1790241030915-hdrh",
+      "name": "Taj",
+      "cityId": "sitapur",
+      "cityName": "Sitapur",
+      "starRating": 4,
+      "googleRating": 4.8,
+      "reviewCount": 95,
+      "address": "Near Main Temple Gate",
+      "description": "Serene pilgrimage stay offering pure vegetarian dining, warm hospitalities, and walking distance to sacred morning aarti.",
+      "images": [
+        "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80"
+      ],
+      "amenities": [
+        "Pure Vegetarian Dining",
+        "Free Wi-Fi",
+        "24hr Hot Water",
+        "Temple Drop & Pickup"
+      ],
+      "basePrice": 5491,
+      "isTopRated": true,
+      "rooms": [
+        {
+          "id": "room-1",
+          "name": "Deluxe Sanctum Room",
+          "bedType": "1 King Bed",
+          "capacity": "2 Adults + 1 Child",
+          "imageUrl": "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
+          "roomOnlyPrice": 5500,
+          "breakfastPrice": 6300,
+          "fullBoardPrice": 7900,
+          "halfBoardPrice": 7100
+        }
+      ],
+      "distanceToTemple": "300m from Temple",
+      "darshanType": "VIP Darshan & Priest Assistance Available"
+    },
     {
       "id": "htl-1789648870192-mezp",
       "name": "deva palace",
@@ -1757,6 +1795,47 @@
       "email": "admin@tirthyatratrails.com",
       "role": "admin",
       "created_at": "2026-02-15T00:00:00.000Z"
+    }
+  ],
+  "hotelInventory": [
+    {
+      "id": "inv-htl-ayodhya-ramayana-deluxe",
+      "hotel_id": "htl-ayodhya-ramayana",
+      "hotelId": "htl-ayodhya-ramayana",
+      "hotel_name": "Sacred Hotel",
+      "room_id": "deluxe",
+      "room_type": "Sanctum Deluxe Room",
+      "rooms_count": 10,
+      "allocation_status": "Available",
+      "date": "2026-09-24",
+      "total_inventory": 10,
+      "booked_count": 2,
+      "blocked_count": 1,
+      "available_count": 7,
+      "base_rate": 3500,
+      "status": "AVAILABLE",
+      "updated_by": "Admin",
+      "created_at": "2026-09-24T09:22:27.796Z",
+      "updated_at": "2026-09-24T09:22:27.796Z"
+    },
+    {
+      "id": "inv-1790241747820-rlsr",
+      "hotel_id": "fe29faae-3cd6-4dfb-8bad-e54f64199712",
+      "hotelId": "fe29faae-3cd6-4dfb-8bad-e54f64199712",
+      "room_id": "deluxe",
+      "room_type": "Heritage Royal Suite",
+      "rooms_count": 6,
+      "allocation_status": "Fast Filling",
+      "date": "2026-09-24",
+      "total_inventory": 8,
+      "booked_count": 0,
+      "blocked_count": 0,
+      "available_count": 4,
+      "base_rate": 3500,
+      "status": "AVAILABLE",
+      "updated_by": "Admin",
+      "created_at": "2026-09-24T09:22:27.820Z",
+      "updated_at": "2026-09-24T09:22:27.835Z"
     }
   ]
 }

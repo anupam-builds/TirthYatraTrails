@@ -428,7 +428,7 @@ export const customFetch: typeof fetch = async (input, init) => {
     });
   }
 
-  // Server-enforced REST proxy for hotel_inventory
+  // Server-enforced REST proxy for hotel_inventory (reconciles remote PGRST205 / 404 errors)
   if (urlStr.includes('/rest/v1/hotel_inventory')) {
     try {
       reqInit.headers = headers;
@@ -442,21 +442,63 @@ export const customFetch: typeof fetch = async (input, init) => {
       }
     } catch {}
 
-    // Fallback to Express backend /api/hotel-inventory
+    // Fallback to local /api/hotel-inventory backend
     try {
-      const serverRes = await fetch('/api/hotel-inventory');
+      const method = (reqInit.method || 'GET').toUpperCase();
+      const acceptHeader = headers.get('accept') || '';
+      const isSingle = acceptHeader.includes('application/vnd.pgrst.object+json');
+      const baseOrigin = typeof window !== 'undefined' ? '' : (process.env.APP_URL || 'http://localhost:3000');
+
+      let searchParams = '';
+      try {
+        const u = new URL(urlStr, 'http://localhost:3000');
+        const q = new URLSearchParams();
+        const hotelId = u.searchParams.get('hotel_id')?.replace(/^eq\./, '');
+        const idParam = u.searchParams.get('id')?.replace(/^eq\./, '');
+        if (hotelId) q.set('hotel_id', hotelId);
+        if (idParam) q.set('id', idParam);
+        const qs = q.toString();
+        if (qs) searchParams = `?${qs}`;
+      } catch {}
+
+      const fetchUrl = `${baseOrigin}/api/hotel-inventory${searchParams}`;
+      const forwardOptions: RequestInit = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      };
+
+      if (method !== 'GET' && method !== 'HEAD' && reqInit.body) {
+        forwardOptions.body = reqInit.body;
+      }
+
+      const serverRes = await fetch(fetchUrl, forwardOptions);
       if (serverRes.ok) {
-        const inventory = await serverRes.json();
+        let inventory = await serverRes.json();
+        if (isSingle) {
+          inventory = Array.isArray(inventory) ? (inventory[0] || {}) : inventory;
+        } else {
+          inventory = Array.isArray(inventory) ? inventory : (inventory ? [inventory] : []);
+        }
+
         return new Response(JSON.stringify(inventory), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          status: method === 'POST' ? 201 : 200,
+          headers: {
+            'Content-Type': isSingle ? 'application/vnd.pgrst.object+json' : 'application/json',
+            'Content-Range': `0-${Array.isArray(inventory) ? inventory.length : 1}/*`,
+            'Preference-Applied': 'return=representation',
+          },
         });
       }
-    } catch {}
+    } catch (proxyErr) {
+      console.warn('[supabase proxy hotel_inventory fallback exception]:', proxyErr);
+    }
 
-    return new Response(JSON.stringify([]), {
+    const isSingle = (headers.get('accept') || '').includes('application/vnd.pgrst.object+json');
+    return new Response(JSON.stringify(isSingle ? {} : []), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': isSingle ? 'application/vnd.pgrst.object+json' : 'application/json' },
     });
   }
 
