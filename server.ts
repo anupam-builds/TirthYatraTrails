@@ -531,18 +531,19 @@ app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async 
     }
 
     // 4. Insert or upsert into remote Supabase admin_allowlist
+    // Strictly map table columns: email, role, created_at.
+    // Strip out 'status' and any extraneous properties from the request body to match database schema.
     let remoteAllowlistData: any = null;
     try {
+      const allowlistPayload = {
+        email: cleanEmail,
+        role: rawRole || 'admin',
+        created_at: typeof req.body.created_at === 'string' ? req.body.created_at : new Date().toISOString(),
+      };
+
       const { data, error } = await supabaseAdmin
         .from('admin_allowlist')
-        .upsert(
-          {
-            email: cleanEmail,
-            role: rawRole,
-            status: 'Active & Authorized',
-          },
-          { onConflict: 'email' }
-        )
+        .upsert(allowlistPayload, { onConflict: 'email' })
         .select()
         .maybeSingle();
 

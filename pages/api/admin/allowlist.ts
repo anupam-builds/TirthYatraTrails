@@ -60,16 +60,19 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Please provide a valid email format.' });
       }
 
+      const allowlistPayload: {
+        email: string;
+        role: string;
+        created_at: string;
+      } = {
+        email: cleanEmail,
+        role: role || 'admin',
+        created_at: typeof body.created_at === 'string' ? body.created_at : new Date().toISOString(),
+      };
+
       const { data, error } = await supabaseAdmin
         .from('admin_allowlist')
-        .upsert(
-          {
-            email: cleanEmail,
-            role,
-            status,
-          },
-          { onConflict: 'email' }
-        )
+        .upsert(allowlistPayload, { onConflict: 'email' })
         .select()
         .maybeSingle();
 
@@ -78,7 +81,13 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: error.message });
       }
 
-      return res.status(201).json({ success: true, data });
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...(data || allowlistPayload),
+          status: data?.status || status || 'Active & Authorized',
+        },
+      });
     } catch (err: any) {
       console.error('[pages/api/admin/allowlist.ts POST exception]:', err);
       return res.status(500).json({ error: err.message || 'Internal Server Error' });

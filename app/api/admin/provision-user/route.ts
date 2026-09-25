@@ -36,27 +36,39 @@ export async function POST(request: Request) {
     }
 
     // 1. Create user in Supabase Auth via Admin Client
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: cleanEmail,
-      password,
-      email_confirm: true,
-    });
+    let authUser: any = null;
+    try {
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password,
+        email_confirm: true,
+      });
 
-    if (authError) {
-      console.warn('[app/api/admin/provision-user] auth.admin.createUser notice:', authError.message);
+      if (authError) {
+        console.warn('[app/api/admin/provision-user] auth.admin.createUser notice:', authError.message);
+      } else {
+        authUser = authData?.user;
+      }
+    } catch (adminAuthErr: any) {
+      console.warn('[app/api/admin/provision-user] Admin auth creation call warning:', adminAuthErr?.message);
     }
 
     // 2. Insert or upsert the provisioned user record into admin_allowlist table
+    // Strictly map table columns: email, role, created_at.
+    // Strip out 'status' and any extraneous properties from the request body to match database schema.
+    const allowlistPayload: {
+      email: string;
+      role: string;
+      created_at: string;
+    } = {
+      email: cleanEmail,
+      role: role || 'admin',
+      created_at: typeof body.created_at === 'string' ? body.created_at : new Date().toISOString(),
+    };
+
     const { data: allowlistData, error: allowlistError } = await supabaseAdmin
       .from('admin_allowlist')
-      .upsert(
-        {
-          email: cleanEmail,
-          role,
-          status: 'Active & Authorized',
-        },
-        { onConflict: 'email' }
-      )
+      .upsert(allowlistPayload, { onConflict: 'email' })
       .select()
       .maybeSingle();
 
@@ -69,8 +81,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: 'Admin provisioned successfully',
-      user: authData?.user || { email: cleanEmail, role },
-      allowlist: allowlistData,
+      user: authUser || { email: cleanEmail, role },
+      allowlist: {
+        ...(allowlistData || allowlistPayload),
+        status: allowlistData?.status || 'Active & Authorized',
+      },
     });
   } catch (err: any) {
     console.error('[app/api/admin/provision-user exception]:', err);

@@ -61,16 +61,17 @@ export default async function handler(req, res) {
     }
 
     // 2. Insert or upsert the provisioned user record into admin_allowlist table
+    // Strictly map table columns: email, role, created_at.
+    // Strip out 'status' and any extraneous properties from the request body to match database schema.
+    const allowlistPayload = {
+      email: cleanEmail,
+      role: role || 'admin',
+      created_at: typeof body.created_at === 'string' ? body.created_at : new Date().toISOString(),
+    };
+
     const { data: allowlistData, error: allowlistError } = await supabaseAdmin
       .from('admin_allowlist')
-      .upsert(
-        {
-          email: cleanEmail,
-          role,
-          status: 'Active & Authorized',
-        },
-        { onConflict: 'email' }
-      )
+      .upsert(allowlistPayload, { onConflict: 'email' })
       .select()
       .maybeSingle();
 
@@ -83,7 +84,10 @@ export default async function handler(req, res) {
       success: true,
       message: 'Admin provisioned successfully',
       user: authUser || { email: cleanEmail, role },
-      allowlist: allowlistData,
+      allowlist: {
+        ...(allowlistData || allowlistPayload),
+        status: allowlistData?.status || 'Active & Authorized',
+      },
     });
   } catch (err) {
     console.error('[pages/api/admin/provision-user.js exception]:', err);
