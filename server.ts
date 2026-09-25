@@ -526,6 +526,13 @@ app.get('/api/admin/administrators', (req, res) => {
 
 // ===================== DEDICATED ADMIN PROVISIONING & CREDENTIAL SYSTEM =====================
 app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async (req, res) => {
+  // 1. ENV CHECK:
+  // Ensure the API route checks for process.env.NEXT_PUBLIC_SUPABASE_URL and process.env.SUPABASE_SERVICE_ROLE_KEY.
+  // If either is missing, return a clear JSON error response ({ error: "Missing server environment variables" }) with status 500 rather than crashing.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return res.status(500).json({ error: 'Missing server environment variables' });
+  }
+
   try {
     const rawEmail = req.body.admin_email || req.body.email || '';
     const rawPassword = req.body.admin_password || req.body.password || '';
