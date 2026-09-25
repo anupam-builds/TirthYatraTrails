@@ -21,6 +21,7 @@ export const supabase: SupabaseClient = createClient(
   supabaseAnonKey || 'placeholder',
   {
     auth: {
+      storage: typeof window !== 'undefined' ? window.sessionStorage : null,
       persistSession: true,
       autoRefreshToken: true,
     },

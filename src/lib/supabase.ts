@@ -549,10 +549,9 @@ export const supabase: SupabaseClient = createClient(
   SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea',
   {
     auth: {
+      storage: typeof window !== 'undefined' ? window.sessionStorage : null,
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     },
     global: {
       headers: getSupabaseHeaders(),
