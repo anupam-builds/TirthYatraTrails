@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, StaffMember } from '../types.js';
 import { api } from '../services/api.js';
 import { localStore } from '../services/localStore.js';
@@ -19,6 +19,7 @@ interface AuthContextType {
   adminUser: User | null;
   isAdminLoading: boolean;
   isAdminAuthenticated: boolean;
+  setAdminSession: (adminRecord: User) => void;
   loginAdmin: (email: string, pass: string) => Promise<void>;
   loginAdminWithOtp: (email: string, otp: string) => Promise<void>;
   sendAdminOtp: (email: string) => Promise<{ ok: boolean; message?: string }>;
@@ -276,13 +277,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: allowlistData?.created_at || new Date().toISOString(),
     };
 
+    setAdminSession(adminRecord);
+  };
+
+  // Set and authorize admin session (updates state and sessionStorage immediately)
+  const setAdminSession = useCallback((adminRecord: User) => {
     const sessionToken = btoa(JSON.stringify(adminRecord));
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('tyt_admin_token', sessionToken);
       localStorage.removeItem('tyt_admin_token');
+      window.dispatchEvent(new CustomEvent('tirth-admin-auth-changed', { detail: adminRecord }));
     }
     setAdminUser(adminRecord);
-  };
+    setIsAdminLoading(false);
+  }, []);
 
   // Admin Passwordless OTP Dispatcher
   const sendAdminOtp = async (email: string) => {
@@ -314,21 +322,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("Access Denied: Email not authorized by existing admin.");
     }
 
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('tyt_admin_token', res.token);
-      localStorage.removeItem('tyt_admin_token');
-    }
-    setAdminUser(res.user);
+    setAdminSession(res.user);
   };
 
   // Admin Logout
-  const logoutAdmin = () => {
+  const logoutAdmin = useCallback(() => {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('tyt_admin_token');
       localStorage.removeItem('tyt_admin_token');
+      window.dispatchEvent(new CustomEvent('tirth-admin-auth-changed', { detail: null }));
     }
     setAdminUser(null);
-  };
+    supabase.auth.signOut().catch(() => {});
+  }, []);
+
+  // Instant cross-component sync for admin auth events
+  useEffect(() => {
+    const handleAdminAuthChanged = (e: Event) => {
+      const custom = e as CustomEvent<User | null>;
+      if (custom.detail) {
+        setAdminUser(custom.detail);
+        setIsAdminLoading(false);
+      } else {
+        setAdminUser(null);
+      }
+    };
+    window.addEventListener('tirth-admin-auth-changed', handleAdminAuthChanged);
+    return () => window.removeEventListener('tirth-admin-auth-changed', handleAdminAuthChanged);
+  }, []);
+
+  // Real-time Supabase auth state change listener
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user?.email) {
+        const cleanEmail = session.user.email.toLowerCase().trim();
+        const isAdmin = await api.checkIsAdminEmail(cleanEmail);
+        if (isAdmin) {
+          const adminRecord: User = {
+            id: session.user.id || (cleanEmail === 'anupamsaxena.dev@gmail.com' ? 'usr-root-admin' : `usr-admin-${Date.now()}`),
+            name: cleanEmail === 'anupamsaxena.dev@gmail.com' ? 'Anupam Saxena (Root Admin)' : (session.user.user_metadata?.name || cleanEmail.split('@')[0]),
+            email: cleanEmail,
+            phone: '',
+            role: 'ADMIN',
+            createdAt: new Date().toISOString(),
+          };
+          setAdminSession(adminRecord);
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [setAdminSession]);
 
   // Staff Login
   const loginStaff = async (email: string, pass: string) => {
@@ -384,6 +430,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         adminUser,
         isAdminLoading,
         isAdminAuthenticated: !!adminUser && adminUser.role === 'ADMIN',
+        setAdminSession,
         loginAdmin,
         loginAdminWithOtp,
         sendAdminOtp,

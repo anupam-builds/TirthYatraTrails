@@ -2,7 +2,7 @@
  * Application Route Constants
  * Public Admin URL has changed to a custom secure hidden path.
  */
-export const SECURE_ADMIN_PORTAL_PATH = '/management/secret-hq';
+export const SECURE_ADMIN_PORTAL_PATH = '/portal/secure-desk-xyz';
 
 export const ADMIN_ROUTES = {
   root: SECURE_ADMIN_PORTAL_PATH,

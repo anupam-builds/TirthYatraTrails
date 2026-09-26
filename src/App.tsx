@@ -53,8 +53,17 @@ const AppContent: React.FC = () => {
   }
 
   // Handle Secure Discreet Admin Portal Routes (/portal/secure-desk-xyz)
-  if (cleanPath.startsWith(SECURE_ADMIN_PORTAL_PATH)) {
-    const subPath = cleanPath.slice(SECURE_ADMIN_PORTAL_PATH.length) || '/';
+  if (
+    cleanPath.startsWith(SECURE_ADMIN_PORTAL_PATH) ||
+    cleanPath.startsWith('/portal/secure-desk-xyz') ||
+    cleanPath.startsWith('/management/secret-hq')
+  ) {
+    const matchedPrefix = cleanPath.startsWith('/portal/secure-desk-xyz')
+      ? '/portal/secure-desk-xyz'
+      : cleanPath.startsWith('/management/secret-hq')
+      ? '/management/secret-hq'
+      : SECURE_ADMIN_PORTAL_PATH;
+    const subPath = cleanPath.slice(matchedPrefix.length) || '/';
     if (subPath === '/login') {
       return <AdminLoginPage />;
     }

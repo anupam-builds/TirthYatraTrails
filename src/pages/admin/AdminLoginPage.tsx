@@ -28,19 +28,27 @@ type AuthStep = 'EMAIL' | 'OTP' | 'PASSWORD';
 
 export const AdminLoginPage: React.FC = () => {
   const { navigate } = useRouter();
-  const { sendAdminOtp } = useAuth();
+  const { sendAdminOtp, setAdminSession, adminUser, isAdminAuthenticated } = useAuth();
   const lampRef = useRef<CuteLampRef>(null);
 
-  // Lamp starts sleeping / OFF on initial page load
-  const [isLampOn, setIsLampOn] = useState(false);
+  // Lamp starts active/ON so the login form is immediately accessible
+  const [isLampOn, setIsLampOn] = useState(true);
 
   // Sequential Multi-Step Auth State: EMAIL (Step 1) -> OTP (Step 2) -> PASSWORD (Step 3)
+  // Initial state is strictly blank by default
   const [step, setStep] = useState<AuthStep>('EMAIL');
-  const [email, setEmail] = useState('anupamsaxena.dev@gmail.com');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
-  const [password, setPassword] = useState('@Atharv_1996');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+
+  // Immediate seamless redirection if admin is already authenticated
+  React.useEffect(() => {
+    if (isAdminAuthenticated && adminUser) {
+      navigate(ADMIN_ROUTES.dashboard);
+    }
+  }, [isAdminAuthenticated, adminUser, navigate]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -239,19 +247,18 @@ export const AdminLoginPage: React.FC = () => {
         id: authUser?.id || (verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'usr-root-admin' : `usr-admin-${Date.now()}`),
         name: verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'Anupam Saxena (Root Admin)' : (authUser?.user_metadata?.name || verifiedEmail.split('@')[0]),
         email: verifiedEmail,
+        phone: '',
         role: 'ADMIN' as const,
         createdAt: allowlistData?.created_at || new Date().toISOString(),
       };
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('tyt_admin_token', btoa(JSON.stringify(adminRecord)));
-        localStorage.removeItem('tyt_admin_token');
-      }
 
-      // Record staff presence
-      try {
-        await api.setStaffOnlineStatus(adminRecord.id, true);
-      } catch {}
+      // Set admin session in AuthContext state, sessionStorage, and broadcast event immediately
+      setAdminSession(adminRecord);
 
+      // Record staff presence asynchronously without blocking navigation
+      api.setStaffOnlineStatus(adminRecord.id, true).catch(() => {});
+
+      // Instant transition and navigation to admin dashboard (no refresh needed)
       navigate(ADMIN_ROUTES.dashboard);
     } catch (err: any) {
       await supabase.auth.signOut().catch(() => {});
@@ -499,8 +506,12 @@ export const AdminLoginPage: React.FC = () => {
                       <span className="text-[10px] uppercase font-bold text-slate-400">Quick Fill:</span>
                       <button
                         type="button"
-                        onClick={() => setEmail('anupamsaxena.dev@gmail.com')}
-                        className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${
+                        onClick={() => {
+                          setEmail('anupamsaxena.dev@gmail.com');
+                          setPassword('@Atharv_1996');
+                          setError('');
+                        }}
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
                           email === 'anupamsaxena.dev@gmail.com'
                             ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -510,8 +521,12 @@ export const AdminLoginPage: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEmail('admin@tirthyatratrails.in')}
-                        className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${
+                        onClick={() => {
+                          setEmail('admin@tirthyatratrails.in');
+                          setPassword('Admin@123');
+                          setError('');
+                        }}
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
                           email === 'admin@tirthyatratrails.in'
                             ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -649,6 +664,37 @@ export const AdminLoginPage: React.FC = () => {
                     <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
                       Final security check: validates administrator credentials and enforces entry in <strong className="text-slate-700">admin_allowlist</strong>.
                     </p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Quick Fill:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPassword('@Atharv_1996');
+                          setError('');
+                        }}
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
+                          password === '@Atharv_1996'
+                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Root Admin (Anupam)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPassword('Admin@123');
+                          setError('');
+                        }}
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
+                          password === 'Admin@123'
+                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Secondary Admin
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">

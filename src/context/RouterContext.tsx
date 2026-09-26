@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface RouterContextType {
   path: string;
@@ -13,15 +13,7 @@ export const RouterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return (window.location.pathname + window.location.search) || '/';
   });
 
-  useEffect(() => {
-    const handlePopState = () => {
-      setPath((window.location.pathname + window.location.search) || '/');
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const navigate = (to: string) => {
+  const navigate = useCallback((to: string) => {
     try {
       if (typeof window !== 'undefined' && (window.location.pathname + window.location.search) !== to) {
         window.history.pushState({}, '', to);
@@ -33,7 +25,15 @@ export const RouterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setPath((window.location.pathname + window.location.search) || '/');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   return (
     <RouterContext.Provider value={{ path, navigate }}>
