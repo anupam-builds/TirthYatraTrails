@@ -22,7 +22,7 @@ interface AuthContextType {
   setAdminSession: (adminRecord: User) => void;
   loginAdmin: (email: string, pass: string) => Promise<void>;
   loginAdminWithOtp: (email: string, otp: string) => Promise<void>;
-  sendAdminOtp: (email: string) => Promise<{ ok: boolean; message?: string }>;
+  sendAdminOtp: (email: string) => Promise<{ ok: boolean; message?: string; devOtp?: string; otpCode?: string }>;
   logoutAdmin: () => void;
 
   // Staff Portal

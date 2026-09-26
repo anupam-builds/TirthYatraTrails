@@ -524,10 +524,11 @@ export async function setStaffOnlineStatus(id: string, online: boolean): Promise
   } catch {}
 
   if (typeof window !== 'undefined') {
-    fetch(`/api/admin/staff/${encodeURIComponent(id)}/presence`, {
+    const safeStaffId = encodeURIComponent((id || 'admin').trim());
+    fetch(`/api/admin/staff/${safeStaffId}/presence`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isOnline: online, lastSeen: timestamp }),
+      body: JSON.stringify({ id: id || 'admin', isOnline: online, lastSeen: timestamp }),
     }).catch(() => {});
 
     window.dispatchEvent(
@@ -655,7 +656,7 @@ export const api = {
    * Passwordless / OTP authentication for Enterprise Admin Desk.
    * Sends a 6-digit OTP code via Supabase Auth & verified domain SMTP (tirthyatratrails.in).
    */
-  async sendAdminOtp(email: string): Promise<{ ok: boolean; message?: string; devOtp?: string }> {
+  async sendAdminOtp(email: string): Promise<{ ok: boolean; message?: string; devOtp?: string; otpCode?: string }> {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) throw new Error('Please enter a valid administrator email address.');
 
@@ -682,13 +683,13 @@ export const api = {
       console.warn('[Admin OTP] Backend dispatch warning:', e);
     }
 
-    // 2. Also trigger Supabase Auth signInWithOtp
+    // 2. Also trigger Supabase Auth signInWithOtp strictly requesting numeric OTP passcode (omit emailRedirectTo to disable magic link flow)
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: {
           shouldCreateUser: false,
-          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/portal/secure-desk-xyz/dashboard` : 'https://tirthyatratrails.in/portal/secure-desk-xyz/dashboard',
+          // CRITICAL: Do NOT pass emailRedirectTo here so Supabase sends the 6-digit OTP passcode template rather than magic link!
         },
       });
 
@@ -702,7 +703,10 @@ export const api = {
     return {
       ok: true,
       devOtp,
-      message: `Verification code dispatched to ${cleanEmail} from noreply@tirthyatratrails.in (SPF/DKIM Verified).`,
+      otpCode: devOtp,
+      message: devOtp
+        ? `A 6-digit OTP passcode [${devOtp}] has been generated and dispatched to ${cleanEmail}.`
+        : `A 6-digit OTP passcode has been dispatched to ${cleanEmail} from noreply@tirthyatratrails.in (SPF/DKIM Verified).`,
     };
   },
 
