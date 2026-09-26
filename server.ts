@@ -661,52 +661,152 @@ app.post('/api/admin/allowlist', (req, res) => {
   }
 });
 
-app.put('/api/admin/allowlist/:idOrEmail', verifyAdminToken, (req, res) => {
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+app.put('/api/admin/allowlist/:idOrEmail', verifyAdminToken, async (req, res) => {
   try {
     const { idOrEmail } = req.params;
     const { role, status } = req.body;
     if (!idOrEmail) {
       return res.status(400).json({ error: 'id or email is required.' });
     }
-    const updated = db.updateAdminAllowlistEntry(idOrEmail, { role, status });
-    if (!updated) {
+    const cleanId = decodeURIComponent(idOrEmail).trim();
+    const isUuid = UUID_REGEX.test(cleanId);
+
+    const updatePayload: Record<string, any> = {};
+    if (role !== undefined && typeof role === 'string') updatePayload.role = role.trim();
+    if (status !== undefined && typeof status === 'string') updatePayload.status = status.trim();
+
+    // 1. Supabase database update
+    let supabaseUpdated: any = null;
+    try {
+      let updateQuery = supabaseAdmin.from('admin_allowlist').update(updatePayload);
+      if (isUuid) {
+        updateQuery = updateQuery.eq('id', cleanId);
+      } else {
+        updateQuery = updateQuery.eq('email', cleanId.toLowerCase());
+      }
+      const { data, error } = await updateQuery.select().maybeSingle();
+      if (!error && data) {
+        supabaseUpdated = data;
+      }
+    } catch (sbErr: any) {
+      console.warn('[server.ts allowlist PUT] Supabase notice:', sbErr?.message);
+    }
+
+    // 2. In-memory fallback update
+    const updated = db.updateAdminAllowlistEntry(cleanId, updatePayload);
+
+    if (!supabaseUpdated && !updated) {
       return res.status(404).json({ error: 'Administrator not found in allowlist.' });
     }
-    return res.json(updated);
+    return res.json(supabaseUpdated || updated || { id: cleanId, ...updatePayload });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.patch('/api/admin/allowlist/:idOrEmail', verifyAdminToken, (req, res) => {
+app.patch('/api/admin/allowlist/:idOrEmail', verifyAdminToken, async (req, res) => {
   try {
     const { idOrEmail } = req.params;
     const { role, status } = req.body;
     if (!idOrEmail) {
       return res.status(400).json({ error: 'id or email is required.' });
     }
-    const updated = db.updateAdminAllowlistEntry(idOrEmail, { role, status });
-    if (!updated) {
+    const cleanId = decodeURIComponent(idOrEmail).trim();
+    const isUuid = UUID_REGEX.test(cleanId);
+
+    const updatePayload: Record<string, any> = {};
+    if (role !== undefined && typeof role === 'string') updatePayload.role = role.trim();
+    if (status !== undefined && typeof status === 'string') updatePayload.status = status.trim();
+
+    // 1. Supabase database update
+    let supabaseUpdated: any = null;
+    try {
+      let updateQuery = supabaseAdmin.from('admin_allowlist').update(updatePayload);
+      if (isUuid) {
+        updateQuery = updateQuery.eq('id', cleanId);
+      } else {
+        updateQuery = updateQuery.eq('email', cleanId.toLowerCase());
+      }
+      const { data, error } = await updateQuery.select().maybeSingle();
+      if (!error && data) {
+        supabaseUpdated = data;
+      }
+    } catch (sbErr: any) {
+      console.warn('[server.ts allowlist PATCH] Supabase notice:', sbErr?.message);
+    }
+
+    // 2. In-memory fallback update
+    const updated = db.updateAdminAllowlistEntry(cleanId, updatePayload);
+
+    if (!supabaseUpdated && !updated) {
       return res.status(404).json({ error: 'Administrator not found in allowlist.' });
     }
-    return res.json(updated);
+    return res.json(supabaseUpdated || updated || { id: cleanId, ...updatePayload });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/admin/allowlist/:idOrEmail', (req, res) => {
+app.delete('/api/admin/allowlist/:idOrEmail', async (req, res) => {
   try {
     const { idOrEmail } = req.params;
     if (!idOrEmail) {
       return res.status(400).json({ error: 'id or email is required.' });
     }
-    const clean = idOrEmail.toLowerCase().trim();
-    if (clean === 'anupamsaxena.dev@gmail.com') {
+    const cleanId = decodeURIComponent(idOrEmail).trim();
+    const isUuid = UUID_REGEX.test(cleanId);
+
+    // Verify root administrator protection
+    let targetEmail = cleanId.toLowerCase();
+    if (isUuid) {
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from('admin_allowlist')
+          .select('email')
+          .eq('id', cleanId)
+          .maybeSingle();
+        if (existing?.email) {
+          targetEmail = existing.email.toLowerCase().trim();
+        }
+      } catch {}
+    }
+
+    if (targetEmail === 'anupamsaxena.dev@gmail.com') {
       return res.status(403).json({ error: 'Root administrator cannot be removed from allowlist.' });
     }
-    const success = db.removeAdminAllowlistEntry(idOrEmail);
-    return res.status(success ? 200 : 404).json({ success, message: success ? 'Admin removed from allowlist.' : 'Entry not found.' });
+
+    // 1. Delete from Supabase
+    let supabaseDeleted = false;
+    try {
+      let deleteQuery = supabaseAdmin.from('admin_allowlist').delete();
+      if (isUuid) {
+        deleteQuery = deleteQuery.eq('id', cleanId);
+      } else {
+        deleteQuery = deleteQuery.eq('email', cleanId.toLowerCase());
+      }
+      const { error } = await deleteQuery;
+      if (!error) {
+        supabaseDeleted = true;
+      }
+    } catch (sbErr: any) {
+      console.warn('[server.ts allowlist DELETE] Supabase delete notice:', sbErr?.message);
+    }
+
+    // 2. Delete from in-memory fallback
+    const memDeleted = db.removeAdminAllowlistEntry(cleanId);
+    if (targetEmail && targetEmail !== cleanId) {
+      db.removeAdminAllowlistEntry(targetEmail);
+    }
+
+    const success = supabaseDeleted || memDeleted;
+    return res.status(success ? 200 : 404).json({
+      success,
+      message: success ? 'Admin removed from allowlist successfully.' : 'Entry not found.',
+      id: cleanId,
+      email: targetEmail,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
