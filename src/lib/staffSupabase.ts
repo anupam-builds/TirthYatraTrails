@@ -8,9 +8,10 @@ export const staffSupabase: SupabaseClient = createClient(
   supabaseAnonKey || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea',
   {
     auth: {
-      storage: typeof window !== 'undefined' ? window.sessionStorage : null,
-      persistSession: true,
+      storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
       autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
     },
     realtime: {
       params: {

@@ -64,9 +64,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initCustomer();
   }, []);
 
-  // Restore Admin Session with strict role re-verification
+  // Restore Admin Session with strict role re-verification (clears on window close via sessionStorage)
   useEffect(() => {
     async function initAdmin() {
+      const clearAdminToken = () => {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('tyt_admin_token');
+          localStorage.removeItem('tyt_admin_token');
+        }
+      };
+
       try {
         const stored = await api.getMe('tyt_admin_token');
         if (stored && stored.role === 'ADMIN') {
@@ -76,15 +83,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setAdminUser(stored);
           } else {
             console.warn('[AuthContext] Admin privileges revoked or not found in database. Terminating session.');
-            localStorage.removeItem('tyt_admin_token');
+            clearAdminToken();
             setAdminUser(null);
           }
         } else {
-          localStorage.removeItem('tyt_admin_token');
+          clearAdminToken();
           setAdminUser(null);
         }
       } catch {
-        localStorage.removeItem('tyt_admin_token');
+        clearAdminToken();
         setAdminUser(null);
       } finally {
         setIsAdminLoading(false);
@@ -104,9 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       try {
-        const token =
-          (typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null) ||
-          (typeof window !== 'undefined' ? window.localStorage.getItem('tyt_staff_token') : null);
+        const token = typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null;
         if (token) {
           try {
             const check = await api.checkStaffSession();
@@ -253,7 +258,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 3. If email is missing from admin_allowlist, immediately signOut, block access, and show error
     if (!allowlistData && verifiedEmail !== 'anupamsaxena.dev@gmail.com') {
       await supabase.auth.signOut().catch(() => {});
-      localStorage.removeItem('tyt_admin_token');
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('tyt_admin_token');
+        localStorage.removeItem('tyt_admin_token');
+      }
       setAdminUser(null);
       throw new Error("Access Denied: Email not authorized by existing admin.");
     }
@@ -269,7 +277,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const sessionToken = btoa(JSON.stringify(adminRecord));
-    localStorage.setItem('tyt_admin_token', sessionToken);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('tyt_admin_token', sessionToken);
+      localStorage.removeItem('tyt_admin_token');
+    }
     setAdminUser(adminRecord);
   };
 
@@ -295,18 +306,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (!allowlistData && cleanEmail !== 'anupamsaxena.dev@gmail.com') {
       await supabase.auth.signOut().catch(() => {});
-      localStorage.removeItem('tyt_admin_token');
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('tyt_admin_token');
+        localStorage.removeItem('tyt_admin_token');
+      }
       setAdminUser(null);
       throw new Error("Access Denied: Email not authorized by existing admin.");
     }
 
-    localStorage.setItem('tyt_admin_token', res.token);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('tyt_admin_token', res.token);
+      localStorage.removeItem('tyt_admin_token');
+    }
     setAdminUser(res.user);
   };
 
   // Admin Logout
   const logoutAdmin = () => {
-    localStorage.removeItem('tyt_admin_token');
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('tyt_admin_token');
+      localStorage.removeItem('tyt_admin_token');
+    }
     setAdminUser(null);
   };
 

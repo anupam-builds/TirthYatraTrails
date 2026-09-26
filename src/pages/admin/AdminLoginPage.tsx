@@ -226,7 +226,10 @@ export const AdminLoginPage: React.FC = () => {
       // 3. If email is missing from admin_allowlist, immediately block access and sign out
       if (!allowlistData && verifiedEmail !== 'anupamsaxena.dev@gmail.com') {
         await supabase.auth.signOut().catch(() => {});
-        localStorage.removeItem('tyt_admin_token');
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('tyt_admin_token');
+          localStorage.removeItem('tyt_admin_token');
+        }
         setError('Access Denied: Email not authorized by existing admin.');
         return;
       }
@@ -239,7 +242,10 @@ export const AdminLoginPage: React.FC = () => {
         role: 'ADMIN' as const,
         createdAt: allowlistData?.created_at || new Date().toISOString(),
       };
-      localStorage.setItem('tyt_admin_token', btoa(JSON.stringify(adminRecord)));
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('tyt_admin_token', btoa(JSON.stringify(adminRecord)));
+        localStorage.removeItem('tyt_admin_token');
+      }
 
       // Record staff presence
       try {

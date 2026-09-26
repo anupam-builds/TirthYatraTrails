@@ -93,36 +93,31 @@ export const customFetch: typeof fetch = async (input, init) => {
       } catch {}
     }
 
-    // 2. Extract from admin session in sessionStorage or localStorage
+    // 2. Extract from admin session strictly in sessionStorage (no localStorage fallback)
     if (!callerEmail && typeof window !== 'undefined') {
       try {
-        const storedAdmin = sessionStorage.getItem('tyt_admin_token') || localStorage.getItem('tyt_admin_token');
+        const storedAdmin = window.sessionStorage ? window.sessionStorage.getItem('tyt_admin_token') : null;
         if (storedAdmin) {
           const parsed = JSON.parse(atob(storedAdmin));
           if (parsed?.email) callerEmail = parsed.email;
         }
       } catch {}
 
-      if (!callerEmail) {
+      if (!callerEmail && typeof window !== 'undefined' && window.sessionStorage) {
         try {
-          // Check sessionStorage first, then localStorage
-          const storages = [window.sessionStorage, window.localStorage];
-          for (const store of storages) {
-            if (!store) continue;
-            for (let i = 0; i < store.length; i++) {
-              const key = store.key(i);
-              if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
-                const val = store.getItem(key);
-                if (val) {
-                  const parsed = JSON.parse(val);
-                  if (parsed?.user?.email) {
-                    callerEmail = parsed.user.email;
-                    break;
-                  }
+          const store = window.sessionStorage;
+          for (let i = 0; i < store.length; i++) {
+            const key = store.key(i);
+            if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
+              const val = store.getItem(key);
+              if (val) {
+                const parsed = JSON.parse(val);
+                if (parsed?.user?.email) {
+                  callerEmail = parsed.user.email;
+                  break;
                 }
               }
             }
-            if (callerEmail) break;
           }
         } catch {}
       }
@@ -555,9 +550,10 @@ export const supabase: SupabaseClient = createClient(
   SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea',
   {
     auth: {
-      storage: typeof window !== 'undefined' ? window.sessionStorage : null,
-      persistSession: true,
+      storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
       autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
     },
     global: {
       headers: getSupabaseHeaders(),

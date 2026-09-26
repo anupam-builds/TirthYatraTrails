@@ -1049,7 +1049,7 @@ export const api = {
   async updateAdminAllowlistEntry(idOrEmail: string, updates: { role?: string; status?: string }): Promise<any> {
     // 1. Try local server endpoint
     try {
-      const token = localStorage.getItem('tyt_admin_token') || '';
+      const token = (typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_admin_token') : null) || '';
       const res = await fetch(`/api/admin/allowlist/${encodeURIComponent(idOrEmail)}`, {
         method: 'PUT',
         headers: {
@@ -1140,9 +1140,7 @@ export const api = {
   },
 
   async checkStaffSession(): Promise<{ ok: boolean; staff: StaffMember }> {
-    const token =
-      (typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null) ||
-      (typeof window !== 'undefined' ? window.localStorage.getItem('tyt_staff_token') : null);
+    const token = typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null;
     if (!token) throw new Error('No staff token');
     const parsed = JSON.parse(atob(token));
     if (!parsed || !parsed.id) throw new Error('Invalid staff token payload');
@@ -1198,9 +1196,10 @@ export const api = {
     return { user: mockUser, token: btoa(JSON.stringify(mockUser)) };
   },
   async getMe(tokenKey = 'tyt_auth_token') {
-    const token =
-      (typeof window !== 'undefined' ? window.sessionStorage.getItem(tokenKey) : null) ||
-      (typeof window !== 'undefined' ? window.localStorage.getItem(tokenKey) : null);
+    const isSessionOnly = tokenKey.includes('admin') || tokenKey.includes('staff');
+    const token = typeof window !== 'undefined'
+      ? (window.sessionStorage.getItem(tokenKey) || (!isSessionOnly ? window.localStorage.getItem(tokenKey) : null))
+      : null;
     return token ? JSON.parse(atob(token)) : null;
   },
 
@@ -1719,7 +1718,7 @@ export const api = {
 
   async createStaffMember(staff: Partial<StaffMember>) {
     try {
-      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
       const res = await fetch('/api/admin/staff', {
         method: 'POST',
         headers: {
@@ -1772,7 +1771,7 @@ export const api = {
 
   async updateStaffMember(id: string, staff: Partial<StaffMember>) {
     try {
-      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
       const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: {
@@ -1824,7 +1823,7 @@ export const api = {
 
   async toggleStaffStatus(id: string) {
     try {
-      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
       const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}/status`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
@@ -1846,7 +1845,7 @@ export const api = {
 
   async blockStaffMember(id: string, isBlocked: boolean, reason?: string) {
     try {
-      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
       const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}/block`, {
         method: 'PATCH',
         headers: {
@@ -1899,7 +1898,7 @@ export const api = {
 
   async deleteStaffMember(id: string) {
     try {
-      const token = (typeof window !== 'undefined' && localStorage.getItem('tyt_admin_token')) || '';
+      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
       await fetch(`/api/admin/staff/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
