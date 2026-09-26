@@ -660,7 +660,7 @@ export const AdminAccessPortal: React.FC = () => {
                 Authorized Enterprise Administrators
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Accounts permitted to authenticate via <code>/admin/login</code>
+                Accounts permitted to authenticate via <code>/portal/secure-desk-xyz/login</code>
               </p>
             </div>
 

@@ -12,7 +12,6 @@ import {
   EyeOff,
   AlertCircle,
   ExternalLink,
-  ShieldCheck,
 } from 'lucide-react';
 
 export const StaffLoginPage: React.FC = () => {
@@ -110,14 +109,6 @@ export const StaffLoginPage: React.FC = () => {
           >
             <span>Public Site</span>
             <ExternalLink className="w-3.5 h-3.5" />
-          </button>
-          <span className={isLampOn ? 'text-slate-300' : 'text-slate-700'}>|</span>
-          <button
-            onClick={() => navigate('/admin/login')}
-            className="text-orange-600 dark:text-orange-400 hover:underline font-bold flex items-center gap-1 transition-colors"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Admin Portal</span>
           </button>
         </div>
       </header>
@@ -235,14 +226,7 @@ export const StaffLoginPage: React.FC = () => {
                   🔒 <strong>Strict Policy:</strong> Self-registration is disabled. Staff credentials are authenticated directly by the travel desk.
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  Need access or credential reset? Contact your{' '}
-                  <button
-                    onClick={() => navigate('/admin/login')}
-                    className="text-orange-600 hover:underline font-bold cursor-pointer"
-                  >
-                    System Administrator
-                  </button>
-                  .
+                  Need access or credential reset? Contact your <strong>System Administrator</strong>.
                 </p>
               </div>
             </motion.div>

@@ -5,6 +5,7 @@ import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
 import { BaseInput } from '../../components/FormField.js';
 import { supabase } from '../../lib/supabase.js';
 import { api } from '../../services/api.js';
+import { ADMIN_ROUTES } from '../../constants/routes.js';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mail,
@@ -245,7 +246,7 @@ export const AdminLoginPage: React.FC = () => {
         await api.setStaffOnlineStatus(adminRecord.id, true);
       } catch {}
 
-      window.location.href = '/admin/dashboard';
+      navigate(ADMIN_ROUTES.dashboard);
     } catch (err: any) {
       await supabase.auth.signOut().catch(() => {});
       setError(err.message || 'Invalid administrator password or credentials.');

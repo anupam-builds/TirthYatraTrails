@@ -688,7 +688,7 @@ export const api = {
         email: cleanEmail,
         options: {
           shouldCreateUser: false,
-          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin/dashboard` : 'https://tirthyatratrails.in/admin/dashboard',
+          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/portal/secure-desk-xyz/dashboard` : 'https://tirthyatratrails.in/portal/secure-desk-xyz/dashboard',
         },
       });
 

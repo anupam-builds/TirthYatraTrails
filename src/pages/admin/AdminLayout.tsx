@@ -37,6 +37,7 @@ import {
 
 import { AdminLoginPage } from './AdminLoginPage.js';
 import { useStaffPresence } from '../../hooks/useStaffPresence.js';
+import { ADMIN_ROUTES } from '../../constants/routes.js';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -55,7 +56,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
         if (!isValid) {
           console.warn('[AdminLayout] Security Guard: Unauthorized admin access. Revoking session.');
           logoutAdmin();
-          navigate('/admin/dashboard');
+          navigate(ADMIN_ROUTES.login);
         }
       }).catch(() => {});
     }
@@ -183,15 +184,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
   }
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { id: 'admins', label: 'Admin Access / Management', path: '/admin/admins', icon: ShieldCheck },
-    { id: 'inquiries', label: 'Travel Desk Leads', path: '/admin/inquiries', icon: MessageSquare },
-    { id: 'staff', label: 'Staff Directory', path: '/admin/staff', icon: Users },
-    { id: 'hotels', label: 'Hotels Inventory', path: '/admin/hotels', icon: Building },
-    { id: 'packages', label: 'Yatra Packages', path: '/admin/packages', icon: Compass },
-    { id: 'cities', label: 'Cities & Hubs', path: '/admin/cities', icon: MapPin },
-    { id: 'reviews', label: 'Traveller Stories', path: '/admin/reviews', icon: Quote },
-    { id: 'settings', label: 'Settings & Alerts', path: '/admin/settings', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', path: ADMIN_ROUTES.dashboard, icon: LayoutDashboard },
+    { id: 'admins', label: 'Admin Access / Management', path: ADMIN_ROUTES.admins, icon: ShieldCheck },
+    { id: 'inquiries', label: 'Travel Desk Leads', path: ADMIN_ROUTES.inquiries, icon: MessageSquare },
+    { id: 'staff', label: 'Staff Directory', path: ADMIN_ROUTES.staff, icon: Users },
+    { id: 'hotels', label: 'Hotels Inventory', path: ADMIN_ROUTES.hotels, icon: Building },
+    { id: 'packages', label: 'Yatra Packages', path: ADMIN_ROUTES.packages, icon: Compass },
+    { id: 'cities', label: 'Cities & Hubs', path: ADMIN_ROUTES.cities, icon: MapPin },
+    { id: 'reviews', label: 'Traveller Stories', path: ADMIN_ROUTES.reviews, icon: Quote },
+    { id: 'settings', label: 'Settings & Alerts', path: ADMIN_ROUTES.settings, icon: Settings },
   ];
 
   return (
@@ -266,7 +267,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
             <button
               onClick={() => {
                 logoutAdmin();
-                navigate('/admin/login');
+                navigate(ADMIN_ROUTES.login);
               }}
               title="Sign Out"
               className="p-2 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/30 dark:hover:bg-red-900/60 dark:text-red-300 rounded-xl transition-colors border border-red-200 dark:border-transparent"
@@ -342,7 +343,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
               </button>
 
               <button
-                onClick={() => navigate('/admin/settings')}
+                onClick={() => navigate(ADMIN_ROUTES.settings)}
                 className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 title="Notification & Tone Settings"
               >
@@ -399,7 +400,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
                   <button
                     onClick={() => {
                       setActiveAlert(null);
-                      navigate('/admin/inquiries');
+                      navigate(ADMIN_ROUTES.inquiries);
                     }}
                     className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
                   >

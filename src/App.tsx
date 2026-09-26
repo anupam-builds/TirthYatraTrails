@@ -38,6 +38,7 @@ import { AdminSettings } from './pages/admin/AdminSettings.js';
 // Staff Pages
 import { StaffLoginPage } from './pages/staff/StaffLoginPage.js';
 import { StaffPortalPage } from './pages/staff/StaffPortalPage.js';
+import { SECURE_ADMIN_PORTAL_PATH } from './constants/routes.js';
 
 const AppContent: React.FC = () => {
   const { path } = useRouter();
@@ -51,37 +52,43 @@ const AppContent: React.FC = () => {
     return <StaffPortalPage />;
   }
 
-  // Handle Admin Portal Routes
-  if (cleanPath.startsWith('/admin')) {
-    if (cleanPath === '/admin/login') {
+  // Handle Secure Discreet Admin Portal Routes (/portal/secure-desk-xyz)
+  if (cleanPath.startsWith(SECURE_ADMIN_PORTAL_PATH)) {
+    const subPath = cleanPath.slice(SECURE_ADMIN_PORTAL_PATH.length) || '/';
+    if (subPath === '/login') {
       return <AdminLoginPage />;
     }
-    if (cleanPath === '/admin/hotels' || cleanPath === '/admin/inventory') {
+    if (subPath === '/hotels' || subPath === '/inventory') {
       return <AdminHotels />;
     }
-    if (cleanPath === '/admin/packages') {
+    if (subPath === '/packages') {
       return <AdminPackages />;
     }
-    if (cleanPath === '/admin/inquiries' || cleanPath === '/admin/leads') {
+    if (subPath === '/inquiries' || subPath === '/leads') {
       return <AdminInquiries />;
     }
-    if (cleanPath === '/admin/admins' || cleanPath === '/admin/management' || cleanPath === '/admin/access' || cleanPath === '/admin/allowlist') {
+    if (subPath === '/admins' || subPath === '/management' || subPath === '/access' || subPath === '/allowlist') {
       return <AdminAccessPage />;
     }
-    if (cleanPath === '/admin/staff') {
+    if (subPath === '/staff') {
       return <AdminStaff />;
     }
-    if (cleanPath === '/admin/cities') {
+    if (subPath === '/cities') {
       return <AdminCities />;
     }
-    if (cleanPath === '/admin/reviews') {
+    if (subPath === '/reviews') {
       return <AdminReviews />;
     }
-    if (cleanPath === '/admin/settings') {
+    if (subPath === '/settings') {
       return <AdminSettings />;
     }
     // Default admin fallback
     return <AdminDashboard />;
+  }
+
+  // Obfuscate former /admin routes so unauthorized visits return to public site
+  if (cleanPath === '/admin' || cleanPath.startsWith('/admin')) {
+    return <HomePage />;
   }
 
   // Handle Dynamic Hotel Detail Route `/hotel/:id`

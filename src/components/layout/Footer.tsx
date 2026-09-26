@@ -5,7 +5,6 @@ import {
   Phone,
   Mail,
   MapPin,
-  ShieldCheck,
   MessageCircle,
   Instagram,
   Facebook,
@@ -334,16 +333,6 @@ export const CustomerFooter: React.FC = () => {
                     className="hover:text-orange-400 cursor-pointer transition-colors text-left block w-full"
                   >
                     Spiritual Hospitality Guarantee
-                  </button>
-                </li>
-                <li className="pt-2">
-                  <button
-                    id="footer-admin-desk-link"
-                    onClick={() => navigate('/admin/login')}
-                    className="text-orange-400 hover:text-orange-300 font-bold underline underline-offset-2 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Admin Desk</span>
                   </button>
                 </li>
               </ul>

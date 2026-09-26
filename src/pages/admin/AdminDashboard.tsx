@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { useRouter } from '../../context/RouterContext.js';
+import { ADMIN_ROUTES } from '../../constants/routes.js';
 import { api, updateLeadOrInquiryStatus } from '../../services/api.js';
 import { City, Hotel, Package, Inquiry } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
@@ -175,7 +176,7 @@ export const AdminDashboard: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/admin/inquiries')}
+              onClick={() => navigate(ADMIN_ROUTES.inquiries)}
               className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <MessageSquare className="w-4 h-4" />
@@ -260,7 +261,7 @@ export const AdminDashboard: React.FC = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">Direct bookings requiring desk follow-up</p>
             </div>
             <button
-              onClick={() => navigate('/admin/inquiries')}
+              onClick={() => navigate(ADMIN_ROUTES.inquiries)}
               className="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 cursor-pointer"
             >
               <span>View All Leads</span>
@@ -394,7 +395,7 @@ export const AdminDashboard: React.FC = () => {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
-                onClick={() => navigate('/admin/hotels')}
+                onClick={() => navigate(ADMIN_ROUTES.hotels)}
                 className="p-4 rounded-2xl bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 hover:border-orange-500 text-left transition-colors space-y-1 cursor-pointer"
               >
                 <Building className="w-5 h-5 text-orange-500 dark:text-orange-400" />
@@ -403,7 +404,7 @@ export const AdminDashboard: React.FC = () => {
               </button>
 
               <button
-                onClick={() => navigate('/admin/packages')}
+                onClick={() => navigate(ADMIN_ROUTES.packages)}
                 className="p-4 rounded-2xl bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 hover:border-orange-500 text-left transition-colors space-y-1 cursor-pointer"
               >
                 <Compass className="w-5 h-5 text-orange-500 dark:text-orange-400" />
@@ -412,7 +413,7 @@ export const AdminDashboard: React.FC = () => {
               </button>
 
               <button
-                onClick={() => navigate('/admin/reviews')}
+                onClick={() => navigate(ADMIN_ROUTES.reviews)}
                 className="p-4 rounded-2xl bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 hover:border-orange-500 text-left transition-colors space-y-1 cursor-pointer"
               >
                 <MessageSquare className="w-5 h-5 text-orange-500 dark:text-orange-400" />
