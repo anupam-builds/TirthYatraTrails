@@ -93,10 +93,10 @@ export const customFetch: typeof fetch = async (input, init) => {
       } catch {}
     }
 
-    // 2. Extract from admin session in localStorage
+    // 2. Extract from admin session in sessionStorage or localStorage
     if (!callerEmail && typeof window !== 'undefined') {
       try {
-        const storedAdmin = localStorage.getItem('tyt_admin_token');
+        const storedAdmin = sessionStorage.getItem('tyt_admin_token') || localStorage.getItem('tyt_admin_token');
         if (storedAdmin) {
           const parsed = JSON.parse(atob(storedAdmin));
           if (parsed?.email) callerEmail = parsed.email;
@@ -105,18 +105,24 @@ export const customFetch: typeof fetch = async (input, init) => {
 
       if (!callerEmail) {
         try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
-              const val = localStorage.getItem(key);
-              if (val) {
-                const parsed = JSON.parse(val);
-                if (parsed?.user?.email) {
-                  callerEmail = parsed.user.email;
-                  break;
+          // Check sessionStorage first, then localStorage
+          const storages = [window.sessionStorage, window.localStorage];
+          for (const store of storages) {
+            if (!store) continue;
+            for (let i = 0; i < store.length; i++) {
+              const key = store.key(i);
+              if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
+                const val = store.getItem(key);
+                if (val) {
+                  const parsed = JSON.parse(val);
+                  if (parsed?.user?.email) {
+                    callerEmail = parsed.user.email;
+                    break;
+                  }
                 }
               }
             }
+            if (callerEmail) break;
           }
         } catch {}
       }

@@ -1140,7 +1140,9 @@ export const api = {
   },
 
   async checkStaffSession(): Promise<{ ok: boolean; staff: StaffMember }> {
-    const token = localStorage.getItem('tyt_staff_token');
+    const token =
+      (typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null) ||
+      (typeof window !== 'undefined' ? window.localStorage.getItem('tyt_staff_token') : null);
     if (!token) throw new Error('No staff token');
     const parsed = JSON.parse(atob(token));
     if (!parsed || !parsed.id) throw new Error('Invalid staff token payload');
@@ -1196,7 +1198,9 @@ export const api = {
     return { user: mockUser, token: btoa(JSON.stringify(mockUser)) };
   },
   async getMe(tokenKey = 'tyt_auth_token') {
-    const token = localStorage.getItem(tokenKey);
+    const token =
+      (typeof window !== 'undefined' ? window.sessionStorage.getItem(tokenKey) : null) ||
+      (typeof window !== 'undefined' ? window.localStorage.getItem(tokenKey) : null);
     return token ? JSON.parse(atob(token)) : null;
   },
 

@@ -73,6 +73,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: typeof window !== 'undefined' ? window.sessionStorage : null,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
   realtime: {
     params: {
       eventsPerSecond: 10,

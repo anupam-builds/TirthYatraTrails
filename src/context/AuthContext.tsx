@@ -93,11 +93,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAdmin();
   }, []);
 
-  // Restore Staff Session
+  // Restore Staff Session (clears on window close via sessionStorage)
   useEffect(() => {
     async function initStaff() {
+      const clearStaffToken = () => {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('tyt_staff_token');
+          localStorage.removeItem('tyt_staff_token');
+        }
+      };
+
       try {
-        const token = localStorage.getItem('tyt_staff_token');
+        const token =
+          (typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null) ||
+          (typeof window !== 'undefined' ? window.localStorage.getItem('tyt_staff_token') : null);
         if (token) {
           try {
             const check = await api.checkStaffSession();
@@ -105,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setStaffUser(check.staff);
               api.setStaffOnlineStatus(check.staff.id, true).catch(() => {});
             } else {
-              localStorage.removeItem('tyt_staff_token');
+              clearStaffToken();
               setStaffUser(null);
             }
           } catch (err: any) {
@@ -116,7 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               err?.message?.includes('not found')
             ) {
               console.warn('[AuthContext] Staff account revoked or blocked. Terminating session.');
-              localStorage.removeItem('tyt_staff_token');
+              clearStaffToken();
               setStaffUser(null);
             } else {
               // Only fallback to decoded token if it's explicitly verified as unblocked
@@ -131,17 +140,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   // Re-check against localStore if available
                   const verifiedLocal = localStore.getStaffMembers().find((s) => s.id === decoded.id);
                   if (verifiedLocal && (verifiedLocal.isBlocked || !verifiedLocal.isActive)) {
-                    localStorage.removeItem('tyt_staff_token');
+                    clearStaffToken();
                     setStaffUser(null);
                   } else {
                     setStaffUser(decoded);
                   }
                 } else {
-                  localStorage.removeItem('tyt_staff_token');
+                  clearStaffToken();
                   setStaffUser(null);
                 }
               } catch {
-                localStorage.removeItem('tyt_staff_token');
+                clearStaffToken();
                 setStaffUser(null);
               }
             }
@@ -150,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setStaffUser(null);
         }
       } catch {
-        localStorage.removeItem('tyt_staff_token');
+        clearStaffToken();
         setStaffUser(null);
       } finally {
         setIsStaffLoading(false);
@@ -304,7 +313,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Staff Login
   const loginStaff = async (email: string, pass: string) => {
     const res = await api.loginStaff(email, pass);
-    localStorage.setItem('tyt_staff_token', res.token);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('tyt_staff_token', res.token);
+      localStorage.removeItem('tyt_staff_token');
+    }
     setStaffUser(res.user);
     if (res.user?.id) {
       await api.setStaffOnlineStatus(res.user.id, true).catch(() => {});
@@ -318,7 +330,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       api.logoutStaff(staffId).catch(() => {});
       api.setStaffOnlineStatus(staffId, false).catch(() => {});
     }
-    localStorage.removeItem('tyt_staff_token');
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('tyt_staff_token');
+      localStorage.removeItem('tyt_staff_token');
+    }
     setStaffUser(null);
   };
 
