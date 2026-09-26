@@ -26,6 +26,29 @@ import {
   Eye,
 } from 'lucide-react';
 import { LeadDetailsModal } from '../../components/LeadDetailsModal.js';
+import { useAuth } from '../../context/AuthContext.js';
+import { supabase } from '../../lib/supabase.js';
+
+function formatAdminName(name?: string | null, email?: string | null): string {
+  if (name && name.trim()) {
+    // Strip redundant parenthetical annotations like "(Root Admin)" or "(Admin)"
+    const clean = name.replace(/\s*\([^)]*\)/g, '').trim();
+    if (clean && !clean.includes('@')) {
+      return clean;
+    }
+  }
+  if (email && email.trim()) {
+    const handle = email.split('@')[0].trim();
+    if (handle.toLowerCase().includes('anupam')) {
+      return 'Anupam Saxena';
+    }
+    const parts = handle.split(/[._-]/).filter(Boolean);
+    if (parts.length > 0) {
+      return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+    }
+  }
+  return 'Admin';
+}
 
 export const AdminDashboard: React.FC = () => {
   const { navigate } = useRouter();
@@ -40,6 +63,70 @@ export const AdminDashboard: React.FC = () => {
   const [selectedDetailedLead, setSelectedDetailedLead] = useState<Inquiry | null>(null);
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Admin user identification from Supabase Auth & Context
+  const { adminUser } = useAuth();
+  const [adminDisplayName, setAdminDisplayName] = useState<string>(() => {
+    if (adminUser?.name) {
+      return formatAdminName(adminUser.name, adminUser.email);
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.sessionStorage.getItem('tyt_admin_token');
+        if (raw) {
+          const parsed = JSON.parse(atob(raw));
+          return formatAdminName(parsed.name, parsed.email);
+        }
+      } catch {}
+    }
+    return 'Administrator';
+  });
+  const [adminEmail, setAdminEmail] = useState<string>(() => adminUser?.email || '');
+  const [adminRole, setAdminRole] = useState<string>('Super Admin');
+
+  // Fetch currently logged-in admin user from Supabase auth
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchAdminDetails() {
+      try {
+        // 1. Query Supabase auth user
+        const { data: { user: sbUser } } = await supabase.auth.getUser();
+        if (sbUser && isMounted) {
+          const email = sbUser.email || adminUser?.email || '';
+          const metaName = sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || adminUser?.name;
+          const formatted = formatAdminName(metaName, email);
+          setAdminDisplayName(formatted);
+          if (email) setAdminEmail(email);
+          if (email.toLowerCase().includes('anupam') || email.toLowerCase() === 'anupamsaxena.dev@gmail.com') {
+            setAdminRole('Root Admin');
+          } else {
+            setAdminRole('Administrator');
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Could not query Supabase auth user:', err);
+      }
+
+      // 2. Fallback to authenticated admin context or sessionStorage
+      if (adminUser && isMounted) {
+        const formatted = formatAdminName(adminUser.name, adminUser.email);
+        setAdminDisplayName(formatted);
+        if (adminUser.email) {
+          setAdminEmail(adminUser.email);
+          if (adminUser.email.toLowerCase().includes('anupam') || adminUser.email.toLowerCase() === 'anupamsaxena.dev@gmail.com') {
+            setAdminRole('Root Admin');
+          }
+        }
+      }
+    }
+
+    fetchAdminDetails();
+    return () => {
+      isMounted = false;
+    };
+  }, [adminUser]);
 
   const recalculateStats = (inqList: Inquiry[], hCount: number, pCount: number, cCount: number) => {
     setRecentInquiries(inqList.slice(0, 5));
@@ -161,8 +248,66 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <AdminLayout activeTab="dashboard">
-      <div className="space-y-8 max-w-7xl mx-auto">
+      <div className="space-y-6 max-w-7xl mx-auto">
         
+        {/* Personalized Welcome Banner */}
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent dark:from-[#0d1d33] dark:via-[#0c192c] dark:to-[#091322] border border-amber-500/25 dark:border-amber-500/20 p-4 sm:p-5 shadow-xs dark:shadow-[0_0_25px_rgba(245,158,11,0.06)] transition-all">
+          {/* Subtle Ambient Decorative Glows */}
+          <div className="absolute -top-10 -right-10 w-44 h-44 bg-amber-500/10 dark:bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-orange-500/10 dark:bg-orange-500/5 rounded-full blur-xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              {/* Glowing Welcome Icon */}
+              <div className="relative flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/30 text-amber-500 dark:text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)] shrink-0">
+                <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
+                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+              </div>
+
+              {/* Welcome Headline & Subtitle */}
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base sm:text-lg lg:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+                    Hello <span className="text-amber-600 dark:text-amber-400 font-extrabold">{adminDisplayName}</span>, Welcome to TirthYatraTrails Admin Panel
+                  </h2>
+
+                  {/* Subtle Glowing Status Badge */}
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live Admin Session</span>
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                  {adminEmail && (
+                    <>
+                      <span>Signed in as <strong className="font-medium text-slate-700 dark:text-slate-300">{adminEmail}</strong></span>
+                      <span className="text-slate-300 dark:text-slate-700">·</span>
+                    </>
+                  )}
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">{adminRole}</span>
+                  <span className="text-slate-300 dark:text-slate-700">·</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Realtime Sync Online</span>
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            {/* Right Badge */}
+            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+              <div className="px-3 py-1.5 rounded-xl bg-white/80 dark:bg-[#0a1628]/80 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1.5 shadow-2xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                <span>Enterprise Command</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Welcome Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
+import { useAdminPresence } from '../hooks/useAdminPresence.js';
 import { BaseInput, BaseSelect } from './FormField.js';
 import {
   ShieldCheck,
@@ -39,6 +40,7 @@ export interface AdminRecord {
 
 export const AdminAccessPortal: React.FC = () => {
   const { adminUser } = useAuth();
+  const { isOnline, onlineCount, isConnected } = useAdminPresence();
 
   // Provisioning Form State
   const [adminEmail, setAdminEmail] = useState('');
@@ -136,9 +138,23 @@ export const AdminAccessPortal: React.FC = () => {
     };
     window.addEventListener('tirth-staff-roster-changed', handleSync);
     window.addEventListener('tirth-allowlist-changed', handleSync);
+
+    // Realtime Postgres changes subscription on admin_allowlist table
+    const allowlistChannel = supabase
+      .channel('admin-allowlist-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'admin_allowlist' },
+        () => {
+          loadAdmins();
+        }
+      )
+      .subscribe();
+
     return () => {
       window.removeEventListener('tirth-staff-roster-changed', handleSync);
       window.removeEventListener('tirth-allowlist-changed', handleSync);
+      supabase.removeChannel(allowlistChannel);
     };
   }, []);
 
@@ -656,9 +672,18 @@ export const AdminAccessPortal: React.FC = () => {
         <div className="lg:col-span-7 bg-white dark:bg-[#0a192f] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Authorized Enterprise Administrators
-              </h2>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Authorized Enterprise Administrators
+                </h2>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm shadow-emerald-500/10">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                  <span>{onlineCount} Online</span>
+                </span>
+              </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Accounts permitted to authenticate via <code>/portal/secure-desk-xyz/login</code>
               </p>
@@ -706,6 +731,7 @@ export const AdminAccessPortal: React.FC = () => {
                     const initials = (adm.name || adm.email)
                       .slice(0, 2)
                       .toUpperCase();
+                    const adminIsOnline = isOnline(adm);
 
                     return (
                       <tr
@@ -715,8 +741,19 @@ export const AdminAccessPortal: React.FC = () => {
                         {/* Administrator info */}
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
-                              {initials}
+                            <div className="relative shrink-0">
+                              <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                                {initials}
+                              </div>
+                              {/* Live indicator dot on avatar */}
+                              <span
+                                title={adminIsOnline ? 'Online (Live)' : 'Offline'}
+                                className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-[#0a192f] transition-all duration-300 ${
+                                  adminIsOnline
+                                    ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]'
+                                    : 'bg-slate-400 dark:bg-slate-600'
+                                }`}
+                              />
                             </div>
                             <div className="truncate">
                               <div className="flex items-center gap-1.5">
@@ -748,10 +785,26 @@ export const AdminAccessPortal: React.FC = () => {
 
                         {/* Status */}
                         <td className="py-3 px-3">
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span>{adm.status || 'Active & Authorized'}</span>
-                          </span>
+                          {adminIsOnline ? (
+                            <span
+                              id={`admin-status-online-${adm.id || adm.email}`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 shadow-sm shadow-emerald-500/15"
+                            >
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                              </span>
+                              <span>Online (Live)</span>
+                            </span>
+                          ) : (
+                            <span
+                              id={`admin-status-offline-${adm.id || adm.email}`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 opacity-60" />
+                              <span>Offline</span>
+                            </span>
+                          )}
                         </td>
 
                         {/* Provisioned Timestamp */}

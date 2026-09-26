@@ -37,6 +37,7 @@ import {
 
 import { AdminLoginPage } from './AdminLoginPage.js';
 import { useStaffPresence } from '../../hooks/useStaffPresence.js';
+import { useAdminPresence } from '../../hooks/useAdminPresence.js';
 import { ADMIN_ROUTES } from '../../constants/routes.js';
 
 interface AdminLayoutProps {
@@ -62,7 +63,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
     }
   }, [activeTab, adminUser, isAdminLoading, logoutAdmin, navigate]);
 
-  // Sync admin presence
+  // Sync admin presence on Supabase Realtime channel 'online-admins'
+  useAdminPresence();
+  // Sync legacy staff table presence
   useStaffPresence(adminUser?.id);
   
   // Real-time Sound & Alert state
