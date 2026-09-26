@@ -31,8 +31,8 @@ export const AdminLoginPage: React.FC = () => {
   const { sendAdminOtp, setAdminSession, adminUser, isAdminAuthenticated } = useAuth();
   const lampRef = useRef<CuteLampRef>(null);
 
-  // Lamp starts active/ON so the login form is immediately accessible
-  const [isLampOn, setIsLampOn] = useState(true);
+  // Lamp starts sleeping / OFF on initial page load; requires explicit cord pull to reveal login card
+  const [isLampOn, setIsLampOn] = useState(false);
 
   // Sequential Multi-Step Auth State: EMAIL (Step 1) -> OTP (Step 2) -> PASSWORD (Step 3)
   // Initial state is strictly blank by default
@@ -373,9 +373,19 @@ export const AdminLoginPage: React.FC = () => {
         <motion.div layout className="flex flex-col items-center shrink-0">
           <CuteLamp ref={lampRef} isOn={isLampOn} onToggle={handleToggleLamp} size="lg" />
           {!isLampOn && (
-            <p className="mt-4 text-xs font-semibold text-slate-400 dark:text-slate-500 animate-pulse text-center">
-              Pull cord or click lamp to access Enterprise Admin Desk
-            </p>
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-4 flex flex-col items-center text-center space-y-1.5 select-none"
+            >
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/25 text-amber-300 text-xs font-semibold shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                <span>Desk Lamp Off</span>
+              </div>
+              <p className="text-xs font-medium text-slate-400 text-center max-w-[250px] leading-relaxed">
+                Pull the golden cord to switch on the lamp and unlock the Enterprise Admin Desk
+              </p>
+            </motion.div>
           )}
         </motion.div>
 
