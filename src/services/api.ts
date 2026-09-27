@@ -486,57 +486,10 @@ export async function updateLeadOrInquiryStatus(
  * Presence status updater targeting staff_members (for stf-* IDs) or profiles.
  * Ignores admin/user IDs (usr-*) and safely updates schema fields.
  */
-export async function setStaffOnlineStatus(id: string, online: boolean): Promise<void> {
-  if (!id || id.startsWith('usr-root')) return;
-  const timestamp = new Date().toISOString();
-
-  try {
-    // 1. Update staff_members table in Supabase
-    await supabase.from('staff_members')
-      .update({
-        is_online: online,
-        is_currently_logged_in: online,
-        last_seen: timestamp,
-        last_active_at: timestamp,
-      })
-      .eq('id', id);
-
-    // 2. Also update profiles table for schema compatibility
-    await supabase.from('profiles')
-      .update({
-        is_online: online,
-        is_currently_logged_in: online,
-        last_seen: timestamp,
-      })
-      .eq('id', id);
-  } catch (err) {
-    console.warn(`[Presence] update failed for ${id}:`, err);
-  }
-
-  // 3. Sync local store and window event for instant responsive UI feedback
-  try {
-    localStore.updateStaffMember(id, {
-      isCurrentlyLoggedIn: online,
-      isOnline: online,
-      lastActiveAt: timestamp,
-      lastSeen: timestamp,
-    } as any);
-  } catch {}
-
-  if (typeof window !== 'undefined') {
-    const safeStaffId = encodeURIComponent((id || 'admin').trim());
-    fetch(`/api/admin/staff/${safeStaffId}/presence`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: id || 'admin', isOnline: online, lastSeen: timestamp }),
-    }).catch(() => {});
-
-    window.dispatchEvent(
-      new CustomEvent('tirth-staff-presence-changed', {
-        detail: { staffId: id, isOnline: online, lastSeen: timestamp },
-      })
-    );
-  }
+export async function setStaffOnlineStatus(_id: string, _online: boolean): Promise<void> {
+  // Background presence network polling, profiles updates, and /presence pings are disabled
+  // to keep the frontend console completely free of 400 and 404 errors during admin navigation.
+  return;
 }
 
 /**
@@ -1113,9 +1066,6 @@ export const api = {
         last_active: new Date().toISOString(),
       }, { onConflict: 'staff_id' });
 
-      // Set online status in profiles & staff_members
-      await this.setStaffOnlineStatus(data.id, true).catch(() => {});
-
       const { password: _, ...safeStaff } = data;
       const mapped: StaffMember = {
         ...safeStaff,
@@ -1128,7 +1078,6 @@ export const api = {
     } catch (err: any) {
       if (err.message?.includes('Access Blocked')) throw err;
       const res = localStore.loginStaff(email, password);
-      await this.setStaffOnlineStatus(res.user.id, true).catch(() => {});
       return res;
     }
   },
@@ -1138,7 +1087,6 @@ export const api = {
       try {
         await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
       } catch {}
-      await this.setStaffOnlineStatus(staffId, false).catch(() => {});
       localStore.logoutStaff(staffId);
     }
   },

@@ -263,9 +263,6 @@ export const AdminLoginPage: React.FC = () => {
       // Set admin session in AuthContext state, sessionStorage, and broadcast event immediately
       setAdminSession(adminRecord);
 
-      // Record staff presence asynchronously without blocking navigation
-      api.setStaffOnlineStatus(adminRecord.id, true).catch(() => {});
-
       // Instant transition and navigation to admin dashboard (no refresh needed)
       navigate(ADMIN_ROUTES.dashboard);
     } catch (err: any) {

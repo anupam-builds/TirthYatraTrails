@@ -118,7 +118,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const check = await api.checkStaffSession();
             if (check?.ok && check.staff && !check.staff.isBlocked && check.staff.isActive) {
               setStaffUser(check.staff);
-              api.setStaffOnlineStatus(check.staff.id, true).catch(() => {});
             } else {
               clearStaffToken();
               setStaffUser(null);
@@ -384,9 +383,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('tyt_staff_token');
     }
     setStaffUser(res.user);
-    if (res.user?.id) {
-      await api.setStaffOnlineStatus(res.user.id, true).catch(() => {});
-    }
   };
 
   // Staff Logout
@@ -394,7 +390,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (staffUser?.id) {
       const staffId = staffUser.id;
       api.logoutStaff(staffId).catch(() => {});
-      api.setStaffOnlineStatus(staffId, false).catch(() => {});
     }
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('tyt_staff_token');
@@ -402,19 +397,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setStaffUser(null);
   };
-
-  // Presence tracking on window unload / unmount
-  useEffect(() => {
-    if (!staffUser?.id) return;
-    const staffId = staffUser.id;
-    const handleBeforeUnload = () => {
-      api.setStaffOnlineStatus(staffId, false).catch(() => {});
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [staffUser?.id]);
 
   return (
     <AuthContext.Provider

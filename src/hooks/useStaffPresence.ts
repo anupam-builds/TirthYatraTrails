@@ -1,44 +1,10 @@
-import { useEffect } from 'react';
-import { api } from '../services/api.js';
-
-export function useStaffPresence(staffId?: string) {
-  useEffect(() => {
-    // Skip unassigned tokens or root admin IDs
-    if (!staffId || staffId.startsWith('usr-root')) return;
-
-    const currentId = staffId;
-
-    const syncPresence = async (online: boolean) => {
-      try {
-        await api.setStaffOnlineStatus(currentId, online);
-      } catch (err) {
-        console.warn('[useStaffPresence] sync error:', err);
-      }
-    };
-
-    // 1. Mark online immediately on session active / component mount
-    syncPresence(true);
-
-    // 2. Continuous heartbeat every 30 seconds to refresh last_seen and maintain live presence
-    const heartbeatInterval = setInterval(() => {
-      syncPresence(true);
-    }, 30000);
-
-    // 3. Mark offline when user closes tab, navigates away, or unloads
-    const handleUnload = () => {
-      syncPresence(false);
-    };
-
-    window.addEventListener('beforeunload', handleUnload);
-    window.addEventListener('pagehide', handleUnload);
-
-    return () => {
-      clearInterval(heartbeatInterval);
-      window.removeEventListener('beforeunload', handleUnload);
-      window.removeEventListener('pagehide', handleUnload);
-      syncPresence(false);
-    };
-  }, [staffId]);
+/**
+ * Staff Online Presence Hook
+ * Disabled background interval pings and profiles updates to keep the console
+ * completely clean of 400 and 404 network errors during admin navigation.
+ */
+export function useStaffPresence(_staffId?: string) {
+  // Deliberately disabled to prevent background polling and unconfigured endpoint errors
 }
 
 export default useStaffPresence;

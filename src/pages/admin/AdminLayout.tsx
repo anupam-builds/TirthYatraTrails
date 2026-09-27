@@ -38,7 +38,6 @@ import {
 } from 'lucide-react';
 
 import { AdminLoginPage } from './AdminLoginPage.js';
-import { useStaffPresence } from '../../hooks/useStaffPresence.js';
 import { useAdminPresence } from '../../hooks/useAdminPresence.js';
 import { ADMIN_ROUTES } from '../../constants/routes.js';
 
@@ -72,9 +71,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
-      if (adminUser?.id) {
-        await api.setStaffOnlineStatus(adminUser.id, false).catch(() => {});
-      }
       await supabase.auth.signOut().catch(() => {});
     } finally {
       logoutAdmin();
@@ -99,8 +95,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
 
   // Sync admin presence on Supabase Realtime channel 'online-admins'
   useAdminPresence();
-  // Sync legacy staff table presence
-  useStaffPresence(adminUser?.id);
   
   // Real-time Sound & Alert state
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(getNotificationSettings());
