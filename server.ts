@@ -1586,12 +1586,16 @@ const handleStaffPresence = (req: express.Request, res: express.Response) => {
   }
 };
 
-app.patch(['/api/admin/staff/:id/presence', '/api/admin/staff/presence', '/api/staff/:id/presence', '/api/staff/presence'], handleStaffPresence);
-app.post(['/api/admin/staff/:id/presence', '/api/admin/staff/presence', '/api/staff/:id/presence', '/api/staff/presence'], handleStaffPresence);
-app.put(['/api/admin/staff/:id/presence', '/api/admin/staff/presence', '/api/staff/:id/presence', '/api/staff/presence'], handleStaffPresence);
-app.get(['/api/admin/staff/:id/presence', '/api/admin/staff/presence', '/api/staff/:id/presence', '/api/staff/presence'], (req, res) => {
-  res.json({ id: req.params.id || 'admin', status: 'ok', timestamp: new Date().toISOString() });
-});
+app.all([
+  '/api/admin/staff/*/presence',
+  '/api/admin/staff/:id/presence',
+  '/api/admin/staff/presence',
+  '/api/admin/staff/%5Bid%5D/presence',
+  '/api/admin/staff/[id]/presence',
+  '/api/staff/*/presence',
+  '/api/staff/:id/presence',
+  '/api/staff/presence',
+], handleStaffPresence);
 app.delete('/api/admin/staff/:id', verifyAdminToken, (req, res) => {
   db.deleteStaffMember(req.params.id); res.json({ success: true });
 });

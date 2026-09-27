@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
-import { useStaffPresence } from '../../hooks/useStaffPresence.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
@@ -64,8 +63,7 @@ export const StaffPortalPage: React.FC = () => {
   const { navigate } = useRouter();
   const { theme, isDark, setTheme, toggleTheme } = useTheme();
 
-  // Sync staff presence in profiles table
-  useStaffPresence(staffUser?.id);
+
 
   const [activePortalTab, setActivePortalTab] = useState<'LEADS' | 'SETTINGS'>('LEADS');
   const [isPlayingTest, setIsPlayingTest] = useState(false);
