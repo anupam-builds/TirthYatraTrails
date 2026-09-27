@@ -242,8 +242,10 @@ export const AdminReviews: React.FC = () => {
 
     try {
       setIsSubmitting(true);
+      const parsedRating = Math.max(1, Math.min(5, Math.round(Number(formData.rating) || 5)));
       const payload = {
         ...formData,
+        rating: parsedRating,
         destinationImage:
           formData.destinationImage.trim() ||
           'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80',

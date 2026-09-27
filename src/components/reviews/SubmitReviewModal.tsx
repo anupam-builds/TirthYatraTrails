@@ -63,7 +63,7 @@ export const SubmitReviewModal: React.FC<SubmitReviewModalProps> = ({
         authorName: authorName.trim(),
         authorLocation: authorHomeCity ? `${authorLocation} (from ${authorHomeCity})` : authorLocation,
         authorInitials: initials,
-        rating,
+        rating: Math.max(1, Math.min(5, Math.round(Number(rating) || 5))),
         reviewText: reviewText.trim() || 'Devotee shared an authentic voice note recording of their sacred journey.',
         destinationImage: destinationImage || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80',
         isVerified: true,

@@ -868,7 +868,7 @@ export const localStore = {
       authorName,
       authorLocation: reviewData.authorLocation || 'Sacred Dham',
       authorInitials: computedInitials,
-      rating: Number(reviewData.rating) || 5.0,
+      rating: Math.max(1, Math.min(5, Math.round(Number(reviewData.rating) || 5))),
       reviewText: reviewData.reviewText || '',
       destinationImage:
         reviewData.destinationImage ||
@@ -905,7 +905,7 @@ export const localStore = {
       ...updateData,
       authorName,
       authorInitials: computedInitials,
-      rating: updateData.rating !== undefined ? Number(updateData.rating) : existing.rating,
+      rating: updateData.rating !== undefined ? Math.max(1, Math.min(5, Math.round(Number(updateData.rating) || 5))) : existing.rating,
       order: updateData.order !== undefined ? Number(updateData.order) : existing.order,
       isVerified: updateData.isVerified !== undefined ? Boolean(updateData.isVerified) : existing.isVerified,
       isFeatured: updateData.isFeatured !== undefined ? Boolean(updateData.isFeatured) : existing.isFeatured,

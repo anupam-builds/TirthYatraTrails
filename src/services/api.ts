@@ -2752,6 +2752,11 @@ export const api = {
       ? { id: String(id).trim(), ...cleanPayload }
       : { ...cleanPayload };
 
+    // Explicitly enforce integer rating (1-5) before sending to Supabase PostgreSQL table
+    if (insertPayload.rating !== undefined) {
+      insertPayload.rating = Math.max(1, Math.min(5, Math.round(Number(insertPayload.rating) || 5)));
+    }
+
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
     const explicitHeaders = {
       apikey: anonKey,
@@ -2833,6 +2838,11 @@ export const api = {
   async updateReview(id: string, rev: Partial<Review>): Promise<Review> {
     const rawPayload = reviewToRow(rev);
     const { id: _ignoredId, ...payload } = rawPayload;
+
+    // Explicitly enforce integer rating (1-5) before sending to Supabase PostgreSQL table
+    if (payload.rating !== undefined) {
+      payload.rating = Math.max(1, Math.min(5, Math.round(Number(payload.rating) || 5)));
+    }
 
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
     const explicitHeaders = {
@@ -4054,7 +4064,12 @@ export function reviewToRow(rev: Partial<Review>): Record<string, any> {
   if (rev.authorInitials !== undefined || (rev as any).author_initials !== undefined) {
     row.author_initials = rev.authorInitials ?? (rev as any).author_initials;
   }
-  if (rev.rating !== undefined) row.rating = Number(rev.rating);
+  if (rev.rating !== undefined || (rev as any).rating !== undefined) {
+    const rawRating = rev.rating ?? (rev as any).rating;
+    const numRating = Number(rawRating);
+    // Parse into an integer using Math.round() to prevent PostgreSQL "invalid input syntax for type integer" error
+    row.rating = !isNaN(numRating) ? Math.max(1, Math.min(5, Math.round(numRating))) : 5;
+  }
   if (rev.reviewText !== undefined || (rev as any).review_text !== undefined) {
     row.review_text = rev.reviewText ?? (rev as any).review_text;
   }
