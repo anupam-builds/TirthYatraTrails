@@ -104,47 +104,57 @@ export const CuteLamp = forwardRef<CuteLampRef, CuteLampProps>(({
       className={`relative select-none flex flex-col items-center justify-start ${scale} ${className}`}
       style={{ width: 300, height: 380 }}
     >
-      {/* 1. RADIANT CONE OF LIGHT WHEN LAMP IS ON (dim/invisible when off) */}
+      {/* 1. SOFT, WARM AMBER GLOW STRICTLY BEHIND THE LAMPSHADE */}
       <motion.div
         initial={false}
         animate={{
           opacity: isOn ? 1 : 0,
-          scale: isOn ? 1 : 0.85,
+          scale: isOn ? 1.05 : 0.7,
         }}
-        transition={{ duration: 0.35, ease: 'easeInOut' }}
-        className="pointer-events-none absolute top-[148px] -left-16 -right-16 h-[390px] z-0 overflow-hidden"
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+        className="pointer-events-none absolute top-[35px] left-1/2 -translate-x-1/2 w-[380px] h-[380px] rounded-full z-0"
+        style={{
+          background:
+            'radial-gradient(circle, rgba(251, 191, 36, 0.18) 0%, rgba(245, 158, 11, 0.08) 45%, rgba(217, 119, 6, 0.02) 70%, transparent 85%)',
+          filter: 'blur(22px)',
+        }}
+      />
+
+      {/* 2. GENTLE WARM LIGHT SPREADING DOWNWARD ONTO DESK */}
+      <motion.div
+        initial={false}
+        animate={{
+          opacity: isOn ? 1 : 0,
+          scaleY: isOn ? 1 : 0.8,
+        }}
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+        className="pointer-events-none absolute top-[138px] -left-16 -right-16 h-[380px] z-0 overflow-hidden"
       >
         <div
           className="w-full h-full"
           style={{
-            clipPath: 'polygon(32% 0%, 68% 0%, 100% 100%, 0% 100%)',
+            clipPath: 'polygon(30% 0%, 70% 0%, 100% 100%, 0% 100%)',
             background:
-              'radial-gradient(ellipse at 50% 0%, rgba(254, 240, 138, 0.7) 0%, rgba(251, 191, 36, 0.35) 40%, rgba(245, 158, 11, 0.1) 72%, transparent 95%)',
-            filter: 'blur(6px)',
+              'radial-gradient(ellipse at 50% 0%, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.06) 42%, transparent 85%)',
+            filter: 'blur(10px)',
           }}
         />
       </motion.div>
 
-      {/* Extra ambient glow behind the shade (ZERO when off) */}
+      {/* 3. SOFT FLOOR / DESK ILLUMINATION POOL */}
       <motion.div
         initial={false}
         animate={{
-          opacity: isOn ? 0.9 : 0,
-          scale: isOn ? 1.15 : 0.6,
-        }}
-        transition={{ duration: 0.35 }}
-        className="pointer-events-none absolute top-[70px] w-56 h-56 rounded-full bg-amber-400/35 blur-2xl z-0"
-      />
-
-      {/* Floor desk illumination pool (ZERO when off) */}
-      <motion.div
-        initial={false}
-        animate={{
-          opacity: isOn ? 0.8 : 0,
+          opacity: isOn ? 1 : 0,
           scale: isOn ? 1 : 0.5,
         }}
-        transition={{ duration: 0.35 }}
-        className="pointer-events-none absolute -bottom-4 left-1/2 -translate-x-1/2 w-[340px] h-[55px] rounded-[100%] bg-amber-400/30 blur-xl z-0"
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+        className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 w-[360px] h-[55px] rounded-[100%] z-0"
+        style={{
+          background:
+            'radial-gradient(ellipse at 50% 50%, rgba(251, 191, 36, 0.16) 0%, rgba(245, 158, 11, 0.05) 55%, transparent 80%)',
+          filter: 'blur(8px)',
+        }}
       />
 
       {/* 2. LAMP STAND & BASE SVG */}

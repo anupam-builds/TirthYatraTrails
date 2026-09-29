@@ -306,20 +306,44 @@ export const AdminLoginPage: React.FC = () => {
   return (
     <div
       id="admin-login-page"
-      className={`min-h-screen flex flex-col justify-between p-4 sm:p-6 transition-colors duration-500 relative overflow-hidden font-sans ${
+      className={`min-h-screen flex flex-col justify-between p-4 sm:p-6 transition-colors duration-700 relative overflow-hidden font-sans ${
         isLampOn
-          ? 'bg-gradient-to-br from-[#fbf8f2] via-[#fefbf6] to-[#faeedb] text-slate-800'
-          : 'bg-gradient-to-br from-[#040a14] via-[#071424] to-[#050c18] text-slate-100'
+          ? 'bg-neutral-950 text-neutral-100'
+          : 'bg-[#080b11] text-neutral-200'
       }`}
     >
-      {/* Ambient background glow (strictly visible when lamp is ON) */}
+      {/* Ambient background glow originating strictly from behind the lamp shade */}
       <div
-        className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-700 ease-out ${
+          isLampOn ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        {/* Desktop glow positioned directly behind lamp (approx 30% x 42% y) */}
+        <div
+          className="w-full h-full hidden md:block"
+          style={{
+            background:
+              'radial-gradient(ellipse 750px 520px at 30% 42%, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.05) 42%, transparent 75%)',
+          }}
+        />
+        {/* Mobile glow centered above card behind lamp */}
+        <div
+          className="w-full h-full block md:hidden"
+          style={{
+            background:
+              'radial-gradient(ellipse 550px 450px at 50% 26%, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.05) 45%, transparent 75%)',
+          }}
+        />
+      </div>
+
+      {/* Subtle desk surface warm bounce illumination */}
+      <div
+        className={`absolute bottom-0 inset-x-0 h-72 pointer-events-none transition-opacity duration-700 ease-out ${
           isLampOn ? 'opacity-100' : 'opacity-0'
         }`}
         style={{
           background:
-            'radial-gradient(circle at 35% 45%, rgba(251, 191, 36, 0.28) 0%, rgba(245, 158, 11, 0.1) 45%, transparent 72%)',
+            'radial-gradient(ellipse 1000px 200px at 50% 100%, rgba(251, 191, 36, 0.07) 0%, rgba(245, 158, 11, 0.02) 50%, transparent 80%)',
         }}
       />
 
@@ -329,7 +353,7 @@ export const AdminLoginPage: React.FC = () => {
           className="flex items-center gap-3 cursor-pointer group"
           onClick={() => navigate('/')}
         >
-          <div className="w-10 h-10 rounded-full bg-white shadow-md p-1 flex items-center justify-center shrink-0 border border-amber-300/40 aspect-square group-hover:scale-105 transition-transform">
+          <div className="w-10 h-10 rounded-full bg-neutral-900 shadow-md p-1 flex items-center justify-center shrink-0 border border-amber-400/30 aspect-square group-hover:scale-105 transition-transform">
             <img
               src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
               alt="TirthYatraTrails.in Logo"
@@ -338,14 +362,10 @@ export const AdminLoginPage: React.FC = () => {
             />
           </div>
           <div>
-            <span
-              className={`font-extrabold text-sm tracking-wide font-serif block ${
-                isLampOn ? 'text-slate-900' : 'text-white'
-              }`}
-            >
+            <span className="font-extrabold text-sm tracking-wide font-serif block text-white">
               TirthYatraTrails
             </span>
-            <span className="text-[10px] text-orange-600 dark:text-orange-400 font-bold uppercase tracking-wider block">
+            <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider block">
               Enterprise Admin Portal
             </span>
           </div>
@@ -354,19 +374,15 @@ export const AdminLoginPage: React.FC = () => {
         <div className="flex items-center gap-3 text-xs">
           <button
             onClick={() => navigate('/')}
-            className={`flex items-center gap-1 transition-colors ${
-              isLampOn
-                ? 'text-slate-600 hover:text-slate-900'
-                : 'text-slate-300 hover:text-white'
-            }`}
+            className="flex items-center gap-1 text-neutral-300 hover:text-white transition-colors"
           >
             <span>Public Site</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
-          <span className={isLampOn ? 'text-slate-300' : 'text-slate-700'}>|</span>
+          <span className="text-neutral-700">|</span>
           <button
             onClick={() => navigate('/staff/login')}
-            className="text-orange-600 dark:text-orange-400 hover:underline font-bold flex items-center gap-1 transition-colors"
+            className="text-amber-500 hover:text-amber-400 font-bold flex items-center gap-1 transition-colors"
           >
             <Users className="w-3.5 h-3.5" />
             <span>Staff Portal</span>
@@ -393,7 +409,7 @@ export const AdminLoginPage: React.FC = () => {
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
                 <span>Desk Lamp Off</span>
               </div>
-              <p className="text-xs font-medium text-slate-400 text-center max-w-[250px] leading-relaxed">
+              <p className="text-xs font-medium text-neutral-400 text-center max-w-[250px] leading-relaxed">
                 Pull the golden cord to switch on the lamp and unlock the Enterprise Admin Desk
               </p>
             </motion.div>
@@ -405,15 +421,15 @@ export const AdminLoginPage: React.FC = () => {
           {isLampOn && (
             <motion.div
               key="active-admin-login-card"
-              initial={{ opacity: 0, x: 45, scale: 0.94, filter: 'blur(8px)' }}
+              initial={{ opacity: 0, x: 35, scale: 0.96, filter: 'blur(6px)' }}
               animate={{ opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, x: 40, scale: 0.94, filter: 'blur(8px)' }}
+              exit={{ opacity: 0, x: 30, scale: 0.96, filter: 'blur(6px)' }}
               transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full max-w-md rounded-3xl p-6 sm:p-8 bg-white/95 border border-amber-200/90 shadow-[0_25px_60px_-15px_rgba(245,158,11,0.25)] text-slate-800 space-y-5 relative z-10"
+              className="w-full max-w-md rounded-3xl p-6 sm:p-8 bg-neutral-900/95 border border-neutral-800 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_35px_rgba(251,191,36,0.08)] text-neutral-100 space-y-5 relative z-10 backdrop-blur-xl"
             >
               {/* Header */}
               <div className="text-center space-y-2">
-                <div className="w-16 h-16 rounded-full p-2 flex items-center justify-center mx-auto border border-amber-200 aspect-square shadow-md bg-white">
+                <div className="w-16 h-16 rounded-full p-2 flex items-center justify-center mx-auto border border-amber-500/30 shadow-md bg-neutral-950 aspect-square">
                   <img
                     src="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png"
                     alt="TirthYatraTrails.in Logo"
@@ -421,25 +437,25 @@ export const AdminLoginPage: React.FC = () => {
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <div className="flex items-center justify-center gap-1.5 text-emerald-700 font-semibold text-[11px] bg-emerald-50 border border-emerald-200/70 rounded-full px-3 py-0.5 w-fit mx-auto">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="flex items-center justify-center gap-1.5 text-emerald-300 font-semibold text-[11px] bg-emerald-950/70 border border-emerald-700/60 rounded-full px-3 py-0.5 w-fit mx-auto">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   <span>OTP-First Multi-Factor Authentication</span>
                 </div>
-                <h1 className="text-2xl font-black font-serif tracking-tight text-slate-900">
+                <h1 className="text-2xl font-black font-serif tracking-tight text-white">
                   Enterprise Admin Portal
                 </h1>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-neutral-400">
                   Secured via Verified Domain • Strict Allowlist Enforcement
                 </p>
               </div>
 
               {/* Sequential Step Indicator */}
-              <div className="bg-slate-100/90 p-1.5 rounded-2xl flex items-center justify-between text-center text-[10px] font-bold">
+              <div className="bg-neutral-950 border border-neutral-800/90 p-1.5 rounded-2xl flex items-center justify-between text-center text-[10px] font-bold">
                 <div
                   className={`flex-1 py-1.5 px-1 rounded-xl transition-all flex items-center justify-center gap-1 ${
                     step === 'EMAIL'
-                      ? 'bg-orange-600 text-white shadow-xs'
-                      : 'text-slate-600 font-medium'
+                      ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-xs'
+                      : 'text-neutral-400 font-medium'
                   }`}
                 >
                   <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[9px]">1</span>
@@ -448,49 +464,49 @@ export const AdminLoginPage: React.FC = () => {
                 <div
                   className={`flex-1 py-1.5 px-1 rounded-xl transition-all flex items-center justify-center gap-1 ${
                     step === 'OTP'
-                      ? 'bg-orange-600 text-white shadow-xs'
+                      ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-xs'
                       : otpVerified
-                      ? 'text-emerald-700 font-semibold'
-                      : 'text-slate-400'
+                      ? 'text-emerald-400 font-semibold'
+                      : 'text-neutral-500'
                   }`}
                 >
-                  {otpVerified ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[9px]">2</span>}
+                  {otpVerified ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <span className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center text-[9px]">2</span>}
                   <span>OTP Passcode</span>
                 </div>
                 <div
                   className={`flex-1 py-1.5 px-1 rounded-xl transition-all flex items-center justify-center gap-1 ${
                     step === 'PASSWORD'
-                      ? 'bg-orange-600 text-white shadow-xs'
-                      : 'text-slate-400'
+                      ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-xs'
+                      : 'text-neutral-500'
                   }`}
                 >
-                  <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[9px]">3</span>
+                  <span className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center text-[9px]">3</span>
                   <span>Password</span>
                 </div>
               </div>
 
               {/* Status / Error feedback */}
               {error && (
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 text-xs font-semibold flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="p-3 rounded-xl bg-red-950/70 border border-red-800/60 text-red-200 text-xs font-semibold flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
               )}
 
               {infoMessage && (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 text-xs font-medium flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-800/50 text-amber-200 text-xs font-medium flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <span>{infoMessage}</span>
                 </div>
               )}
 
               {/* Domain & DNS Security Indicator */}
-              <div className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-200/60 text-blue-900 flex items-center justify-between text-[11px]">
+              <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-800/50 text-blue-200 flex items-center justify-between text-[11px]">
                 <div className="flex items-center gap-1.5 font-medium">
-                  <Globe className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span>Domain DNS: <strong className="font-semibold text-blue-950">tirthyatratrails.in</strong></span>
+                  <Globe className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span>Domain DNS: <strong className="font-semibold text-blue-100">tirthyatratrails.in</strong></span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-900/60 text-blue-200 border border-blue-700/50 px-1.5 py-0.5 rounded">
                   SPF/DKIM
                 </span>
               </div>
@@ -501,12 +517,12 @@ export const AdminLoginPage: React.FC = () => {
                   <div>
                     <label
                       htmlFor="admin-email-input"
-                      className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-700"
+                      className="block text-xs font-bold uppercase tracking-wider mb-1 text-neutral-200"
                     >
                       Administrator Work Email
                     </label>
                     <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <Mail className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
                       <BaseInput
                         id="admin-email-input"
                         name="admin_email"
@@ -516,14 +532,14 @@ export const AdminLoginPage: React.FC = () => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="admin@tirthyatratrails.in"
-                        className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs bg-neutral-950 border border-neutral-700 text-white placeholder-neutral-500 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-colors"
                       />
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                    <p className="text-[11px] text-neutral-400 mt-1.5 leading-relaxed">
                       A strict 6-digit numeric OTP passcode will be dispatched to your administrator inbox (strictly numeric code, no magic links).
                     </p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">Quick Fill:</span>
+                      <span className="text-[10px] uppercase font-bold text-neutral-400">Quick Fill:</span>
                       <button
                         type="button"
                         onClick={() => {
@@ -531,10 +547,10 @@ export const AdminLoginPage: React.FC = () => {
                           setPassword('@Atharv_1996');
                           setError('');
                         }}
-                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer border ${
                           email === 'anupamsaxena.dev@gmail.com'
-                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-amber-950/80 text-amber-300 font-bold border-amber-600/70'
+                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-750 hover:text-white border-neutral-700'
                         }`}
                       >
                         Root Admin (Anupam)
@@ -546,10 +562,10 @@ export const AdminLoginPage: React.FC = () => {
                           setPassword('Admin@123');
                           setError('');
                         }}
-                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer border ${
                           email === 'admin@tirthyatratrails.in'
-                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-amber-950/80 text-amber-300 font-bold border-amber-600/70'
+                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-750 hover:text-white border-neutral-700'
                         }`}
                       >
                         Secondary Admin
@@ -561,7 +577,7 @@ export const AdminLoginPage: React.FC = () => {
                     id="btn-admin-request-otp"
                     type="submit"
                     disabled={loading || !email.trim()}
-                    className="w-full py-3 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                    className="w-full py-3 bg-gradient-to-r from-[#ea580c] to-[#d97706] hover:from-[#c2410c] hover:to-[#b45309] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-950/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     <span>{loading ? 'Dispatching OTP Code...' : 'Step 1: Send OTP Passcode'}</span>
                     <ArrowRight className="w-4 h-4" />
@@ -576,7 +592,7 @@ export const AdminLoginPage: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <label
                         htmlFor="otp-token-input"
-                        className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+                        className="block text-xs font-bold uppercase tracking-wider text-neutral-200"
                       >
                         6-Digit OTP Passcode
                       </label>
@@ -586,14 +602,14 @@ export const AdminLoginPage: React.FC = () => {
                           setStep('EMAIL');
                           setError('');
                         }}
-                        className="text-[11px] text-orange-600 hover:underline cursor-pointer"
+                        className="text-[11px] text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
                       >
                         Change email
                       </button>
                     </div>
 
                     <div className="relative">
-                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <KeyRound className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
                       <BaseInput
                         id="otp-token-input"
                         name="otp_token"
@@ -607,19 +623,19 @@ export const AdminLoginPage: React.FC = () => {
                         value={otp}
                         onChange={(e) => setOtp(e.target.value.trim())}
                         placeholder="e.g. 123456"
-                        className="w-full pl-10 pr-3 py-2.5 rounded-xl text-center tracking-[0.3em] font-mono text-base font-bold bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-3 py-2.5 rounded-xl text-center tracking-[0.3em] font-mono text-base font-bold bg-neutral-950 border border-neutral-700 text-white placeholder-neutral-500 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-colors"
                       />
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                    <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
                       Enter the 6-digit numeric passcode dispatched to your email (strictly numeric OTP; magic sign-in links are disabled).
                     </p>
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1.5">
-                      <span>Sent to: <strong className="text-slate-700">{email}</strong></span>
+                    <div className="flex items-center justify-between text-[11px] text-neutral-400 mt-1.5">
+                      <span>Sent to: <strong className="text-neutral-200">{email}</strong></span>
                       <button
                         type="button"
                         onClick={handleResend}
                         disabled={resendCooldown > 0 || loading}
-                        className="text-orange-600 hover:text-orange-700 disabled:text-slate-400 flex items-center gap-1 cursor-pointer font-medium"
+                        className="text-amber-400 hover:text-amber-300 disabled:text-neutral-500 flex items-center gap-1 cursor-pointer font-medium"
                       >
                         <RotateCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
                         <span>{resendCooldown > 0 ? `Resend (${resendCooldown}s)` : 'Resend code'}</span>
@@ -631,7 +647,7 @@ export const AdminLoginPage: React.FC = () => {
                     id="btn-admin-verify-otp"
                     type="submit"
                     disabled={loading || otp.trim().length < 6}
-                    className="w-full py-3 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                    className="w-full py-3 bg-gradient-to-r from-[#ea580c] to-[#d97706] hover:from-[#c2410c] hover:to-[#b45309] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-950/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     <span>{loading ? 'Verifying OTP Passcode...' : 'Step 2: Verify OTP Passcode'}</span>
                     <ShieldCheck className="w-4 h-4" />
@@ -655,14 +671,14 @@ export const AdminLoginPage: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <label
                         htmlFor="admin-password-input"
-                        className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+                        className="block text-xs font-bold uppercase tracking-wider text-neutral-200"
                       >
                         Administrator Password
                       </label>
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="text-[11px] text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+                        className="text-[11px] text-neutral-400 hover:text-neutral-200 flex items-center gap-1 cursor-pointer"
                       >
                         {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                         <span>{showPassword ? 'Hide' : 'Show'}</span>
@@ -670,7 +686,7 @@ export const AdminLoginPage: React.FC = () => {
                     </div>
 
                     <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <Lock className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
                       <BaseInput
                         id="admin-password-input"
                         name="admin_password"
@@ -681,24 +697,24 @@ export const AdminLoginPage: React.FC = () => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter your admin password..."
-                        className="w-full pl-10 pr-10 py-2.5 rounded-xl text-xs bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl text-xs bg-neutral-950 border border-neutral-700 text-white placeholder-neutral-500 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-colors"
                       />
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                      Final security check: validates administrator credentials and enforces entry in <strong className="text-slate-700">admin_allowlist</strong>.
+                    <p className="text-[11px] text-neutral-400 mt-1.5 leading-relaxed">
+                      Final security check: validates administrator credentials and enforces entry in <strong className="text-neutral-200">admin_allowlist</strong>.
                     </p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">Quick Fill:</span>
+                      <span className="text-[10px] uppercase font-bold text-neutral-400">Quick Fill:</span>
                       <button
                         type="button"
                         onClick={() => {
                           setPassword('@Atharv_1996');
                           setError('');
                         }}
-                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer border ${
                           password === '@Atharv_1996'
-                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-amber-950/80 text-amber-300 font-bold border-amber-600/70'
+                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-750 hover:text-white border-neutral-700'
                         }`}
                       >
                         Root Admin (Anupam)
@@ -709,10 +725,10 @@ export const AdminLoginPage: React.FC = () => {
                           setPassword('Admin@123');
                           setError('');
                         }}
-                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer ${
+                        className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer border ${
                           password === 'Admin@123'
-                            ? 'bg-orange-100 text-orange-700 font-bold border border-orange-300'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-amber-950/80 text-amber-300 font-bold border-amber-600/70'
+                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-750 hover:text-white border-neutral-700'
                         }`}
                       >
                         Secondary Admin
@@ -727,7 +743,7 @@ export const AdminLoginPage: React.FC = () => {
                         setStep('OTP');
                         setError('');
                       }}
-                      className="py-3 px-3 border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                      className="py-3 px-3 border border-neutral-700 text-neutral-300 hover:bg-neutral-800 font-bold text-xs rounded-xl transition-all cursor-pointer"
                     >
                       Back
                     </button>
@@ -735,7 +751,7 @@ export const AdminLoginPage: React.FC = () => {
                       id="btn-admin-complete-login"
                       type="submit"
                       disabled={loading || !password}
-                      className="flex-1 py-3 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                      className="flex-1 py-3 bg-gradient-to-r from-[#ea580c] to-[#d97706] hover:from-[#c2410c] hover:to-[#b45309] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-950/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                     >
                       <span>{loading ? 'Validating Allowlist & Password...' : 'Step 3: Complete Sign-In'}</span>
                       <ShieldCheck className="w-4 h-4" />
@@ -744,10 +760,10 @@ export const AdminLoginPage: React.FC = () => {
                 </form>
               )}
 
-              <div className="pt-2 border-t border-slate-200 text-center">
+              <div className="pt-2 border-t border-neutral-800 text-center">
                 <button
                   onClick={() => navigate('/')}
-                  className="text-xs text-slate-500 hover:text-orange-600 transition-colors cursor-pointer"
+                  className="text-xs text-neutral-400 hover:text-amber-400 transition-colors cursor-pointer"
                 >
                   ← Return to Customer Website
                 </button>
@@ -758,11 +774,7 @@ export const AdminLoginPage: React.FC = () => {
       </motion.main>
 
       {/* Footer */}
-      <footer
-        className={`text-center text-xs z-10 py-2 ${
-          isLampOn ? 'text-slate-500' : 'text-slate-400'
-        }`}
-      >
+      <footer className="text-center text-xs z-10 py-2 text-neutral-500">
         &copy; {new Date().getFullYear()} TirthYatraTrails • Sacred Pilgrim Travel Operations System
       </footer>
     </div>
