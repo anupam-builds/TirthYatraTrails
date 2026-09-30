@@ -821,6 +821,7 @@ app.get('/api/admin/schema/sql', (req, res) => {
     const adminMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20260924_admin_allowlist_pgrst205.sql');
     const leadsMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20260930_custom_pilgrimage_leads_schema.sql');
     const accomMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20260930_accommodation_tier_leads_schema.sql');
+    const reminderMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20260930_lead_reminders_and_trip_status.sql');
 
     if (requested === 'hotel_inventory' && fs.existsSync(invMigrationPath)) {
       res.setHeader('Content-Type', 'text/plain');
@@ -832,6 +833,9 @@ app.get('/api/admin/schema/sql', (req, res) => {
       let leadsSql = fs.readFileSync(leadsMigrationPath, 'utf8');
       if (fs.existsSync(accomMigrationPath)) {
         leadsSql += '\n\n' + fs.readFileSync(accomMigrationPath, 'utf8');
+      }
+      if (fs.existsSync(reminderMigrationPath)) {
+        leadsSql += '\n\n' + fs.readFileSync(reminderMigrationPath, 'utf8');
       }
       return res.send(leadsSql);
     }
@@ -848,6 +852,9 @@ app.get('/api/admin/schema/sql', (req, res) => {
     }
     if (fs.existsSync(accomMigrationPath)) {
       combinedSql += fs.readFileSync(accomMigrationPath, 'utf8') + '\n\n';
+    }
+    if (fs.existsSync(reminderMigrationPath)) {
+      combinedSql += fs.readFileSync(reminderMigrationPath, 'utf8') + '\n\n';
     }
     if (combinedSql) {
       res.setHeader('Content-Type', 'text/plain');

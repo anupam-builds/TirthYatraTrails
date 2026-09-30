@@ -596,3 +596,52 @@ export function subscribeToInquiryUpdates(
     }
   };
 }
+
+/**
+ * Synthesizes a distinct, pleasant multi-tone alert chime specifically for CRM lead reminders
+ * Ascending bell chime: C5 -> E5 -> G5 -> C6 with warm natural decay
+ */
+export function playReminderChime(volume = 0.85) {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => executeReminderChime(ctx, volume)).catch(() => {});
+      return;
+    }
+    executeReminderChime(ctx, volume);
+  } catch (err) {
+    console.warn('Failed to play reminder chime:', err);
+  }
+}
+
+function executeReminderChime(ctx: AudioContext, volume: number) {
+  const now = Math.max(ctx.currentTime + 0.015, 0.015);
+  const vol = Math.max(0.1, Math.min(1, volume));
+
+  const chimeNotes = [
+    { freq: 523.25, delay: 0.0, dur: 0.45 },
+    { freq: 659.25, delay: 0.12, dur: 0.45 },
+    { freq: 783.99, delay: 0.24, dur: 0.55 },
+    { freq: 1046.50, delay: 0.36, dur: 0.9 },
+  ];
+
+  chimeNotes.forEach(({ freq, delay, dur }) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now + delay);
+
+    gain.gain.setValueAtTime(0.0001, now + delay);
+    gain.gain.linearRampToValueAtTime(0.28 * vol, now + delay + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + dur);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now + delay);
+    osc.stop(now + delay + dur + 0.05);
+  });
+}
+

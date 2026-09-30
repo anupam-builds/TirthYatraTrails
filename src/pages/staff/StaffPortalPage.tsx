@@ -1072,8 +1072,9 @@ export const StaffPortalPage: React.FC = () => {
                 </h2>
                 <p className="text-xs text-slate-600 dark:text-slate-300">
                   Welcome to the Pilgrim Care &amp; Yatra Desk. Review devotee requests, update status to{' '}
-                  <span className="font-bold text-blue-600 dark:text-blue-400">CONTACTED</span> or{' '}
-                  <span className="font-bold text-slate-700 dark:text-slate-300">CLOSED</span>, and log follow-up notes.
+                  <span className="font-bold text-blue-600 dark:text-blue-400">CONTACTED</span>,{' '}
+                  <span className="font-bold text-purple-600 dark:text-purple-400">TRIP</span>, or{' '}
+                  <span className="font-bold text-slate-700 dark:text-slate-300">CLOSED</span>, set follow-up reminders, and log notes.
                 </p>
               </div>
 
@@ -1098,6 +1099,7 @@ export const StaffPortalPage: React.FC = () => {
               onAssignStaff={undefined}
               onEditInquiry={(inq) => setSelectedInquiryForEdit(inq)}
               onAddNote={handleAddNote}
+              onLeadCreated={(newLead) => setInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)])}
             />
 
             {/* Detailed Lead Edit Modal */}

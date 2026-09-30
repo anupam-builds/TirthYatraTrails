@@ -1,7 +1,7 @@
 import React from 'react';
-import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle } from 'lucide-react';
+import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle, Bell, Clock } from 'lucide-react';
 import { formatLeadId } from '../utils/formatters.js';
-import { parseAccommodationTier } from '../utils/crmUtils.js';
+import { parseAccommodationTier, getLeadReminderStatus } from '../utils/crmUtils.js';
 
 interface LeadDetailsModalProps {
   lead: any | null;
@@ -209,6 +209,74 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                     "{specialRequests}"
                   </div>
                 </div>
+              </div>
+            </section>
+
+            {/* 4. Workflow Status & Follow-up Reminder */}
+            <section className="bg-slate-800/60 p-4 rounded-2xl border border-slate-700/60 shadow-xs">
+              <h4 className="text-xs uppercase tracking-wider text-orange-300/90 font-bold mb-3 flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-orange-400" />
+                <span>4. Workflow Status &amp; Follow-up Reminder</span>
+              </h4>
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Current Status:</span>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
+                    (lead.status === 'TRIP' || lead.status === 'Trip')
+                      ? 'bg-purple-950/90 text-purple-300 border-purple-800'
+                      : lead.status === 'CONFIRMED'
+                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-800'
+                      : lead.status === 'CONTACTED'
+                      ? 'bg-blue-950/90 text-blue-300 border-blue-800'
+                      : lead.status === 'CLOSED'
+                      ? 'bg-slate-800 text-slate-300 border-slate-700'
+                      : 'bg-amber-950/90 text-amber-300 border-amber-800'
+                  }`}>
+                    {lead.status || 'NEW'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Assigned Representative:</span>
+                  <span className="text-slate-200 font-semibold">
+                    {lead.assignedStaffName || lead.assigned_staff_name || 'Unassigned (General Pool)'}
+                  </span>
+                </div>
+                {(() => {
+                  const reminderTs = lead.reminder_at || lead.reminderAt || meta.reminder_at;
+                  if (!reminderTs) {
+                    return (
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-700/50">
+                        <span className="text-slate-400">Follow-up Reminder:</span>
+                        <span className="text-slate-500 italic">No reminder scheduled</span>
+                      </div>
+                    );
+                  }
+                  const remStatus = getLeadReminderStatus(reminderTs);
+                  const remNote = lead.reminder_note || lead.reminderNote || meta.reminder_note;
+                  return (
+                    <div className="pt-2 border-t border-slate-700/50 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-orange-400" /> Reminder Due:
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                          remStatus.isOverdue
+                            ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                            : remStatus.isDue
+                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                            : 'bg-purple-950 text-purple-300 border border-purple-800'
+                        }`}>
+                          {remStatus.label}
+                        </span>
+                      </div>
+                      {remNote && (
+                        <p className="text-[11px] text-slate-300 italic bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                          "{remNote}"
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </section>
           </div>

@@ -16,6 +16,7 @@ import {
   formatCrmTimestamp,
   generateCustomerWhatsAppLink,
   parseAccommodationTier,
+  getLeadReminderStatus,
 } from '../../utils/crmUtils.js';
 import {
   Search,
@@ -44,8 +45,13 @@ import {
   Send,
   Building,
   Eye,
+  Plus,
+  Bell,
+  Compass,
 } from 'lucide-react';
 import { LeadDetailsModal } from '../LeadDetailsModal.js';
+import { CreateLeadModal } from './CreateLeadModal.js';
+import { ReminderAlertBanner } from './ReminderAlertBanner.js';
 
 interface LeadTableViewProps {
   inquiries: Inquiry[];
@@ -64,6 +70,8 @@ interface LeadTableViewProps {
   onEdit?: (inquiry: Inquiry) => void;
   onView?: (inquiry: Inquiry) => void;
   enableSelection?: boolean;
+  onCreateLead?: () => void;
+  onLeadCreated?: (newLead: Inquiry) => void;
 }
 
 export const LeadTableView: React.FC<LeadTableViewProps> = ({
@@ -82,12 +90,15 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   onAddNote,
   onEdit,
   onView,
+  onCreateLead,
+  onLeadCreated,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [staffFilter, setStaffFilter] = useState<string>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedDetailedLead, setSelectedDetailedLead] = useState<Inquiry | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Accordion for inline notes
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
@@ -142,6 +153,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const newCount = baseInquiries.filter((i) => !i.status || i.status === 'NEW').length;
   const contactedCount = baseInquiries.filter((i) => i.status === 'CONTACTED').length;
   const confirmedCount = baseInquiries.filter((i) => i.status === 'CONFIRMED').length;
+  const tripCount = baseInquiries.filter((i) => i.status === 'TRIP' || i.status === 'Trip').length;
   const closedCount = baseInquiries.filter((i) => i.status === 'CLOSED').length;
   const unassignedCount = baseInquiries.filter((i) => {
     const raw = (i as any).assigned_staff_id || i.assignedStaffId;
@@ -215,8 +227,11 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   // Filter inquiries
   const filteredInquiries = baseInquiries.filter((inq) => {
     // Status Filter
-    if (statusFilter !== 'ALL' && inq.status !== statusFilter) {
-      return false;
+    if (statusFilter !== 'ALL') {
+      const isTripFilter = statusFilter === 'TRIP' || statusFilter === 'Trip';
+      const isTripInq = inq.status === 'TRIP' || inq.status === 'Trip';
+      if (isTripFilter && !isTripInq) return false;
+      if (!isTripFilter && inq.status !== statusFilter) return false;
     }
 
     // Staff filter (Applicable only in Admin mode)
@@ -261,8 +276,23 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Real-time Audio & Visual Reminder Alert Banner */}
+      <ReminderAlertBanner
+        inquiries={localInquiries}
+        onEditInquiry={(inq) => {
+          if (onEditInquiry) onEditInquiry(inq);
+          else if (onEdit) onEdit(inq);
+        }}
+        onUpdateInquiry={async (id, updates) => {
+          await updateLeadOrInquiryStatus({ id, ...updates });
+        }}
+        isStaffMode={isStaffMode}
+        currentStaffId={currentStaffId}
+        currentStaffName={currentStaffName}
+      />
+
       {/* 1. SUMMARY METRICS CARDS */}
-      <div className={`grid grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         {/* Total Enquiries */}
         <div
           onClick={() => {
@@ -337,30 +367,51 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           </div>
         </div>
 
-        {/* Confirmed Bookings - Admin Dashboard & Travel Desk View */}
-        {isAdmin && (
-          <div
-            onClick={() => setStatusFilter('CONFIRMED')}
-            className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
-              statusFilter === 'CONFIRMED'
-                ? 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-700 ring-2 ring-emerald-500/20'
-                : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-emerald-200'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Confirmed</span>
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                {confirmedCount}
-              </span>
-              <span className="text-[11px] font-semibold text-slate-400">bookings confirmed</span>
+        {/* Confirmed Bookings */}
+        <div
+          onClick={() => setStatusFilter('CONFIRMED')}
+          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+            statusFilter === 'CONFIRMED'
+              ? 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-700 ring-2 ring-emerald-500/20'
+              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-emerald-200'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Confirmed</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-        )}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
+              {confirmedCount}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400">bookings confirmed</span>
+          </div>
+        </div>
+
+        {/* Trip - Itinerary Ready & Finalized for Travel */}
+        <div
+          onClick={() => setStatusFilter('TRIP')}
+          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+            statusFilter === 'TRIP' || statusFilter === 'Trip'
+              ? 'bg-purple-50 border-purple-300 dark:bg-purple-950/40 dark:border-purple-700 ring-2 ring-purple-500/20'
+              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-purple-200'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-purple-700 dark:text-purple-400">Trip</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Compass className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-purple-700 dark:text-purple-300 font-mono">
+              {tripCount}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400">ready for travel</span>
+          </div>
+        </div>
 
         {/* Closed */}
         <div
@@ -411,32 +462,48 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
             )}
           </div>
 
-          {/* Assigned Staff Filter - Admin Only */}
-          {isAdmin ? (
-            <div className="flex items-center gap-2">
-              <label htmlFor="crm-filter-by-staff" className="text-xs font-bold text-slate-500 shrink-0">Staff:</label>
-              <BaseSelect
-                id="crm-filter-by-staff"
-                name="crm-filter-by-staff"
-                value={staffFilter}
-                onChange={(e) => setStaffFilter(e.target.value)}
-                className="px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
-              >
-                <option value="ALL">All Representatives</option>
-                <option value="UNASSIGNED">Unassigned Only</option>
-                {staffList.map((stf) => (
-                  <option key={stf.id} value={stf.id}>
-                    {stf.name}
-                  </option>
-                ))}
-              </BaseSelect>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-              <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Assigned To You ({totalCount})</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Assigned Staff Filter - Admin Only */}
+            {isAdmin ? (
+              <div className="flex items-center gap-2">
+                <label htmlFor="crm-filter-by-staff" className="text-xs font-bold text-slate-500 shrink-0">Staff:</label>
+                <BaseSelect
+                  id="crm-filter-by-staff"
+                  name="crm-filter-by-staff"
+                  value={staffFilter}
+                  onChange={(e) => setStaffFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
+                >
+                  <option value="ALL">All Representatives</option>
+                  <option value="UNASSIGNED">Unassigned Only</option>
+                  {staffList.map((stf) => (
+                    <option key={stf.id} value={stf.id}>
+                      {stf.name}
+                    </option>
+                  ))}
+                </BaseSelect>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Assigned To You ({totalCount})</span>
+              </div>
+            )}
+
+            {/* Prominent Create Lead Button (Accessible to both Admin & Staff) */}
+            <button
+              type="button"
+              id="crm-create-lead-btn"
+              onClick={() => {
+                if (onCreateLead) onCreateLead();
+                else setIsCreateModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-98 text-white text-xs font-black shadow-md hover:shadow-orange-600/30 transition-all cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4 text-amber-200" />
+              <span>Create Lead</span>
+            </button>
+          </div>
         </div>
 
         {/* Status Pills */}
@@ -857,6 +924,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   <span>💰 {leadBudget}</span>
                                 </span>
                               ) : null}
+
+                              {/* Follow-up Reminder Badge */}
+                              {(() => {
+                                const reminderTs = inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at;
+                                if (!reminderTs) return null;
+                                const remStatus = getLeadReminderStatus(reminderTs);
+                                const remNote = inq.reminder_note || (inq as any).reminderNote || inq.metadata?.reminder_note;
+                                return (
+                                  <div
+                                    className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${
+                                      remStatus.isOverdue
+                                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300 dark:border-rose-800 animate-pulse'
+                                        : remStatus.isDue
+                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                        : 'bg-purple-50 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-800/80'
+                                    }`}
+                                    title={remNote ? `Reminder: ${remNote} (${remStatus.label})` : `Reminder: ${remStatus.label}`}
+                                  >
+                                    <Bell className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
+                                    <span>{remStatus.label}</span>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         </td>
@@ -1028,6 +1118,20 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       <LeadDetailsModal
         lead={selectedDetailedLead}
         onClose={() => setSelectedDetailedLead(null)}
+      />
+
+      {/* Manual Entry Create Lead Modal */}
+      <CreateLeadModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={(newLead) => {
+          setLocalInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)]);
+          if (onLeadCreated) onLeadCreated(newLead);
+        }}
+        staffList={staffList}
+        isStaffMode={isStaffMode}
+        currentStaffId={currentStaffId}
+        currentStaffName={currentStaffName}
       />
     </div>
   );

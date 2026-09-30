@@ -31,7 +31,20 @@ import {
   Copy,
   Check,
   Lock,
+  Bell,
 } from 'lucide-react';
+
+function toDatetimeLocal(isoStr?: string): string {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
+}
 
 interface LeadEditModalProps {
   inquiry: Inquiry | null;
@@ -82,6 +95,10 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
         status: inquiry.status || 'NEW',
         assignedStaffId: (inquiry as any).assigned_staff_id || inquiry.assignedStaffId || '',
         assignedStaffName: (inquiry as any).assigned_staff_name || inquiry.assignedStaffName || '',
+        reminderAt: toDatetimeLocal(inquiry.reminderAt || (inquiry as any).reminder_at || (inquiry as any).metadata?.reminder_at),
+        reminder_at: toDatetimeLocal(inquiry.reminderAt || (inquiry as any).reminder_at || (inquiry as any).metadata?.reminder_at),
+        reminderNote: inquiry.reminderNote || (inquiry as any).reminder_note || (inquiry as any).metadata?.reminder_note || '',
+        reminder_note: inquiry.reminderNote || (inquiry as any).reminder_note || (inquiry as any).metadata?.reminder_note || '',
         title: inquiry.title || inquiry.referenceName || '',
         specialRequests: inquiry.specialRequests || '',
         tags: inquiry.tags ? [...inquiry.tags] : [],
@@ -216,6 +233,10 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
         accommodationPreference: formData.accommodationTier,
         accommodation_preference: formData.accommodationTier,
         plan: formData.accommodationTier,
+        reminderAt: formData.reminderAt ? new Date(formData.reminderAt).toISOString() : null,
+        reminder_at: formData.reminderAt ? new Date(formData.reminderAt).toISOString() : null,
+        reminderNote: (formData.reminderNote || '').trim() || null,
+        reminder_note: (formData.reminderNote || '').trim() || null,
         metadata: {
           ...existingMeta,
           whatsapp_number: rawPhone,
@@ -236,6 +257,8 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
           accommodation_preference: formData.accommodationTier,
           plan: formData.accommodationTier,
           special_requests: formData.specialRequests,
+          reminder_at: formData.reminderAt ? new Date(formData.reminderAt).toISOString() : null,
+          reminder_note: (formData.reminderNote || '').trim() || null,
         },
       };
 
@@ -501,6 +524,94 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                     ))}
                   </BaseSelect>
                 )}
+              </div>
+
+              {/* Lead Reminder Settings */}
+              <div className="sm:col-span-2 p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                    <Bell className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Follow-up Reminder (Audio &amp; Visual Alert)</span>
+                  </span>
+                  {formData.reminderAt && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, reminderAt: '', reminder_at: '', reminderNote: '', reminder_note: '' })}
+                      className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline font-bold cursor-pointer"
+                    >
+                      Clear Reminder
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="edit-modal-reminder-at" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Reminder Date &amp; Time
+                    </label>
+                    <div className="relative">
+                      <Clock className="w-3.5 h-3.5 text-orange-500 absolute left-3 top-2.5" />
+                      <BaseInput
+                        id="edit-modal-reminder-at"
+                        name="edit-modal-reminder-at"
+                        type="datetime-local"
+                        value={formData.reminderAt || ''}
+                        onChange={(e) => setFormData({ ...formData, reminderAt: e.target.value, reminder_at: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-white dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="edit-modal-reminder-note" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Reminder Note / Action
+                    </label>
+                    <BaseInput
+                      id="edit-modal-reminder-note"
+                      name="edit-modal-reminder-note"
+                      type="text"
+                      placeholder="e.g. Share itinerary on WhatsApp, Darshan confirmation"
+                      value={formData.reminderNote || ''}
+                      onChange={(e) => setFormData({ ...formData, reminderNote: e.target.value, reminder_note: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] text-slate-400 font-medium mr-1">Quick Presets:</span>
+                  {[
+                    { label: '+15 Mins', offsetMin: 15 },
+                    { label: '+1 Hour', offsetMin: 60 },
+                    { label: '+4 Hours', offsetMin: 240 },
+                    { label: 'Tomorrow 10 AM', isTomorrow10AM: true },
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        let targetDate = new Date();
+                        if (preset.isTomorrow10AM) {
+                          targetDate.setDate(targetDate.getDate() + 1);
+                          targetDate.setHours(10, 0, 0, 0);
+                        } else if (preset.offsetMin) {
+                          targetDate = new Date(Date.now() + preset.offsetMin * 60 * 1000);
+                        }
+                        const val = toDatetimeLocal(targetDate.toISOString());
+                        setFormData((prev) => ({
+                          ...prev,
+                          reminderAt: val,
+                          reminder_at: val,
+                          reminderNote: prev.reminderNote || 'Follow-up on pilgrim yatra booking',
+                        }));
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-white dark:bg-[#081220] hover:bg-amber-100 dark:hover:bg-amber-900/40 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10px] font-bold transition-colors cursor-pointer"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

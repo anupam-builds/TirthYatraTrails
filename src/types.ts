@@ -244,6 +244,8 @@ export type InquiryStatus =
   | 'ONLY_QUERY'
   | 'CONTACTED'
   | 'CONFIRMED'
+  | 'TRIP'
+  | 'Trip'
   | 'WON'
   | 'LOST'
   | 'CLOSED';
@@ -303,6 +305,10 @@ export interface Inquiry {
   endDate?: string;
   end_date?: string;
   budget?: string | number;
+  reminderAt?: string;
+  reminder_at?: string;
+  reminderNote?: string;
+  reminder_note?: string;
   companionMatchingOptIn?: boolean;
   companionPilgrimType?: 'SOLO_TRAVELER' | 'ELDERLY_PILGRIM' | 'MOTHER_DAUGHTER' | 'FAMILY_GROUP' | 'SPIRITUAL_SEEKER';
   companionNotes?: string;

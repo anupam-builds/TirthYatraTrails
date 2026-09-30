@@ -584,6 +584,10 @@ export const localStore = {
       durationDays: inquiryData.durationDays !== undefined ? Number(inquiryData.durationDays) : (inquiryData as any).metadata?.duration_days,
       duration_days: inquiryData.durationDays !== undefined ? Number(inquiryData.durationDays) : (inquiryData as any).metadata?.duration_days,
       budget: inquiryData.budget || (inquiryData as any).metadata?.budget,
+      reminderAt: inquiryData.reminderAt || (inquiryData as any).reminder_at || (inquiryData as any).metadata?.reminder_at,
+      reminder_at: inquiryData.reminderAt || (inquiryData as any).reminder_at || (inquiryData as any).metadata?.reminder_at,
+      reminderNote: inquiryData.reminderNote || (inquiryData as any).reminder_note || (inquiryData as any).metadata?.reminder_note,
+      reminder_note: inquiryData.reminderNote || (inquiryData as any).reminder_note || (inquiryData as any).metadata?.reminder_note,
       guests: totalGuests,
       adults: adultsCount,
       children: childrenCount,
@@ -647,6 +651,20 @@ export const localStore = {
         merged.metadata.phone = merged.phone;
         merged.metadata.whatsapp_number = merged.phone;
       }
+    }
+
+    if (updates.reminderAt !== undefined || (updates as any).reminder_at !== undefined) {
+      const rAt = updates.reminderAt !== undefined ? updates.reminderAt : (updates as any).reminder_at;
+      merged.reminderAt = rAt || undefined;
+      merged.reminder_at = rAt || undefined;
+      if (merged.metadata) merged.metadata.reminder_at = rAt || null;
+    }
+
+    if (updates.reminderNote !== undefined || (updates as any).reminder_note !== undefined) {
+      const rNote = updates.reminderNote !== undefined ? updates.reminderNote : (updates as any).reminder_note;
+      merged.reminderNote = rNote || undefined;
+      merged.reminder_note = rNote || undefined;
+      if (merged.metadata) merged.metadata.reminder_note = rNote || null;
     }
 
     if (newStatus === 'CLOSED') {

@@ -29,6 +29,18 @@ export const CRM_STATUS_CONFIG: Record<InquiryStatus, StatusConfig> = {
     badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800',
     dotClass: 'bg-emerald-500',
   },
+  TRIP: {
+    key: 'TRIP',
+    label: 'Trip',
+    badgeClass: 'bg-purple-50 text-purple-800 border-purple-300 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800',
+    dotClass: 'bg-purple-500',
+  },
+  Trip: {
+    key: 'TRIP',
+    label: 'Trip',
+    badgeClass: 'bg-purple-50 text-purple-800 border-purple-300 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800',
+    dotClass: 'bg-purple-500',
+  },
   CLOSED: {
     key: 'CLOSED',
     label: 'Closed',
@@ -69,21 +81,24 @@ export const CRM_STATUS_CONFIG: Record<InquiryStatus, StatusConfig> = {
 };
 
 /**
- * Admin status list matching the Admin Dashboard: NEW, CONTACTED, CONFIRMED, CLOSED (4 options)
+ * Admin status list matching the Admin Dashboard: NEW, CONTACTED, CONFIRMED, TRIP, CLOSED (5 options)
  */
 export const ADMIN_CRM_STATUS_LIST: InquiryStatus[] = [
   'NEW',
   'CONTACTED',
   'CONFIRMED',
+  'TRIP',
   'CLOSED',
 ];
 
 /**
- * Staff status list strictly restricted to: NEW, CONTACTED, CLOSED (3 options)
+ * Staff status list: NEW, CONTACTED, CONFIRMED, TRIP, CLOSED (5 synchronized options)
  */
 export const STAFF_CRM_STATUS_LIST: InquiryStatus[] = [
   'NEW',
   'CONTACTED',
+  'CONFIRMED',
+  'TRIP',
   'CLOSED',
 ];
 
@@ -95,10 +110,73 @@ export const CRM_STATUS_LIST: InquiryStatus[] = ADMIN_CRM_STATUS_LIST;
 export function normalizeInquiryStatus(status?: string): InquiryStatus {
   if (!status) return 'NEW';
   const s = status.toUpperCase().trim();
+  if (s === 'TRIP') return 'TRIP';
   if (s === 'CONFIRMED' || s === 'WON') return 'CONFIRMED';
   if (s === 'CLOSED' || s === 'LOST') return 'CLOSED';
   if (s === 'CONTACTED' || s === 'IN_PROGRESS' || s === 'QUOTATION_SENT') return 'CONTACTED';
   return 'NEW';
+}
+
+/**
+ * Calculates reminder due status and human-friendly time label
+ */
+export function getLeadReminderStatus(reminderAt?: string): {
+  isSet: boolean;
+  isDue: boolean;
+  isOverdue: boolean;
+  label: string;
+  diffMinutes: number;
+} {
+  if (!reminderAt) {
+    return { isSet: false, isDue: false, isOverdue: false, label: '', diffMinutes: 0 };
+  }
+  try {
+    const target = new Date(reminderAt);
+    if (isNaN(target.getTime())) {
+      return { isSet: false, isDue: false, isOverdue: false, label: '', diffMinutes: 0 };
+    }
+    const now = new Date();
+    const diffMs = target.getTime() - now.getTime();
+    const diffMinutes = Math.round(diffMs / (1000 * 60));
+
+    const formattedTime = target.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const formattedDate = target.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+    });
+
+    if (diffMs <= 0) {
+      const overdueMinutes = Math.abs(diffMinutes);
+      return {
+        isSet: true,
+        isDue: true,
+        isOverdue: true,
+        diffMinutes,
+        label: overdueMinutes < 2 ? 'Due now' : `${overdueMinutes}m overdue (${formattedTime})`,
+      };
+    } else if (diffMinutes <= 30) {
+      return {
+        isSet: true,
+        isDue: false,
+        isOverdue: false,
+        diffMinutes,
+        label: `In ${diffMinutes}m (${formattedTime})`,
+      };
+    } else {
+      return {
+        isSet: true,
+        isDue: false,
+        isOverdue: false,
+        diffMinutes,
+        label: `${formattedDate}, ${formattedTime}`,
+      };
+    }
+  } catch {
+    return { isSet: false, isDue: false, isOverdue: false, label: '', diffMinutes: 0 };
+  }
 }
 
 export const ACCOMMODATION_TIERS = [

@@ -26,7 +26,9 @@ import {
   Clock,
   Archive,
   Radio,
+  Plus,
 } from 'lucide-react';
+import { CreateLeadModal } from '../../components/crm/CreateLeadModal.js';
 
 export const AdminInquiries: React.FC = () => {
   const { adminUser } = useAuth();
@@ -36,6 +38,7 @@ export const AdminInquiries: React.FC = () => {
   const [trashLoading, setTrashLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedInquiryForEdit, setSelectedInquiryForEdit] = useState<Inquiry | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Realtime inquiries hook using isolated channel public:leads-realtime
   const {
@@ -590,6 +593,14 @@ export const AdminInquiries: React.FC = () => {
             </div>
 
             <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-98 text-white text-xs font-black transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 text-amber-200" />
+              <span>Create Lead</span>
+            </button>
+
+            <button
               onClick={handleManualRefresh}
               disabled={refreshing}
               className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0d1d33] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
@@ -615,6 +626,15 @@ export const AdminInquiries: React.FC = () => {
               onUnlockInquiry={handleUnlockInquiry}
               onEditInquiry={(inq) => setSelectedInquiryForEdit(inq)}
               onAddNote={handleAddNote}
+              onCreateLead={() => setIsCreateModalOpen(true)}
+              onLeadCreated={(newLead) => {
+                setInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)]);
+                setActionMessage({
+                  type: 'success',
+                  text: `Lead ${newLead.leadId || newLead.id} created successfully in database!`,
+                });
+                setTimeout(() => setActionMessage(null), 5000);
+              }}
             />
 
             {/* Detailed Modal Editor */}
@@ -625,6 +645,22 @@ export const AdminInquiries: React.FC = () => {
               onSave={handleSaveInquiryUpdates}
               staffList={staffList}
               onAddNote={handleAddNote}
+            />
+
+            {/* Manual Entry Create Lead Modal */}
+            <CreateLeadModal
+              isOpen={isCreateModalOpen}
+              onClose={() => setIsCreateModalOpen(false)}
+              onSuccess={(newLead) => {
+                setInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)]);
+                setActionMessage({
+                  type: 'success',
+                  text: `Lead ${newLead.leadId || newLead.id} created successfully!`,
+                });
+                setTimeout(() => setActionMessage(null), 5000);
+              }}
+              staffList={staffList}
+              isStaffMode={false}
             />
           </>
         )}

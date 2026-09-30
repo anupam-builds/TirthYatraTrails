@@ -373,6 +373,10 @@ export async function updateLeadOrInquiryStatus(
         dbPayload.accommodation_tier = v || null;
         dbPayload.accommodation_preference = v || null;
         dbPayload.plan = v || null;
+      } else if (k === 'reminderAt' || k === 'reminder_at') {
+        dbPayload.reminder_at = v || null;
+      } else if (k === 'reminderNote' || k === 'reminder_note') {
+        dbPayload.reminder_note = v || null;
       } else if (k === 'assignedStaffId' || k === 'assigned_staff_id') {
         if (dbPayload.assigned_staff_id === undefined) {
           dbPayload.assigned_staff_id = v === '--Unassigned--' || !v ? null : v;
@@ -387,7 +391,7 @@ export async function updateLeadOrInquiryStatus(
     }
   }
 
-  // Ensure metadata stays synchronized with end_date, duration_days, budget, and accommodation_tier
+  // Ensure metadata stays synchronized with end_date, duration_days, budget, accommodation_tier, and reminder_at
   if (dbPayload.metadata && typeof dbPayload.metadata === 'object') {
     if (dbPayload.end_date !== undefined) dbPayload.metadata.end_date = dbPayload.end_date;
     if (dbPayload.duration_days !== undefined) dbPayload.metadata.duration_days = dbPayload.duration_days;
@@ -395,6 +399,12 @@ export async function updateLeadOrInquiryStatus(
     if (dbPayload.accommodation_tier !== undefined) {
       dbPayload.metadata.accommodation_tier = dbPayload.accommodation_tier;
       dbPayload.metadata.accommodation_preference = dbPayload.accommodation_tier;
+    }
+    if (dbPayload.reminder_at !== undefined) {
+      dbPayload.metadata.reminder_at = dbPayload.reminder_at;
+    }
+    if (dbPayload.reminder_note !== undefined) {
+      dbPayload.metadata.reminder_note = dbPayload.reminder_note;
     }
   }
 
@@ -1512,6 +1522,215 @@ export const api = {
       broadcastNewInquiry(fb);
       return fb;
     }
+  },
+
+  async createManualLead(leadData: {
+    fullName: string;
+    customerName?: string;
+    whatsappNumber: string;
+    customerPhone?: string;
+    email?: string;
+    customerEmail?: string;
+    userCity?: string;
+    packageInterest?: string;
+    title?: string;
+    checkInDate?: string;
+    endDate?: string;
+    durationDays?: number | string;
+    budget?: string | number;
+    accommodationTier?: string;
+    assignedStaffId?: string;
+    assignedStaffName?: string;
+    reminderAt?: string;
+    reminderNote?: string;
+    specialRequests?: string;
+    notes?: string;
+    status?: InquiryStatus | string;
+    type?: 'PACKAGE' | 'HOTEL';
+    guests?: number;
+    adults?: number;
+    children?: number;
+  }): Promise<Inquiry> {
+    const customerName = (leadData.fullName || leadData.customerName || 'Pilgrim Devotee').trim();
+    const phoneVal = (leadData.whatsappNumber || leadData.customerPhone || '').trim();
+    const emailVal = (leadData.email || leadData.customerEmail || '').trim();
+    const cityVal = (leadData.userCity || '').trim();
+    const titleVal = (leadData.packageInterest || leadData.title || 'Custom Pilgrimage Yatra').trim();
+    const statusVal = (leadData.status || 'NEW').toString();
+    const accomVal = leadData.accommodationTier || '3 Star Standard';
+    const durDays = leadData.durationDays !== undefined && leadData.durationDays !== '' && !isNaN(Number(leadData.durationDays)) ? Number(leadData.durationDays) : null;
+
+    // Generate unique sequential / TTT Lead ID
+    const existingList = localStore.getInquiries();
+    let maxNum = 0;
+    for (const inq of existingList) {
+      if (inq.leadId) {
+        const cleaned = inq.leadId.replace(/^(TTT|TTX)/i, '');
+        const num = parseInt(cleaned, 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+    const nextLeadId = `TTT${String(maxNum + 1).padStart(8, '0')}`;
+    const rawLeadUuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `lead-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    const structuredMetadata: Record<string, any> = {
+      lead_id: nextLeadId,
+      full_name: customerName,
+      customer_name: customerName,
+      whatsapp_number: phoneVal,
+      phone: phoneVal,
+      email: emailVal,
+      resident_state: cityVal,
+      user_city: cityVal,
+      package_interest: titleVal,
+      start_date: leadData.checkInDate || '',
+      check_in_date: leadData.checkInDate || '',
+      end_date: leadData.endDate || null,
+      duration_days: durDays,
+      duration: durDays ? `${durDays} Days` : '',
+      tour_duration: durDays ? `${durDays} Days` : '',
+      budget: leadData.budget || null,
+      accommodation_tier: accomVal,
+      accommodation_preference: accomVal,
+      assigned_staff_id: leadData.assignedStaffId || null,
+      assigned_staff_name: leadData.assignedStaffName || null,
+      reminder_at: leadData.reminderAt || null,
+      reminder_note: leadData.reminderNote || null,
+      special_requests: leadData.specialRequests || '',
+      notes: leadData.notes || '',
+      created_manually: true,
+      source: 'CRM_MANUAL_ENTRY',
+    };
+
+    const payload: Record<string, any> = {
+      id: rawLeadUuid,
+      lead_id: nextLeadId,
+      full_name: customerName,
+      customer_name: customerName,
+      email: emailVal,
+      customer_email: emailVal,
+      phone: phoneVal,
+      whatsapp_number: phoneVal,
+      customer_phone: phoneVal,
+      user_city: cityVal,
+      title: titleVal,
+      package_interest: titleVal,
+      type: leadData.type || 'PACKAGE',
+      status: statusVal,
+      check_in_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
+      end_date: leadData.endDate || null,
+      duration_days: durDays,
+      budget: leadData.budget || null,
+      accommodation_tier: accomVal,
+      accommodation_preference: accomVal,
+      assigned_staff_id: leadData.assignedStaffId || null,
+      assigned_staff_name: leadData.assignedStaffName || null,
+      reminder_at: leadData.reminderAt || null,
+      reminder_note: leadData.reminderNote || null,
+      special_requests: leadData.specialRequests || '',
+      notes: leadData.notes || '',
+      metadata: structuredMetadata,
+      created_at: new Date().toISOString(),
+    };
+
+    let createdRow: any = null;
+    try {
+      let res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn('⚠️ [createManualLead] Initial POST to leads returned non-200:', res.status, errText);
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.duration_days;
+        delete fallbackPayload.end_date;
+        delete fallbackPayload.budget;
+        delete fallbackPayload.accommodation_tier;
+        delete fallbackPayload.accommodation_preference;
+        delete fallbackPayload.reminder_at;
+        delete fallbackPayload.reminder_note;
+        delete fallbackPayload.lead_id;
+
+        res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation',
+          },
+          body: JSON.stringify(fallbackPayload),
+        });
+      }
+
+      if (res.ok) {
+        const json = await res.json().catch(() => null);
+        createdRow = Array.isArray(json) ? json[0] : json;
+      }
+    } catch (err) {
+      console.warn('⚠️ [createManualLead] Fetch to leads failed:', err);
+    }
+
+    try {
+      fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    } catch {}
+
+    const mapped = createdRow ? mapInquiryRow(createdRow) : mapInquiryRow(payload);
+    mapped.leadId = nextLeadId;
+    mapped.customerName = customerName;
+    mapped.fullName = customerName;
+    mapped.whatsappNumber = phoneVal;
+    mapped.customerPhone = phoneVal;
+    mapped.phone = phoneVal;
+    mapped.whatsapp_number = phoneVal;
+    mapped.email = emailVal;
+    mapped.customerEmail = emailVal;
+    mapped.userCity = cityVal;
+    mapped.title = titleVal;
+    mapped.status = statusVal;
+    mapped.accommodationTier = accomVal;
+    mapped.accommodation_tier = accomVal;
+    mapped.checkInDate = leadData.checkInDate || new Date().toISOString().split('T')[0];
+    mapped.endDate = leadData.endDate;
+    mapped.end_date = leadData.endDate;
+    mapped.durationDays = durDays ?? undefined;
+    mapped.duration_days = durDays ?? undefined;
+    mapped.budget = leadData.budget;
+    mapped.assignedStaffId = leadData.assignedStaffId;
+    mapped.assigned_staff_id = leadData.assignedStaffId;
+    mapped.assignedStaffName = leadData.assignedStaffName;
+    mapped.assigned_staff_name = leadData.assignedStaffName;
+    mapped.reminderAt = leadData.reminderAt;
+    mapped.reminder_at = leadData.reminderAt;
+    mapped.reminderNote = leadData.reminderNote;
+    mapped.reminder_note = leadData.reminderNote;
+    mapped.notes = leadData.notes || '';
+
+    localStore.submitInquiry(mapped);
+    broadcastNewInquiry(mapped);
+
+    return mapped;
+  },
+
+  async createLead(leadData: any): Promise<Inquiry> {
+    return this.createManualLead(leadData);
   },
 
   async getInquiries(userId?: string): Promise<Inquiry[]> {
@@ -3605,6 +3824,10 @@ export function mapInquiryRow(row: any): Inquiry {
     endDate: row.end_date || row.endDate || row.metadata?.end_date || undefined,
     end_date: row.end_date || row.endDate || row.metadata?.end_date || undefined,
     budget: row.budget || row.metadata?.budget || undefined,
+    reminder_at: row.reminder_at || row.reminderAt || row.metadata?.reminder_at || undefined,
+    reminderAt: row.reminder_at || row.reminderAt || row.metadata?.reminder_at || undefined,
+    reminder_note: row.reminder_note || row.reminderNote || row.metadata?.reminder_note || undefined,
+    reminderNote: row.reminder_note || row.reminderNote || row.metadata?.reminder_note || undefined,
     companionMatchingOptIn: Boolean(row.companion_matching_opt_in ?? row.companionMatchingOptIn),
     companionPilgrimType: row.companion_pilgrim_type || row.companionPilgrimType,
     companionNotes: row.companion_notes || row.companionNotes,
