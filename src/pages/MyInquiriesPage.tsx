@@ -155,7 +155,20 @@ export const MyInquiriesPage: React.FC = () => {
                       {inq.checkInDate && (
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-orange-500" />
-                          <span>Yatra Date: {inq.checkInDate}</span>
+                          <span>
+                            Dates: {inq.checkInDate}
+                            {(inq.endDate || inq.end_date || (inq as any).metadata?.end_date)
+                              ? ` → ${(inq.endDate || inq.end_date || (inq as any).metadata?.end_date)}`
+                              : ''}
+                            {(inq.durationDays || inq.duration_days || (inq as any).metadata?.duration_days)
+                              ? ` (${inq.durationDays || inq.duration_days || (inq as any).metadata?.duration_days} Days)`
+                              : ''}
+                          </span>
+                        </div>
+                      )}
+                      {(inq.budget || (inq as any).metadata?.budget) && (
+                        <div className="font-semibold text-emerald-700">
+                          Budget: {inq.budget || (inq as any).metadata?.budget}
                         </div>
                       )}
                       <div>

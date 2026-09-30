@@ -154,6 +154,9 @@ model Inquiry {
   planChosen      String?
   selectedPlan    String?
   specialRequests String?
+  endDate         String?
+  durationDays    Int?
+  budget          String?
   status          InquiryStatus @default(NEW)
   isResolved      Boolean       @default(false)
   createdAt       DateTime      @default(now())

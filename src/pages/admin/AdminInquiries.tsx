@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
 import { LeadEditModal } from '../../components/crm/LeadEditModal.js';
 import { BaseInput, BaseSelect } from '../../components/FormField.js';
-import { getLeadId, formatLeadId, formatSequentialLeadId, computeSequentialLeadIdMap, formatCrmTimestamp } from '../../utils/crmUtils.js';
+import { getLeadId, formatLeadId, formatSequentialLeadId, computeSequentialLeadIdMap, formatCrmTimestamp, formatCrmDate, parseAccommodationTier } from '../../utils/crmUtils.js';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import {
   MessageSquare,
@@ -801,9 +801,24 @@ export const AdminInquiries: React.FC = () => {
                                   <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
                                   <span>{inq.userCity || 'City TBD'}</span>
                                   <span className="text-slate-300 dark:text-slate-700">•</span>
-                                  <span className="text-[10px] text-slate-500 font-semibold">
-                                    {inq.accommodationTier || '3 Star Hotel'}
-                                  </span>
+                                  {(() => {
+                                    const accomInfo = parseAccommodationTier(inq.accommodationTier || (inq as any).accommodation_tier);
+                                    return (
+                                      <span className="text-[10px] text-slate-600 dark:text-slate-300 font-bold">
+                                        <span className="text-amber-500">{accomInfo.starString}</span> {accomInfo.category === 'Budget Hotels' ? 'Budget' : 'Premium'}: {accomInfo.name}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 flex-wrap pt-0.5">
+                                  {inq.checkInDate && <span>📅 {formatCrmDate(inq.checkInDate)}</span>}
+                                  {((inq as any).end_date || inq.endDate) && <span>→ {formatCrmDate((inq as any).end_date || inq.endDate)}</span>}
+                                  {((inq as any).duration_days || inq.durationDays) && (
+                                    <span className="font-bold text-orange-600 dark:text-orange-400">({(inq as any).duration_days || inq.durationDays} Days)</span>
+                                  )}
+                                  {((inq as any).budget || inq.budget) && (
+                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">💰 {((inq as any).budget || inq.budget)}</span>
+                                  )}
                                 </div>
                               </div>
                             </td>

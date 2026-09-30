@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle } from 'lucide-react';
 import { formatLeadId } from '../utils/formatters.js';
+import { parseAccommodationTier } from '../utils/crmUtils.js';
 
 interface LeadDetailsModalProps {
   lead: any | null;
@@ -18,7 +19,10 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
 
   const packageInterest = meta.package_interest || lead.package_name || lead.packageName || lead.title || 'N/A';
   const startDate = meta.start_date || lead.start_date || lead.checkInDate || lead.arrival_date || 'Flexible / TBD';
-  const duration = meta.duration || lead.duration || 'Standard Itinerary';
+  const endDate = meta.end_date || lead.end_date || lead.endDate || 'Flexible / TBD';
+  const durationDays = lead.duration_days ?? lead.durationDays ?? meta.duration_days ?? (lead.duration ? parseInt(lead.duration) : null);
+  const duration = durationDays ? `${durationDays} Days` : (meta.duration || lead.duration || 'Standard Itinerary');
+  const budget = lead.budget || meta.budget || 'Not specified';
   const adults = meta.adults ?? lead.adults ?? 1;
   const children = meta.children ?? lead.children ?? 0;
   const pickupCity = meta.pickup_city || lead.pickup_city || lead.pickupLocation || 'N/A';
@@ -131,8 +135,26 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                     <span className="text-white font-semibold">{startDate}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block">Duration:</span>
-                    <span className="text-white font-semibold">{duration}</span>
+                    <span className="text-slate-400 block">Estimated End Date:</span>
+                    <span className="text-white font-semibold">{endDate}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <span className="text-slate-400 block">Duration (Days):</span>
+                    <span className="inline-flex items-center gap-1 font-bold text-orange-300">
+                      <span className="px-2 py-0.5 rounded bg-orange-950/80 border border-orange-500/40 text-orange-300 text-xs">
+                        {duration}
+                      </span>
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Estimated Budget:</span>
+                    <span className="inline-flex items-center gap-1 font-bold text-emerald-300">
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs">
+                        {budget}
+                      </span>
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-1 border-t border-slate-700/50">
@@ -160,11 +182,26 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
               </h4>
               <div className="space-y-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Accommodation Tier:</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-950/80 border border-orange-500/40 text-orange-300 font-extrabold text-[11px]">
-                    <Sparkles className="w-3 h-3 text-orange-400" />
-                    {accommodationTier}
-                  </span>
+                  <span className="text-slate-400 font-medium">Accommodation Tier:</span>
+                  {(() => {
+                    const accomInfo = parseAccommodationTier(accommodationTier);
+                    const isBudget = accomInfo.category === 'Budget Hotels';
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                          isBudget
+                            ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
+                            : 'bg-purple-950/80 border-purple-500/50 text-purple-300'
+                        }`}>
+                          {isBudget ? 'Budget Hotel' : 'Premium'}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-slate-100 font-extrabold text-[11px]">
+                          <span className="text-amber-400 font-bold">{accomInfo.starString}</span>
+                          <span>{accomInfo.name}</span>
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   <span className="text-slate-400 block text-xs mb-1.5">Rituals / Notes (Dietary, Senior Citizen, Puja):</span>

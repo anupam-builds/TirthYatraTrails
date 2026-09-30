@@ -363,6 +363,16 @@ export async function updateLeadOrInquiryStatus(
       if (k === 'whatsapp_number' || k === 'whatsappNumber' || k === 'phone' || k === 'customerPhone') {
         dbPayload.phone = v;
         dbPayload.whatsapp_number = v;
+      } else if (k === 'endDate' || k === 'end_date') {
+        dbPayload.end_date = v || null;
+      } else if (k === 'durationDays' || k === 'duration_days') {
+        dbPayload.duration_days = v !== undefined && v !== null && !isNaN(Number(v)) ? Number(v) : null;
+      } else if (k === 'budget') {
+        dbPayload.budget = v || null;
+      } else if (k === 'accommodationTier' || k === 'accommodation_tier' || k === 'accommodationPreference' || k === 'accommodation_preference' || k === 'plan') {
+        dbPayload.accommodation_tier = v || null;
+        dbPayload.accommodation_preference = v || null;
+        dbPayload.plan = v || null;
       } else if (k === 'assignedStaffId' || k === 'assigned_staff_id') {
         if (dbPayload.assigned_staff_id === undefined) {
           dbPayload.assigned_staff_id = v === '--Unassigned--' || !v ? null : v;
@@ -374,6 +384,17 @@ export async function updateLeadOrInquiryStatus(
       } else if (k !== 'id' && k !== 'status' && !k.startsWith('assignedStaff')) {
         dbPayload[k] = v;
       }
+    }
+  }
+
+  // Ensure metadata stays synchronized with end_date, duration_days, budget, and accommodation_tier
+  if (dbPayload.metadata && typeof dbPayload.metadata === 'object') {
+    if (dbPayload.end_date !== undefined) dbPayload.metadata.end_date = dbPayload.end_date;
+    if (dbPayload.duration_days !== undefined) dbPayload.metadata.duration_days = dbPayload.duration_days;
+    if (dbPayload.budget !== undefined) dbPayload.metadata.budget = dbPayload.budget;
+    if (dbPayload.accommodation_tier !== undefined) {
+      dbPayload.metadata.accommodation_tier = dbPayload.accommodation_tier;
+      dbPayload.metadata.accommodation_preference = dbPayload.accommodation_tier;
     }
   }
 
@@ -507,34 +528,55 @@ export async function submitCustomerInquiry(formData: any) {
     : (formData.dropCity || formData.drop_city || formData.dropoffLocation || '');
   const packageInterestVal = formData.packageInterest || formData.package_interest || formData.title || formData.packageName || '';
   const startDateVal = formData.startDate || formData.start_date || formData.checkInDate || '';
-  const durationVal = formData.duration || formData.tourDuration || '';
+  const endDateVal = formData.endDate || formData.end_date || '';
+  const durationDaysVal =
+    formData.durationDays !== undefined && formData.durationDays !== null && !isNaN(Number(formData.durationDays))
+      ? Number(formData.durationDays)
+      : formData.duration_days !== undefined && formData.duration_days !== null && !isNaN(Number(formData.duration_days))
+      ? Number(formData.duration_days)
+      : null;
+  const durationVal = formData.duration || (durationDaysVal ? `${durationDaysVal} Days` : formData.tourDuration || '');
+  const budgetVal = formData.budget ? String(formData.budget).trim() : '';
   const adultsVal = Number(formData.adults) || 1;
   const childrenVal = Number(formData.children) || 0;
   const accommodationTierVal = formData.accommodationTier || formData.accommodation_tier || formData.plan || formData.planChosen || '';
   const specialRequestsVal = formData.specialRequests || formData.special_requests || '';
 
-  const payload = {
+  const metadataPayload = {
+    whatsapp_number: phoneVal,
+    resident_state: formData.residentState || formData.resident_state || formData.userCity || '',
+    package_interest: packageInterestVal,
+    start_date: startDateVal,
+    end_date: endDateVal || null,
+    duration_days: durationDaysVal,
+    duration: durationVal,
+    budget: budgetVal || null,
+    adults: adultsVal,
+    children: childrenVal,
+    pickup_city: pickupCityVal,
+    drop_city: dropCityVal,
+    accommodation_tier: accommodationTierVal,
+    accommodation_preference: accommodationTierVal,
+    special_requests: specialRequestsVal,
+    ...((formData.metadata && typeof formData.metadata === 'object') ? formData.metadata : {}),
+  };
+
+  const payload: any = {
     full_name: fullNameVal,
     email: emailVal,
     phone: phoneVal,
     whatsapp_number: phoneVal,
     status: 'new',
-    metadata: {
-      whatsapp_number: phoneVal,
-      resident_state: formData.residentState || formData.resident_state || formData.userCity || '',
-      package_interest: packageInterestVal,
-      start_date: startDateVal,
-      duration: durationVal,
-      adults: adultsVal,
-      children: childrenVal,
-      pickup_city: pickupCityVal,
-      drop_city: dropCityVal,
-      accommodation_tier: accommodationTierVal,
-      special_requests: specialRequestsVal,
-    },
+    end_date: endDateVal || null,
+    duration_days: durationDaysVal,
+    budget: budgetVal || null,
+    accommodation_tier: accommodationTierVal || null,
+    accommodation_preference: accommodationTierVal || null,
+    plan: accommodationTierVal || null,
+    metadata: metadataPayload,
   };
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+  let res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
     method: 'POST',
     headers: {
       apikey: SUPABASE_ANON_KEY,
@@ -544,6 +586,42 @@ export async function submitCustomerInquiry(formData: any) {
     },
     body: JSON.stringify(payload),
   });
+
+  // If table does not yet have end_date/duration_days/budget/accommodation_tier columns in PostgREST cache, retry cleanly with metadata
+  if (!res.ok && res.status === 400) {
+    const errText = await res.text();
+    if (
+      errText.includes('end_date') ||
+      errText.includes('duration_days') ||
+      errText.includes('budget') ||
+      errText.includes('accommodation_tier') ||
+      errText.includes('accommodation_preference') ||
+      errText.includes('PGRST204')
+    ) {
+      const fallbackPayload = {
+        full_name: fullNameVal,
+        email: emailVal,
+        phone: phoneVal,
+        whatsapp_number: phoneVal,
+        status: 'new',
+        plan: accommodationTierVal || null,
+        metadata: metadataPayload,
+      };
+      res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify(fallbackPayload),
+      });
+    } else {
+      console.error(`POST inquiries failed (${res.status}):`, errText);
+      throw new Error(`Inquiry submission failed: ${res.status}`);
+    }
+  }
 
   if (!res.ok) {
     const errText = await res.text();
@@ -1258,25 +1336,56 @@ export const api = {
       (inquiryData as any).check_in_date ||
       new Date().toISOString().split('T')[0];
 
+    const endDate =
+      (inquiryData as any).endDate ||
+      (inquiryData as any).end_date ||
+      (inquiryData as any).metadata?.end_date ||
+      null;
+
+    const rawDurationDays =
+      (inquiryData as any).durationDays !== undefined && (inquiryData as any).durationDays !== null
+        ? (inquiryData as any).durationDays
+        : (inquiryData as any).duration_days !== undefined && (inquiryData as any).duration_days !== null
+        ? (inquiryData as any).duration_days
+        : (inquiryData as any).metadata?.duration_days;
+    const durationDays =
+      rawDurationDays !== undefined && rawDurationDays !== null && !isNaN(Number(rawDurationDays))
+        ? Number(rawDurationDays)
+        : null;
+
+    const budget =
+      (inquiryData as any).budget ||
+      (inquiryData as any).metadata?.budget ||
+      null;
+
+    const durationStr =
+      (inquiryData as any).duration ||
+      (inquiryData as any).tourDuration ||
+      (durationDays ? `${durationDays} Days` : '');
+
     const structuredMetadata = {
       whatsapp_number: phoneVal,
       resident_state: (inquiryData as any).residentState || (inquiryData as any).resident_state || (inquiryData as any).userCity || inquiryData.userCity || '',
       package_interest: (inquiryData as any).packageInterest || (inquiryData as any).package_interest || inquiryData.title || (inquiryData as any).packageName || (inquiryData as any).referenceName || '',
       start_date: checkInDate,
-      duration: (inquiryData as any).duration || (inquiryData as any).tourDuration || '',
+      end_date: endDate,
+      duration_days: durationDays,
+      duration: durationStr,
+      budget: budget,
       adults: Number(inquiryData.adults ?? (inquiryData as any).metadata?.adults ?? inquiryData.guests ?? 1) || 1,
       children: Number(inquiryData.children ?? (inquiryData as any).metadata?.children ?? 0) || 0,
       pickup_city: (inquiryData as any).pickupCity || (inquiryData as any).pickupLocation || (inquiryData as any).pickup_city || (inquiryData as any).pickup_location || '',
       drop_city: (inquiryData as any).sameAsPickup
         ? ((inquiryData as any).pickupCity || (inquiryData as any).pickupLocation || '')
         : ((inquiryData as any).dropCity || (inquiryData as any).dropoffLocation || (inquiryData as any).drop_city || (inquiryData as any).dropoff_location || ''),
-      accommodation_tier: (inquiryData as any).accommodationTier || (inquiryData as any).accommodation_tier || inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || '',
+      accommodation_tier: (inquiryData as any).accommodationTier || (inquiryData as any).accommodation_tier || (inquiryData as any).accommodationPreference || (inquiryData as any).accommodation_preference || inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || '',
+      accommodation_preference: (inquiryData as any).accommodationPreference || (inquiryData as any).accommodation_preference || (inquiryData as any).accommodationTier || (inquiryData as any).accommodation_tier || inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || '',
       special_requests: (inquiryData as any).specialRequests || (inquiryData as any).special_requests || '',
       ...((inquiryData as any).metadata || {}),
     };
 
     try {
-      const payload = {
+      const payload: any = {
         title: inquiryData.title || structuredMetadata.package_interest || 'Pilgrimage Inquiry',
         type: inquiryData.type || 'PACKAGE',
         full_name: customerName,
@@ -1284,6 +1393,11 @@ export const api = {
         whatsapp_number: phoneVal,
         email: customerEmail,
         check_in_date: checkInDate,
+        end_date: endDate,
+        duration_days: durationDays,
+        budget: budget,
+        accommodation_tier: structuredMetadata.accommodation_tier || null,
+        accommodation_preference: structuredMetadata.accommodation_preference || null,
         guests: structuredMetadata.adults + structuredMetadata.children,
         adults: structuredMetadata.adults,
         children: structuredMetadata.children,
@@ -1300,7 +1414,7 @@ export const api = {
         metadata: structuredMetadata,
       };
 
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+      let res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
         method: 'POST',
         headers: {
           'apikey': SUPABASE_ANON_KEY,
@@ -1310,6 +1424,52 @@ export const api = {
         },
         body: JSON.stringify(payload),
       });
+
+      // If table does not yet have end_date/duration_days/budget/accommodation_tier in PostgREST cache, retry cleanly with metadata
+      if (!res.ok && res.status === 400) {
+        const errText = await res.text();
+        if (
+          errText.includes('end_date') ||
+          errText.includes('duration_days') ||
+          errText.includes('budget') ||
+          errText.includes('accommodation_tier') ||
+          errText.includes('accommodation_preference') ||
+          errText.includes('PGRST204')
+        ) {
+          delete payload.end_date;
+          delete payload.duration_days;
+          delete payload.budget;
+          delete payload.accommodation_tier;
+          delete payload.accommodation_preference;
+          res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=representation',
+            },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          console.error(`POST inquiries failed (${res.status}):`, errText);
+          throw new Error(`Inquiry submission failed: ${res.status}`);
+        }
+      }
+
+      if (!res.ok && res.status === 404) {
+        // Fallback to 'leads' table if 'inquiries' table is not present
+        res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation',
+          },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (!res.ok) {
         const errText = await res.text();
@@ -1322,6 +1482,21 @@ export const api = {
       const mapped = mapInquiryRow(createdRow);
       broadcastNewInquiry(mapped);
       localStore.submitInquiry(mapped);
+
+      // Also safely sync copy to 'leads' table in background if separate leads table exists
+      try {
+        fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      } catch {}
+
       return mapped;
     } catch (err: any) {
       console.error('⚠️ [submitInquiry] Supabase insert failed, falling back to localStore:', err);
@@ -3392,7 +3567,7 @@ export function mapInquiryRow(row: any): Inquiry {
     planChosen: row.plan_chosen || row.planChosen || row.plan || row.selected_plan || row.selectedPlan,
     selectedPlan: row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || row.plan,
     plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen,
-    accommodationTier: row.accommodation_tier || row.accommodationTier,
+    accommodationTier: row.accommodation_tier || row.accommodationTier || row.accommodation_preference || row.plan || (row.metadata && typeof row.metadata === 'object' ? (row.metadata.accommodation_tier || row.metadata.accommodation_preference) : undefined) || '3 Star Premium',
     pickupLocation: row.pickup_location || row.pickupLocation,
     dropoffLocation: row.dropoff_location || row.dropoffLocation,
     specialRequests: row.special_requests || row.specialRequests,
@@ -3413,6 +3588,23 @@ export function mapInquiryRow(row: any): Inquiry {
     customerRating: row.customer_rating || row.customerRating,
     tags: row.tags || [],
     tourDuration: row.tour_duration || row.tourDuration,
+    durationDays: (row.duration_days !== undefined && row.duration_days !== null && !isNaN(Number(row.duration_days)))
+      ? Number(row.duration_days)
+      : (row.durationDays !== undefined && row.durationDays !== null && !isNaN(Number(row.durationDays)))
+      ? Number(row.durationDays)
+      : (row.metadata?.duration_days !== undefined && row.metadata?.duration_days !== null && !isNaN(Number(row.metadata?.duration_days)))
+      ? Number(row.metadata.duration_days)
+      : undefined,
+    duration_days: (row.duration_days !== undefined && row.duration_days !== null && !isNaN(Number(row.duration_days)))
+      ? Number(row.duration_days)
+      : (row.durationDays !== undefined && row.durationDays !== null && !isNaN(Number(row.durationDays)))
+      ? Number(row.durationDays)
+      : (row.metadata?.duration_days !== undefined && row.metadata?.duration_days !== null && !isNaN(Number(row.metadata?.duration_days)))
+      ? Number(row.metadata.duration_days)
+      : undefined,
+    endDate: row.end_date || row.endDate || row.metadata?.end_date || undefined,
+    end_date: row.end_date || row.endDate || row.metadata?.end_date || undefined,
+    budget: row.budget || row.metadata?.budget || undefined,
     companionMatchingOptIn: Boolean(row.companion_matching_opt_in ?? row.companionMatchingOptIn),
     companionPilgrimType: row.companion_pilgrim_type || row.companionPilgrimType,
     companionNotes: row.companion_notes || row.companionNotes,
@@ -4181,6 +4373,20 @@ function getFallbackStories(): TravelStory[] {
 
 export function generateWhatsAppLink(details: any) {
   const travelDeskNumber = '919876543210';
-  const text = encodeURIComponent(`Namaste TirthYatraTrails! Inquiry for ${details.title || 'Pilgrimage'}`);
+  const lines = [
+    `Namaste TirthYatraTrails!`,
+    `Inquiry: ${details.title || 'Sacred Pilgrimage Yatra'}`,
+    details.fullName ? `Pilgrim: ${details.fullName}` : '',
+    details.checkInDate || details.startDate ? `Start Date: ${details.checkInDate || details.startDate}` : '',
+    details.endDate ? `End Date: ${details.endDate}` : '',
+    details.durationDays ? `Duration: ${details.durationDays} Days` : (details.duration ? `Duration: ${details.duration}` : ''),
+    details.budget ? `Budget: ${details.budget}` : '',
+    details.adults ? `Group: ${details.adults} Adults${details.children ? `, ${details.children} Children` : ''}` : '',
+    details.pickupLocation ? `Pickup: ${details.pickupLocation}` : '',
+    details.dropoffLocation ? `Drop: ${details.dropoffLocation}` : '',
+    details.plan ? `Accommodation: ${details.plan}` : '',
+    details.specialRequests ? `Notes: ${details.specialRequests}` : '',
+  ].filter(Boolean);
+  const text = encodeURIComponent(lines.join('\n'));
   return `https://wa.me/${travelDeskNumber}?text=${text}`;
 }

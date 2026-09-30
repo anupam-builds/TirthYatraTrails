@@ -274,7 +274,10 @@ export interface Inquiry {
   planChosen?: string;
   selectedPlan?: string;
   plan?: string;
-  accommodationTier?: string; // e.g. "3 Star Hotel", "4 Star Deluxe", "5 Star Luxury"
+  accommodationTier?: string; // e.g. "2 Star Standard", "3 Star Premium", etc.
+  accommodation_tier?: string;
+  accommodation_preference?: string;
+  accommodationPreference?: string;
   pickupLocation?: string;
   dropoffLocation?: string;
   specialRequests?: string;
@@ -295,6 +298,11 @@ export interface Inquiry {
   customerRating?: number;
   tags?: string[];
   tourDuration?: string;
+  durationDays?: number;
+  duration_days?: number;
+  endDate?: string;
+  end_date?: string;
+  budget?: string | number;
   companionMatchingOptIn?: boolean;
   companionPilgrimType?: 'SOLO_TRAVELER' | 'ELDERLY_PILGRIM' | 'MOTHER_DAUGHTER' | 'FAMILY_GROUP' | 'SPIRITUAL_SEEKER';
   companionNotes?: string;

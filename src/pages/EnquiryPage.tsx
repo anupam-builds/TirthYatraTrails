@@ -33,39 +33,76 @@ import {
   RotateCcw,
 } from 'lucide-react';
 
-const ACCOMMODATION_TIERS = [
+export interface AccommodationTierOption {
+  id: string;
+  name: string;
+  category: 'Budget Hotels' | 'Premium';
+  stars: number;
+  tagline: string;
+  desc: string;
+  badge: string;
+  iconColor: string;
+}
+
+export const BUDGET_HOTELS_TIERS: AccommodationTierOption[] = [
   {
-    id: '3 Star',
-    name: '3 Star Standard',
-    tagline: 'Clean, verified boutique pilgrim hotels',
-    desc: 'Attached bath, AC, hygienic pure-veg dining & proximity to temple ghats.',
-    badge: 'Popular for budget Yatris',
+    id: '2 Star Standard',
+    name: '2 Star Standard',
+    category: 'Budget Hotels',
+    stars: 2,
+    tagline: 'Clean & economical pilgrim lodges & dharamshalas',
+    desc: 'Sanitized rooms, essential clean bedding, hot water bucket/geyser, quiet peaceful rest close to shrines.',
+    badge: 'Budget Friendly',
     iconColor: 'text-amber-500',
   },
   {
+    id: '3 Star Standard',
+    name: '3 Star Standard',
+    category: 'Budget Hotels',
+    stars: 3,
+    tagline: 'Clean, verified boutique pilgrim hotels',
+    desc: 'Attached bath, AC, hygienic pure-veg dining & proximity to temple ghats.',
+    badge: 'Popular for Yatris',
+    iconColor: 'text-emerald-600',
+  },
+];
+
+export const PREMIUM_TIERS: AccommodationTierOption[] = [
+  {
     id: '3 Star Premium',
     name: '3 Star Premium',
+    category: 'Premium',
+    stars: 3,
     tagline: 'Superior spacious rooms & VIP service',
     desc: 'Upgraded modern amenities, priority check-in, complimentary satvik breakfast & evening aarti assistance.',
     badge: 'Best Value',
     iconColor: 'text-orange-500',
   },
   {
-    id: '4 Star',
+    id: '4 Star Luxury',
     name: '4 Star Luxury',
+    category: 'Premium',
+    stars: 4,
     tagline: 'Deluxe hospitality & temple transfers',
     desc: 'Full-service luxury pilgrimage resort, on-call doctor, temple chauffeur, puja coordination & sattvic buffet.',
     badge: 'Recommended for Families & Elders',
-    iconColor: 'text-orange-600',
+    iconColor: 'text-indigo-600',
   },
   {
-    id: '5 Star',
+    id: '5 Star Heritage',
     name: '5 Star Heritage',
+    category: 'Premium',
+    stars: 5,
     tagline: 'Opulent palace suites & private Pandit',
     desc: 'Ultra-luxury suites, dedicated private Pandit for rituals, helipad transfer coordination & VIP fast-track darshan escorts.',
     badge: 'Ultimate Sacred Luxury',
     iconColor: 'text-purple-600',
   },
+];
+
+export const ACCOMMODATION_TIERS: AccommodationTierOption[] = [
+  ...BUDGET_HOTELS_TIERS,
+  ...PREMIUM_TIERS,
 ];
 
 const DURATION_OPTIONS = [
@@ -118,13 +155,24 @@ export const EnquiryPage: React.FC = () => {
     d.setDate(d.getDate() + 7);
     return d.toISOString().split('T')[0];
   });
-  const [tourDuration, setTourDuration] = useState('7 Days');
+  const [tourEndDate, setTourEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
+  const [durationDays, setDurationDays] = useState<number | ''>(7);
+  const [standardDuration, setStandardDuration] = useState('7 Days');
+  const [budget, setBudget] = useState('');
   const [adults, setAdults] = useState<number>(2);
   const [children, setChildren] = useState<number>(0);
   const [childAges, setChildAges] = useState<number[]>([]);
   const [pickupCity, setPickupCity] = useState('');
   const [dropCity, setDropCity] = useState('');
   const [sameDropCity, setSameDropCity] = useState(true);
+
+  // Derived state for custom pilgrimage vs standard package
+  const isCustomPackage = selectedPackageId === 'custom';
+  const chosenPackage = packages.find((p) => p.id === selectedPackageId);
 
   // 3. Accommodation Tier
   const [accommodationTier, setAccommodationTier] = useState<string>('3 Star Premium');
@@ -154,12 +202,20 @@ export const EnquiryPage: React.FC = () => {
 
         if (paramPkgId) {
           setSelectedPackageId(paramPkgId);
+          const match = list.find((p) => p.id === paramPkgId);
+          if (match?.duration) setStandardDuration(match.duration);
         } else if (paramPkgTitle) {
           const match = list.find((p) => p.title.toLowerCase().includes(paramPkgTitle.toLowerCase()));
-          if (match) setSelectedPackageId(match.id);
-          else setCustomPackageTitle(paramPkgTitle);
+          if (match) {
+            setSelectedPackageId(match.id);
+            if (match.duration) setStandardDuration(match.duration);
+          } else {
+            setSelectedPackageId('custom');
+            setCustomPackageTitle(paramPkgTitle);
+          }
         } else if (list.length > 0) {
           setSelectedPackageId(list[0].id);
+          if (list[0].duration) setStandardDuration(list[0].duration);
         }
 
         if (paramCity) {
@@ -248,15 +304,40 @@ export const EnquiryPage: React.FC = () => {
       return;
     }
 
+    // Validation rules for custom fields apply ONLY when submitting a Custom Pilgrimage
+    if (isCustomPackage) {
+      if (tourEndDate && tourStartDate && new Date(tourEndDate) < new Date(tourStartDate)) {
+        setErrorMessage('Estimated Tour End Date cannot be earlier than Tour Start Date.');
+        return;
+      }
+      if (durationDays !== '' && Number(durationDays) < 1) {
+        setErrorMessage('Number of Days must be at least 1 day.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
-      const chosenPackage = packages.find((p) => p.id === selectedPackageId);
       const yatraTitle = chosenPackage ? chosenPackage.title : (customPackageTitle || 'Custom Sacred Pilgrimage');
       const totalGuests = adults + children;
 
+      // Determine duration, end date, and budget based on selection mode
+      const parsedDurationDays = isCustomPackage
+        ? (durationDays ? Number(durationDays) : 1)
+        : (parseInt(standardDuration) || 7);
+
+      const durationStr = isCustomPackage
+        ? `${parsedDurationDays} Days`
+        : (standardDuration || chosenPackage?.duration || `${parsedDurationDays} Days`);
+
+      const effectiveEndDate = isCustomPackage ? (tourEndDate || null) : null;
+      const effectiveBudget = isCustomPackage ? (budget.trim() || null) : null;
+
       const fullNotes = [
-        `Duration: ${tourDuration}`,
+        `Duration: ${durationStr}`,
+        effectiveEndDate ? `End Date: ${effectiveEndDate}` : '',
+        effectiveBudget ? `Budget: ${effectiveBudget}` : '',
         `Accommodation Tier: ${accommodationTier}`,
         pickupCity ? `Pickup: ${pickupCity}` : '',
         dropCity ? `Drop: ${dropCity}` : '',
@@ -272,7 +353,10 @@ export const EnquiryPage: React.FC = () => {
         residentState: userCity.trim(),
         packageInterest: yatraTitle,
         startDate: tourStartDate,
-        duration: tourDuration,
+        endDate: effectiveEndDate || undefined,
+        durationDays: parsedDurationDays,
+        duration: durationStr,
+        budget: effectiveBudget || undefined,
         adults: adults,
         children: children,
         pickupCity: pickupCity.trim(),
@@ -290,17 +374,28 @@ export const EnquiryPage: React.FC = () => {
         phone: phoneVal,
         whatsapp_number: phoneVal,
         status: 'new',
+        end_date: effectiveEndDate,
+        duration_days: parsedDurationDays,
+        budget: effectiveBudget,
+        accommodation_tier: formData.accommodationTier,
+        accommodation_preference: formData.accommodationTier,
+        plan: formData.accommodationTier,
         metadata: {
           whatsapp_number: phoneVal,
           resident_state: formData.residentState,
           package_interest: formData.packageInterest,
+          is_custom_circuit: isCustomPackage,
           start_date: formData.startDate,
+          end_date: effectiveEndDate,
+          duration_days: parsedDurationDays,
           duration: formData.duration,
+          budget: effectiveBudget,
           adults: Number(formData.adults) || 1,
           children: Number(formData.children) || 0,
           pickup_city: formData.pickupCity,
           drop_city: formData.sameAsPickup ? formData.pickupCity : formData.dropCity,
           accommodation_tier: formData.accommodationTier,
+          accommodation_preference: formData.accommodationTier,
           special_requests: formData.specialRequests
         }
       };
@@ -325,6 +420,11 @@ export const EnquiryPage: React.FC = () => {
         pickupLocation: submissionPayload.metadata.pickup_city,
         dropoffLocation: submissionPayload.metadata.drop_city,
         checkInDate: submissionPayload.metadata.start_date,
+        endDate: effectiveEndDate || undefined,
+        end_date: effectiveEndDate || undefined,
+        durationDays: parsedDurationDays,
+        duration_days: parsedDurationDays,
+        budget: effectiveBudget || undefined,
         guests: submissionPayload.metadata.adults + submissionPayload.metadata.children,
         adults: submissionPayload.metadata.adults,
         children: submissionPayload.metadata.children,
@@ -333,6 +433,8 @@ export const EnquiryPage: React.FC = () => {
         planChosen: submissionPayload.metadata.accommodation_tier,
         selectedPlan: submissionPayload.metadata.accommodation_tier,
         accommodationTier: submissionPayload.metadata.accommodation_tier,
+        accommodation_tier: submissionPayload.metadata.accommodation_tier,
+        accommodation_preference: submissionPayload.metadata.accommodation_tier,
         specialRequests: submissionPayload.metadata.special_requests,
       });
 
@@ -349,7 +451,9 @@ export const EnquiryPage: React.FC = () => {
         children: children,
         childAges: childAges,
         plan: accommodationTier,
-        specialRequests: `Duration: ${tourDuration}. ${specialRequests.trim()}`,
+        specialRequests: isCustomPackage
+          ? `[Custom Pilgrimage Circuit] Dates: ${tourStartDate} to ${tourEndDate || 'TBD'} (${durationStr}). Budget: ${budget.trim() || 'Flexible'}. ${specialRequests.trim()}`
+          : `[Standard Yatra Booking] Package: ${yatraTitle} (${durationStr}). ${specialRequests.trim()}`,
       });
 
       setSubmittedInquiry(createdInquiry);
@@ -441,16 +545,32 @@ export const EnquiryPage: React.FC = () => {
                 <span className="font-bold text-[#0f294a] text-sm">{submittedInquiry?.title || 'Pilgrimage Yatra'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-500">Estimated Start Date:</span>
-                <span className="font-bold text-slate-800">{tourStartDate}</span>
+                <span className="font-semibold text-slate-500">Estimated Tour Dates:</span>
+                <span className="font-bold text-slate-800">
+                  {tourStartDate} {isCustomPackage && tourEndDate ? `→ ${tourEndDate}` : ''} ({isCustomPackage ? (durationDays ? `${durationDays} Days` : 'Custom') : (standardDuration || chosenPackage?.duration || 'Standard Itinerary')})
+                </span>
               </div>
+              {isCustomPackage && budget.trim() && (
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-500">Estimated Budget:</span>
+                  <span className="font-bold text-emerald-700">{budget.trim()}</span>
+                </div>
+              )}
+              {!isCustomPackage && chosenPackage && (
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-500">Package Starting Price:</span>
+                  <span className="font-bold text-emerald-700">₹{chosenPackage.startingPrice.toLocaleString('en-IN')} / person</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-500">Pilgrim Count:</span>
                 <span className="font-bold text-slate-800">{adults} Adults {children > 0 ? `+ ${children} Children` : ''}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-500">Accommodation Tier:</span>
-                <span className="font-bold text-orange-700">{accommodationTier}</span>
+                <span className="font-bold text-orange-700">
+                  {accommodationTier} ({BUDGET_HOTELS_TIERS.some((t) => t.id === accommodationTier) ? 'Budget Hotel' : 'Premium'})
+                </span>
               </div>
               {pickupCity && (
                 <div className="flex items-center justify-between">
@@ -637,9 +757,15 @@ export const EnquiryPage: React.FC = () => {
                         name="enquire-package-select"
                         value={selectedPackageId}
                         onChange={(e) => {
-                          setSelectedPackageId(e.target.value);
-                          if (e.target.value !== 'custom') {
+                          const val = e.target.value;
+                          setSelectedPackageId(val);
+                          setErrorMessage('');
+                          if (val !== 'custom') {
                             setCustomPackageTitle('');
+                            const matchedPkg = packages.find((p) => p.id === val);
+                            if (matchedPkg?.duration) {
+                              setStandardDuration(matchedPkg.duration);
+                            }
                           }
                         }}
                         className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-8 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 appearance-none cursor-pointer"
@@ -662,69 +788,218 @@ export const EnquiryPage: React.FC = () => {
                   </div>
 
                   {/* If custom selected, show input */}
-                  {selectedPackageId === 'custom' && (
-                    <div className="space-y-1.5 animate-in fade-in">
-                      <label htmlFor="enquire-custom-package-title" className="block text-xs font-semibold text-slate-600">
-                        Specify Your Desired Sacred Destination or Circuit
-                      </label>
-                      <BaseInput
-                        id="enquire-custom-package-title"
-                        name="enquire-custom-package-title"
-                        type="text"
-                        placeholder="e.g. Amarnath Yatra, Ujjain Mahakaleshwar & Omkareshwar, or Rameswaram"
-                        value={customPackageTitle}
-                        onChange={(e) => setCustomPackageTitle(e.target.value)}
-                        className="w-full bg-orange-50/50 border border-orange-200 rounded-xl px-4 py-2.5 text-sm font-medium text-[#0f294a] focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                      />
-                    </div>
-                  )}
-
-                  {/* Date and Duration row */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Tour Start Date */}
-                    <div className="space-y-1.5">
-                      <label htmlFor="enquire-start-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                        Estimated Tour Start Date <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+                  {/* CONDITIONAL RENDERING: Custom Pilgrimage Circuit vs Standard Package */}
+                  {isCustomPackage ? (
+                    /* ======================================================== */
+                    /* MODE 1: CUSTOM PILGRIMAGE CIRCUIT (DYNAMIC CUSTOM FIELDS) */
+                    /* ======================================================== */
+                    <div className="space-y-4 pt-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                      {/* Destination / Circuit Free Text Input */}
+                      <div className="space-y-1.5">
+                        <label htmlFor="enquire-custom-package-title" className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Specify Your Desired Sacred Destination or Circuit
+                        </label>
                         <BaseInput
-                          id="enquire-start-date"
-                          name="enquire-start-date"
-                          type="date"
-                          required
-                          value={tourStartDate}
-                          min={new Date().toISOString().split('T')[0]}
-                          onChange={(e) => setTourStartDate(e.target.value)}
-                          className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                          id="enquire-custom-package-title"
+                          name="enquire-custom-package-title"
+                          type="text"
+                          placeholder="e.g. Amarnath Yatra, Ujjain Mahakaleshwar & Omkareshwar, or Rameswaram"
+                          value={customPackageTitle}
+                          onChange={(e) => setCustomPackageTitle(e.target.value)}
+                          className="w-full bg-orange-50/50 border border-orange-200 rounded-xl px-4 py-2.5 text-sm font-medium text-[#0f294a] focus:outline-none focus:ring-2 focus:ring-orange-500/50"
                         />
                       </div>
-                    </div>
 
-                    {/* Tour Duration Selector */}
-                    <div className="space-y-1.5">
-                      <label htmlFor="enquire-duration-select" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                        Desired Tour Duration
-                      </label>
-                      <div className="relative">
-                        <Clock className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5 pointer-events-none" />
-                        <BaseSelect
-                          id="enquire-duration-select"
-                          name="enquire-duration-select"
-                          value={tourDuration}
-                          onChange={(e) => setTourDuration(e.target.value)}
-                          className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-8 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 appearance-none cursor-pointer"
-                        >
-                          {DURATION_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </BaseSelect>
-                        <ChevronRight className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 rotate-90 pointer-events-none" />
+                      {/* Custom Dates: Start Date & End Date row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Tour Start Date */}
+                        <div className="space-y-1.5">
+                          <label htmlFor="enquire-start-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                            Estimated Tour Start Date <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+                            <BaseInput
+                              id="enquire-start-date"
+                              name="enquire-start-date"
+                              type="date"
+                              required
+                              value={tourStartDate}
+                              min={new Date().toISOString().split('T')[0]}
+                              onChange={(e) => {
+                                const newStart = e.target.value;
+                                setTourStartDate(newStart);
+                                if (newStart && durationDays) {
+                                  const d = new Date(newStart);
+                                  d.setDate(d.getDate() + Number(durationDays));
+                                  setTourEndDate(d.toISOString().split('T')[0]);
+                                }
+                              }}
+                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Estimated Tour End Date */}
+                        <div className="space-y-1.5">
+                          <label htmlFor="enquire-end-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                            Estimated Tour End Date
+                          </label>
+                          <div className="relative">
+                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+                            <BaseInput
+                              id="enquire-end-date"
+                              name="enquire-end-date"
+                              type="date"
+                              value={tourEndDate}
+                              min={tourStartDate || new Date().toISOString().split('T')[0]}
+                              onChange={(e) => {
+                                const newEnd = e.target.value;
+                                setTourEndDate(newEnd);
+                                if (tourStartDate && newEnd) {
+                                  const diffDays = Math.round((new Date(newEnd).getTime() - new Date(tourStartDate).getTime()) / (1000 * 60 * 60 * 24));
+                                  if (diffDays > 0) {
+                                    setDurationDays(diffDays);
+                                  }
+                                }
+                              }}
+                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Custom Duration & Budget row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Number of Days (numeric input) */}
+                        <div className="space-y-1.5">
+                          <label htmlFor="enquire-duration-days" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                            Number of Days
+                          </label>
+                          <div className="relative">
+                            <Clock className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5 pointer-events-none" />
+                            <BaseInput
+                              id="enquire-duration-days"
+                              name="enquire-duration-days"
+                              type="number"
+                              min="1"
+                              max="90"
+                              placeholder="e.g. 7"
+                              value={durationDays}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10) || 1);
+                                setDurationDays(val);
+                                if (val && tourStartDate) {
+                                  const d = new Date(tourStartDate);
+                                  d.setDate(d.getDate() + Number(val));
+                                  setTourEndDate(d.toISOString().split('T')[0]);
+                                }
+                              }}
+                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Estimated Budget (INR / USD) */}
+                        <div className="space-y-1.5">
+                          <label htmlFor="enquire-budget" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                            Estimated Budget (INR / USD)
+                          </label>
+                          <div className="relative">
+                            <span className="w-4 h-4 text-orange-500 font-bold absolute left-3.5 top-2.5 text-sm pointer-events-none">₹</span>
+                            <BaseInput
+                              id="enquire-budget"
+                              name="enquire-budget"
+                              type="text"
+                              placeholder="e.g. ₹50,000 or $700"
+                              value={budget}
+                              onChange={(e) => setBudget(e.target.value)}
+                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    /* ======================================================== */
+                    /* MODE 2: STANDARD PACKAGE (FIXED-ITINERARY VIEW)          */
+                    /* ======================================================== */
+                    <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+                      {/* Standard Package: Start Date and Duration row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Tour Start Date */}
+                        <div className="space-y-1.5">
+                          <label htmlFor="enquire-start-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                            Estimated Tour Start Date <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+                            <BaseInput
+                              id="enquire-start-date"
+                              name="enquire-start-date"
+                              type="date"
+                              required
+                              value={tourStartDate}
+                              min={new Date().toISOString().split('T')[0]}
+                              onChange={(e) => setTourStartDate(e.target.value)}
+                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Standard Tour Duration Selector */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label htmlFor="enquire-standard-duration" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                              Desired Tour Duration
+                            </label>
+                            {chosenPackage?.duration && (
+                              <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200">
+                                Itinerary: {chosenPackage.duration}
+                              </span>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <Clock className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5 pointer-events-none" />
+                            <BaseSelect
+                              id="enquire-standard-duration"
+                              name="enquire-standard-duration"
+                              value={standardDuration}
+                              onChange={(e) => setStandardDuration(e.target.value)}
+                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-8 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 appearance-none cursor-pointer"
+                            >
+                              {chosenPackage?.duration && !DURATION_OPTIONS.some((o) => o.value === chosenPackage.duration) && (
+                                <option value={chosenPackage.duration}>
+                                  {chosenPackage.duration} (Standard Package Itinerary)
+                                </option>
+                              )}
+                              {DURATION_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </BaseSelect>
+                            <ChevronRight className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 rotate-90 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Package Itinerary Summary Badge */}
+                      {chosenPackage && (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span className="font-bold text-slate-800">{chosenPackage.title}</span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-600">{chosenPackage.duration} Itinerary</span>
+                          </div>
+                          <span className="font-extrabold text-orange-600">
+                            from ₹{chosenPackage.startingPrice.toLocaleString('en-IN')} / person
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Adults and Children Counters */}
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
@@ -885,7 +1160,7 @@ export const EnquiryPage: React.FC = () => {
               {/* ------------------------------------------------------------ */}
               {/* SECTION 3: ACCOMMODATION TIERS                               */}
               {/* ------------------------------------------------------------ */}
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
                   <div className="w-8 h-8 rounded-xl bg-orange-100 text-[#ea580c] flex items-center justify-center font-bold text-sm">
                     3
@@ -896,44 +1171,124 @@ export const EnquiryPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                  {ACCOMMODATION_TIERS.map((tier) => {
-                    const isSelected = accommodationTier === tier.id;
-                    return (
-                      <div
-                        key={tier.id}
-                        id={`tier-card-${tier.id.toLowerCase().replace(/\s+/g, '-')}`}
-                        onClick={() => setAccommodationTier(tier.id)}
-                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative ${
-                          isSelected
-                            ? 'border-orange-500 bg-orange-50/40 shadow-md ring-1 ring-orange-500/30'
-                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <Building2 className={`w-5 h-5 ${isSelected ? 'text-[#ea580c]' : 'text-slate-400'}`} />
-                            <h3 className="font-extrabold text-sm text-[#0f294a]">
-                              {tier.name}
-                            </h3>
+                {/* BUDGET FRIENDLY HOTELS */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      <h3 className="text-sm font-bold text-slate-800">
+                        Budget Friendly Hotels
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                      Economy &amp; Standard Stays
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {BUDGET_HOTELS_TIERS.map((tier) => {
+                      const isSelected = accommodationTier === tier.id;
+                      return (
+                        <div
+                          key={tier.id}
+                          id={`tier-card-${tier.id.toLowerCase().replace(/\s+/g, '-')}`}
+                          onClick={() => setAccommodationTier(tier.id)}
+                          className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative flex flex-col justify-between ${
+                            isSelected
+                              ? 'border-emerald-500 bg-emerald-50/50 shadow-md ring-2 ring-emerald-500/20'
+                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <Building2 className={`w-5 h-5 ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`} />
+                              <div>
+                                <h4 className="font-extrabold text-sm text-[#0f294a]">
+                                  {tier.name}
+                                </h4>
+                                <div className="flex items-center gap-0.5 text-amber-500 text-xs mt-0.5">
+                                  {Array.from({ length: tier.stars }).map((_, i) => (
+                                    <span key={i}>★</span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs border font-bold ${
+                              isSelected ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'border-slate-300 text-transparent'
+                            }`}>
+                              ✓
+                            </div>
                           </div>
-                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs border ${
-                            isSelected ? 'bg-[#ea580c] text-white border-[#ea580c]' : 'border-slate-300 text-transparent'
-                          }`}>
-                            ✓
+
+                          <div className="mt-3 flex items-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-emerald-100 text-emerald-900 border border-emerald-200">
+                              {tier.badge}
+                            </span>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                        <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-orange-100 text-[#c2410c]">
-                          {tier.badge}
-                        </span>
+                {/* PREMIUM */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                      <h3 className="text-sm font-bold text-slate-800">
+                        Premium
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-purple-800 bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-full">
+                      Deluxe, Luxury &amp; Heritage Stays
+                    </span>
+                  </div>
 
-                        <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                          {tier.desc}
-                        </p>
-                      </div>
-                    );
-                  })}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    {PREMIUM_TIERS.map((tier) => {
+                      const isSelected = accommodationTier === tier.id;
+                      return (
+                        <div
+                          key={tier.id}
+                          id={`tier-card-${tier.id.toLowerCase().replace(/\s+/g, '-')}`}
+                          onClick={() => setAccommodationTier(tier.id)}
+                          className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative flex flex-col justify-between ${
+                            isSelected
+                              ? 'border-orange-500 bg-orange-50/50 shadow-md ring-2 ring-orange-500/20'
+                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <Building2 className={`w-5 h-5 ${isSelected ? 'text-[#ea580c]' : 'text-slate-400'}`} />
+                              <div>
+                                <h4 className="font-extrabold text-sm text-[#0f294a]">
+                                  {tier.name}
+                                </h4>
+                                <div className="flex items-center gap-0.5 text-amber-500 text-xs mt-0.5">
+                                  {Array.from({ length: tier.stars }).map((_, i) => (
+                                    <span key={i}>★</span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs border font-bold ${
+                              isSelected ? 'bg-[#ea580c] text-white border-[#ea580c] shadow-xs' : 'border-slate-300 text-transparent'
+                            }`}>
+                              ✓
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex items-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-orange-100 text-[#c2410c] border border-orange-200">
+                              {tier.badge}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

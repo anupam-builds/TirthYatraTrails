@@ -102,13 +102,91 @@ export function normalizeInquiryStatus(status?: string): InquiryStatus {
 }
 
 export const ACCOMMODATION_TIERS = [
-  '3 Star Hotel',
+  '2 Star Standard',
+  '3 Star Standard',
   '3 Star Premium',
-  '4 Star Deluxe',
-  '5 Star Luxury',
-  'Heritage Palace',
-  'Budget Yatri Niwas',
+  '4 Star Luxury',
+  '5 Star Heritage',
 ];
+
+export interface AccommodationTierInfo {
+  category: 'Budget Hotels' | 'Premium';
+  name: string;
+  stars: number;
+  starString: string;
+  badgeClass: string;
+  chipClass: string;
+  iconColor: string;
+}
+
+/**
+ * Parses and categorizes any raw accommodation tier string into structured category and display metadata
+ */
+export function parseAccommodationTier(tierRaw?: string): AccommodationTierInfo {
+  const t = (tierRaw || '').trim();
+  const lower = t.toLowerCase();
+
+  // 1. Budget Hotels
+  if (lower.includes('2 star') || lower.includes('yatri niwas') || lower.includes('dharamshala') || lower.includes('economy')) {
+    return {
+      category: 'Budget Hotels',
+      name: '2 Star Standard',
+      stars: 2,
+      starString: '★★',
+      badgeClass: 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800',
+      chipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300',
+      iconColor: 'text-amber-500',
+    };
+  }
+
+  if (lower === '3 star standard' || lower === '3 star' || lower === '3 star hotel' || lower.includes('standard')) {
+    return {
+      category: 'Budget Hotels',
+      name: '3 Star Standard',
+      stars: 3,
+      starString: '★★★',
+      badgeClass: 'bg-emerald-50 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800',
+      chipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300',
+      iconColor: 'text-emerald-600',
+    };
+  }
+
+  // 2. Premium
+  if (lower.includes('5 star') || lower.includes('heritage') || lower.includes('palace')) {
+    return {
+      category: 'Premium',
+      name: '5 Star Heritage',
+      stars: 5,
+      starString: '★★★★★',
+      badgeClass: 'bg-purple-50 text-purple-900 border-purple-300 dark:bg-purple-950/70 dark:text-purple-300 dark:border-purple-800',
+      chipClass: 'bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300',
+      iconColor: 'text-purple-600',
+    };
+  }
+
+  if (lower.includes('4 star') || lower.includes('luxury') || lower.includes('deluxe')) {
+    return {
+      category: 'Premium',
+      name: '4 Star Luxury',
+      stars: 4,
+      starString: '★★★★',
+      badgeClass: 'bg-indigo-50 text-indigo-900 border-indigo-300 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800',
+      chipClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300',
+      iconColor: 'text-indigo-600',
+    };
+  }
+
+  // Default to 3 Star Premium
+  return {
+    category: 'Premium',
+    name: t || '3 Star Premium',
+    stars: 3,
+    starString: '★★★',
+    badgeClass: 'bg-orange-50 text-orange-900 border-orange-300 dark:bg-orange-950/70 dark:text-orange-300 dark:border-orange-800',
+    chipClass: 'bg-orange-100 text-orange-800 dark:bg-orange-900/60 dark:text-orange-300',
+    iconColor: 'text-orange-600',
+  };
+}
 
 /**
  * Returns or generates a deterministic unique alphanumeric Lead ID formatted as TTT00000001.

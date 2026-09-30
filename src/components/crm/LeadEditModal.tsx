@@ -73,9 +73,12 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
         email: inquiry.customerEmail || inquiry.email || '',
         userCity: inquiry.userCity || '',
         checkInDate: inquiry.checkInDate || '',
+        endDate: inquiry.endDate || (inquiry as any).end_date || (inquiry as any).metadata?.end_date || '',
+        durationDays: inquiry.durationDays !== undefined ? inquiry.durationDays : (inquiry as any).duration_days !== undefined ? (inquiry as any).duration_days : (inquiry as any).metadata?.duration_days,
+        budget: inquiry.budget || (inquiry as any).metadata?.budget || '',
         adults: inquiry.adults !== undefined ? inquiry.adults : inquiry.guests || 2,
         children: inquiry.children !== undefined ? inquiry.children : 0,
-        accommodationTier: inquiry.accommodationTier || '3 Star Hotel',
+        accommodationTier: inquiry.accommodationTier || (inquiry as any).accommodation_tier || (inquiry as any).accommodation_preference || inquiry.plan || '3 Star Premium',
         status: inquiry.status || 'NEW',
         assignedStaffId: (inquiry as any).assigned_staff_id || inquiry.assignedStaffId || '',
         assignedStaffName: (inquiry as any).assigned_staff_name || inquiry.assignedStaffName || '',
@@ -185,6 +188,10 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
       const rawPhone = (formData.customerPhone || formData.whatsappNumber || (formData as any).phone || '').trim();
       const existingMeta = (inquiry as any).metadata || {};
 
+      const parsedDuration = formData.durationDays !== undefined && formData.durationDays !== null && !isNaN(Number(formData.durationDays))
+        ? Number(formData.durationDays)
+        : undefined;
+
       const updates: Partial<Inquiry> = {
         ...formData,
         fullName: formData.customerName,
@@ -195,9 +202,20 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
         whatsapp_number: rawPhone,
         whatsappNumber: rawPhone,
         customerPhone: rawPhone,
+        endDate: formData.endDate,
+        end_date: formData.endDate,
+        durationDays: parsedDuration,
+        duration_days: parsedDuration,
+        tourDuration: parsedDuration ? `${parsedDuration} Days` : formData.tourDuration,
+        budget: formData.budget,
         guests: adultsCount + childrenCount,
         adults: adultsCount,
         children: childrenCount,
+        accommodationTier: formData.accommodationTier,
+        accommodation_tier: formData.accommodationTier,
+        accommodationPreference: formData.accommodationTier,
+        accommodation_preference: formData.accommodationTier,
+        plan: formData.accommodationTier,
         metadata: {
           ...existingMeta,
           whatsapp_number: rawPhone,
@@ -206,11 +224,17 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
           email: formData.customerEmail,
           package_interest: formData.title,
           start_date: formData.checkInDate,
+          end_date: formData.endDate,
+          duration_days: parsedDuration,
+          duration: parsedDuration ? `${parsedDuration} Days` : formData.tourDuration,
+          budget: formData.budget,
           adults: adultsCount,
           children: childrenCount,
           pickup_city: formData.pickupLocation,
           drop_city: formData.dropoffLocation,
-          accommodation_tier: formData.plan || formData.selectedPlan,
+          accommodation_tier: formData.accommodationTier,
+          accommodation_preference: formData.accommodationTier,
+          plan: formData.accommodationTier,
           special_requests: formData.specialRequests,
         },
       };
@@ -496,32 +520,55 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                 <BaseSelect
                   id="edit-modal-accommodation-tier"
                   name="edit-modal-accommodation-tier"
-                  value={formData.accommodationTier || '3 Star Hotel'}
+                  value={formData.accommodationTier || '3 Star Premium'}
                   onChange={(e) => setFormData({ ...formData, accommodationTier: e.target.value })}
                   className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
-                  {ACCOMMODATION_TIERS.map((tier) => (
-                    <option key={tier} value={tier}>
-                      {tier}
-                    </option>
-                  ))}
+                  <optgroup label="Budget Friendly Hotels">
+                    <option value="2 Star Standard">2 Star Standard (Budget Hotel)</option>
+                    <option value="3 Star Standard">3 Star Standard (Budget Hotel)</option>
+                  </optgroup>
+                  <optgroup label="Premium">
+                    <option value="3 Star Premium">3 Star Premium</option>
+                    <option value="4 Star Luxury">4 Star Luxury</option>
+                    <option value="5 Star Heritage">5 Star Heritage</option>
+                  </optgroup>
                 </BaseSelect>
               </div>
 
-              <div>
-                <label htmlFor="edit-modal-checkin-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Arrival / Check-in Date
-                </label>
-                <div className="relative">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <BaseInput
-                    id="edit-modal-checkin-date"
-                    name="edit-modal-checkin-date"
-                    type="date"
-                    value={formData.checkInDate || ''}
-                    onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
-                    className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor="edit-modal-checkin-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Arrival / Check-in Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <BaseInput
+                      id="edit-modal-checkin-date"
+                      name="edit-modal-checkin-date"
+                      type="date"
+                      value={formData.checkInDate || ''}
+                      onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
+                      className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="edit-modal-end-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Estimated Tour End Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <BaseInput
+                      id="edit-modal-end-date"
+                      name="edit-modal-end-date"
+                      type="date"
+                      value={formData.endDate || ''}
+                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                      className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -558,19 +605,40 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label htmlFor="edit-modal-tour-duration" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Tour Duration
-                </label>
-                <BaseInput
-                  id="edit-modal-tour-duration"
-                  name="edit-modal-tour-duration"
-                  type="text"
-                  placeholder="e.g. 5 Days / 4 Nights"
-                  value={formData.tourDuration || ''}
-                  onChange={(e) => setFormData({ ...formData, tourDuration: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor="edit-modal-tour-duration-days" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Duration (Number of Days)
+                  </label>
+                  <BaseInput
+                    id="edit-modal-tour-duration-days"
+                    name="edit-modal-tour-duration-days"
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 7"
+                    value={formData.durationDays ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10) || 1);
+                      setFormData({ ...formData, durationDays: val as any, tourDuration: val ? `${val} Days` : '' });
+                    }}
+                    className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="edit-modal-budget" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Estimated Budget (INR / USD)
+                  </label>
+                  <BaseInput
+                    id="edit-modal-budget"
+                    name="edit-modal-budget"
+                    type="text"
+                    placeholder="e.g. ₹50,000 or $700"
+                    value={formData.budget || ''}
+                    onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
               </div>
 
               <div>

@@ -15,6 +15,7 @@ import {
   formatCrmDate,
   formatCrmTimestamp,
   generateCustomerWhatsAppLink,
+  parseAccommodationTier,
 } from '../../utils/crmUtils.js';
 import {
   Search,
@@ -492,7 +493,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                 <th className="py-3.5 px-4">City / Accom. Tier</th>
                 <th className="py-3.5 px-4">Package Interest &amp; Tags</th>
                 <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4">Arrival Date</th>
+                <th className="py-3.5 px-4">Dates, Duration &amp; Budget</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -540,6 +541,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     inq.whatsappNumber ||
                     '';
                   const hasPhone = Boolean(phoneCandidate && phoneCandidate !== 'No phone');
+                  const leadEndDate = inq.endDate || lead.end_date || lead.endDate || inq.end_date || lead.metadata?.end_date;
+                  const leadDurationDays = inq.durationDays ?? lead.duration_days ?? lead.durationDays ?? inq.duration_days ?? lead.metadata?.duration_days;
+                  const leadBudget = inq.budget || lead.budget || lead.metadata?.budget;
 
                   return (
                     <React.Fragment key={inq.id}>
@@ -714,11 +718,31 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-semibold text-xs">
                               <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
-                              <span>{inq.userCity || 'City TBD'}</span>
+                              <span className="truncate max-w-[130px]">{inq.userCity || 'City TBD'}</span>
                             </div>
-                            <span className="inline-block text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                              {inq.accommodationTier || '3 Star Hotel'}
-                            </span>
+                            {(() => {
+                              const accomInfo = parseAccommodationTier(inq.accommodationTier || (inq as any).accommodation_tier);
+                              const isBudget = accomInfo.category === 'Budget Hotels';
+                              return (
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1">
+                                    <span className={`inline-flex items-center text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                      isBudget
+                                        ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                                        : 'bg-purple-100 text-purple-900 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                                    }`}>
+                                      {isBudget ? 'Budget' : 'Premium'}
+                                    </span>
+                                    <span className="text-[10px] text-amber-500 font-bold tracking-tighter">
+                                      {accomInfo.starString}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                                    {accomInfo.name}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </td>
 
@@ -804,11 +828,36 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           )}
                         </td>
 
-                        {/* 8. Arrival Date */}
+                        {/* 8. Dates, Duration & Budget */}
                         <td className="py-4 px-4 align-top">
-                          <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
-                            <Calendar className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                            <span>{formatCrmDate(inq.checkInDate)}</span>
+                          <div className="space-y-1.5 text-xs">
+                            <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                              <Calendar className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                              <span>{formatCrmDate(inq.checkInDate)}</span>
+                              {leadEndDate && leadEndDate !== 'Flexible / TBD' && (
+                                <span className="text-slate-400 dark:text-slate-500 font-normal">
+                                  → {formatCrmDate(leadEndDate)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center flex-wrap gap-1.5">
+                              {leadDurationDays ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 border border-orange-200 dark:border-orange-800/80">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  <span>{leadDurationDays} Days</span>
+                                </span>
+                              ) : inq.tourDuration ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  <span>{inq.tourDuration}</span>
+                                </span>
+                              ) : null}
+                              {leadBudget ? (
+                                <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80">
+                                  <span>💰 {leadBudget}</span>
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </td>
 
