@@ -1403,11 +1403,7 @@ export const api = {
         whatsapp_number: phoneVal,
         email: customerEmail,
         check_in_date: checkInDate,
-        end_date: endDate,
-        duration_days: durationDays,
-        budget: budget,
         accommodation_tier: structuredMetadata.accommodation_tier || null,
-        accommodation_preference: structuredMetadata.accommodation_preference || null,
         guests: structuredMetadata.adults + structuredMetadata.children,
         adults: structuredMetadata.adults,
         children: structuredMetadata.children,
@@ -1435,36 +1431,21 @@ export const api = {
         body: JSON.stringify(payload),
       });
 
-      // If table does not yet have end_date/duration_days/budget/accommodation_tier in PostgREST cache, retry cleanly with metadata
+      // If table has schema mismatch, log detailed JSON error and retry with fallback
       if (!res.ok && res.status === 400) {
-        const errText = await res.text();
-        if (
-          errText.includes('end_date') ||
-          errText.includes('duration_days') ||
-          errText.includes('budget') ||
-          errText.includes('accommodation_tier') ||
-          errText.includes('accommodation_preference') ||
-          errText.includes('PGRST204')
-        ) {
-          delete payload.end_date;
-          delete payload.duration_days;
-          delete payload.budget;
-          delete payload.accommodation_tier;
-          delete payload.accommodation_preference;
-          res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
-            method: 'POST',
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=representation',
-            },
-            body: JSON.stringify(payload),
-          });
-        } else {
-          console.error(`POST inquiries failed (${res.status}):`, errText);
-          throw new Error(`Inquiry submission failed: ${res.status}`);
-        }
+        const errBody = await res.json().catch(() => null);
+        console.error('❌ [submitInquiry] Supabase POST to /rest/v1/inquiries returned 400:', errBody);
+        delete payload.accommodation_tier;
+        res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation',
+          },
+          body: JSON.stringify(payload),
+        });
       }
 
       if (!res.ok && res.status === 404) {
@@ -1620,7 +1601,36 @@ export const api = {
       source: 'CRM_MANUAL_ENTRY',
     };
 
-    // Exact top-level columns present in the Supabase 'leads' table:
+    // 1. Exact top-level columns present in public.inquiries:
+    // id, title, type, full_name, customer_name, phone, whatsapp_number, email, city, check_in_date, guests, adults, children, plan, accommodation_tier, special_requests, notes, status, assigned_staff_id, assigned_staff_name, is_locked_for_staff, metadata, created_at, updated_at
+    const inquiriesPayload: Record<string, any> = {
+      id: rawLeadUuid,
+      title: titleVal,
+      type: leadData.type || 'PACKAGE',
+      full_name: customerName,
+      customer_name: customerName,
+      phone: phoneVal,
+      whatsapp_number: phoneVal,
+      email: emailVal || null,
+      city: cityVal || null,
+      check_in_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
+      guests: (leadData.adults || 1) + (leadData.children || 0),
+      adults: leadData.adults || 1,
+      children: leadData.children || 0,
+      plan: accomVal || null,
+      accommodation_tier: accomVal || null,
+      special_requests: leadData.specialRequests || leadData.notes || '',
+      notes: leadData.notes ? [{ id: `note-${Date.now()}`, text: leadData.notes, createdAt: new Date().toISOString() }] : [],
+      status: statusVal || 'NEW',
+      assigned_staff_id: leadData.assignedStaffId || null,
+      assigned_staff_name: leadData.assignedStaffName || null,
+      is_locked_for_staff: false,
+      metadata: structuredMetadata,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // 2. Exact top-level columns present in public.leads:
     // id, customer_name, full_name, phone, whatsapp_number, email, city, accommodation_tier, accommodation_preference, assigned_staff_id, assigned_staff_name, status, metadata, created_at, updated_at
     const leadsDbPayload: Record<string, any> = {
       id: rawLeadUuid,
@@ -1641,8 +1651,34 @@ export const api = {
     };
 
     let createdRow: any = null;
+
+    // Write to active CRM table 'inquiries' with error parsing
     try {
-      let res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+      const inqRes = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(inquiriesPayload),
+      });
+
+      if (!inqRes.ok) {
+        const errBody = await inqRes.json().catch(() => null);
+        console.error('❌ [createManualLead] Supabase POST to /rest/v1/inquiries returned', inqRes.status, errBody);
+      } else {
+        const json = await inqRes.json().catch(() => null);
+        createdRow = Array.isArray(json) ? json[0] : json;
+      }
+    } catch (err) {
+      console.warn('⚠️ [createManualLead] Fetch to inquiries failed:', err);
+    }
+
+    // Synchronize to 'leads' table with error parsing
+    try {
+      const leadsRes = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',
         headers: {
           'apikey': SUPABASE_ANON_KEY,
@@ -1653,80 +1689,18 @@ export const api = {
         body: JSON.stringify(leadsDbPayload),
       });
 
-      if (!res.ok) {
-        const errText = await res.text();
-        console.warn('⚠️ [createManualLead] Initial POST to leads returned non-200:', res.status, errText);
-        // Resilient fallback: remove any specific column if rejected by schema
-        const fallbackPayload = { ...leadsDbPayload };
-        if (errText.includes('accommodation_preference')) {
-          delete fallbackPayload.accommodation_preference;
-        }
-        if (errText.includes('accommodation_tier')) {
-          delete fallbackPayload.accommodation_tier;
-        }
-        if (errText.includes('assigned_staff_name')) {
-          delete fallbackPayload.assigned_staff_name;
-        }
-        if (errText.includes('city')) {
-          delete fallbackPayload.city;
-        }
-
-        res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
-          method: 'POST',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-          },
-          body: JSON.stringify(fallbackPayload),
-        });
-      }
-
-      if (res.ok) {
-        const json = await res.json().catch(() => null);
+      if (!leadsRes.ok) {
+        const errBody = await leadsRes.json().catch(() => null);
+        console.error('❌ [createManualLead] Supabase POST to /rest/v1/leads returned', leadsRes.status, errBody);
+      } else if (!createdRow) {
+        const json = await leadsRes.json().catch(() => null);
         createdRow = Array.isArray(json) ? json[0] : json;
       }
     } catch (err) {
       console.warn('⚠️ [createManualLead] Fetch to leads failed:', err);
     }
 
-    try {
-      const inquiriesPayload: Record<string, any> = {
-        id: rawLeadUuid,
-        title: titleVal,
-        type: leadData.type || 'PACKAGE',
-        full_name: customerName,
-        customer_name: customerName,
-        phone: phoneVal,
-        whatsapp_number: phoneVal,
-        email: emailVal || null,
-        city: cityVal || null,
-        check_in_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
-        accommodation_tier: accomVal || null,
-        accommodation_preference: accomVal || null,
-        assigned_staff_id: leadData.assignedStaffId || null,
-        assigned_staff_name: leadData.assignedStaffName || null,
-        status: statusVal || 'NEW',
-        special_requests: leadData.specialRequests || leadData.notes || '',
-        metadata: structuredMetadata,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify(inquiriesPayload),
-      }).catch(() => {});
-    } catch {}
-
-    const mapped = createdRow ? mapInquiryRow(createdRow) : mapInquiryRow(leadsDbPayload);
+    const mapped = createdRow ? mapInquiryRow(createdRow) : mapInquiryRow(inquiriesPayload);
     mapped.leadId = nextLeadId;
     mapped.customerName = customerName;
     mapped.fullName = customerName;
