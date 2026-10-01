@@ -246,6 +246,76 @@ export interface UpdateLeadOptions {
   [key: string]: any;
 }
 
+// In-memory cache for live Supabase schema column inspection
+let cachedInquiriesCols: Set<string> | null = null;
+let cachedLeadsCols: Set<string> | null = null;
+let lastColsCheck = 0;
+
+export function invalidateTableColumnsCache() {
+  cachedInquiriesCols = null;
+  cachedLeadsCols = null;
+  lastColsCheck = 0;
+  console.log('🔄 [API] Table columns schema cache invalidated');
+}
+
+/**
+ * Dynamically discovers the columns exposed by Supabase PostgREST for a given table.
+ * Merges discovered columns with safe baseline columns, preventing 400 PGRST204 errors.
+ */
+export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set<string>> {
+  const now = Date.now();
+  if (table === 'inquiries' && cachedInquiriesCols && now - lastColsCheck < 45000) {
+    return cachedInquiriesCols;
+  }
+  if (table === 'leads' && cachedLeadsCols && now - lastColsCheck < 45000) {
+    return cachedLeadsCols;
+  }
+
+  // Baseline verified schema columns guaranteed to exist
+  const baselineInquiries = new Set([
+    'id', 'title', 'type', 'full_name', 'phone', 'email', 'check_in_date',
+    'guests', 'adults', 'children', 'child_ages', 'plan', 'special_requests',
+    'pickup_location', 'dropoff_location', 'user_id', 'status',
+    'assigned_staff_id', 'assigned_staff_name', 'is_locked_for_staff',
+    'notes', 'created_at', 'customer_name', 'city', 'accommodation_tier',
+    'updated_at', 'metadata', 'whatsapp_number',
+  ]);
+
+  const baselineLeads = new Set([
+    'id', 'customer_name', 'full_name', 'phone', 'whatsapp_number', 'email',
+    'city', 'accommodation_tier', 'accommodation_preference',
+    'assigned_staff_id', 'assigned_staff_name', 'status',
+    'metadata', 'created_at', 'updated_at',
+  ]);
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?limit=1`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
+        const liveCols = new Set(Object.keys(data[0]));
+        const merged = table === 'inquiries'
+          ? new Set([...baselineInquiries, ...liveCols])
+          : new Set([...baselineLeads, ...liveCols]);
+
+        if (table === 'inquiries') cachedInquiriesCols = merged;
+        else cachedLeadsCols = merged;
+        lastColsCheck = now;
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn(`[getTableColumns] Could not inspect active columns for ${table}, using baseline:`, err);
+  }
+
+  return table === 'inquiries' ? baselineInquiries : baselineLeads;
+}
+
 /**
  * Universal safeguarded status and assignment updater for leads and inquiries.
  * Targets 'inquiries' (if ID starts with 'inq') or 'leads', cleans '--Unassigned--'
@@ -391,43 +461,117 @@ export async function updateLeadOrInquiryStatus(
     }
   }
 
-  // Ensure metadata stays synchronized with end_date, duration_days, budget, accommodation_tier, and reminder_at
-  if (dbPayload.metadata && typeof dbPayload.metadata === 'object') {
-    if (dbPayload.end_date !== undefined) dbPayload.metadata.end_date = dbPayload.end_date;
-    if (dbPayload.duration_days !== undefined) dbPayload.metadata.duration_days = dbPayload.duration_days;
-    if (dbPayload.budget !== undefined) dbPayload.metadata.budget = dbPayload.budget;
-    if (dbPayload.accommodation_tier !== undefined) {
-      dbPayload.metadata.accommodation_tier = dbPayload.accommodation_tier;
-      dbPayload.metadata.accommodation_preference = dbPayload.accommodation_tier;
-    }
-    if (dbPayload.reminder_at !== undefined) {
-      dbPayload.metadata.reminder_at = dbPayload.reminder_at;
-    }
-    if (dbPayload.reminder_note !== undefined) {
-      dbPayload.metadata.reminder_note = dbPayload.reminder_note;
-    }
+  const hasReminderAtUpdate = 'reminderAt' in extraPayload || 'reminder_at' in extraPayload || 'reminder_at' in dbPayload;
+  const rawReminderAt = extraPayload.reminderAt ?? extraPayload.reminder_at ?? dbPayload.reminder_at;
+  const cleanReminderAt = hasReminderAtUpdate
+    ? (rawReminderAt ? new Date(rawReminderAt).toISOString() : null)
+    : undefined;
+
+  const hasReminderNoteUpdate = 'reminderNote' in extraPayload || 'reminder_note' in extraPayload || 'reminder_note' in dbPayload;
+  const rawReminderNote = extraPayload.reminderNote ?? extraPayload.reminder_note ?? dbPayload.reminder_note;
+  const cleanReminderNote = hasReminderNoteUpdate
+    ? (rawReminderNote ? String(rawReminderNote).trim() : null)
+    : undefined;
+
+  const existingInquiry = localStore.getInquiries().find((i: any) => matchLeadId(i, resolvedId));
+  const existingMeta = (existingInquiry as any)?.metadata && typeof (existingInquiry as any).metadata === 'object'
+    ? (existingInquiry as any).metadata
+    : {};
+
+  const mergedMetadata: Record<string, any> = {
+    ...existingMeta,
+    ...(extraPayload.metadata || {}),
+  };
+
+  if (hasReminderAtUpdate) {
+    mergedMetadata.reminder_at = cleanReminderAt;
+  }
+  if (hasReminderNoteUpdate) {
+    mergedMetadata.reminder_note = cleanReminderNote;
+  }
+  if (dbPayload.status) {
+    mergedMetadata.status = dbPayload.status;
+  }
+  if (dbPayload.assigned_staff_id !== undefined) {
+    mergedMetadata.assigned_staff_id = dbPayload.assigned_staff_id;
+  }
+  if (dbPayload.assigned_staff_name !== undefined) {
+    mergedMetadata.assigned_staff_name = dbPayload.assigned_staff_name;
   }
 
+  // Tables schema column definitions to prevent PostgREST 400 (PGRST204) schema mismatch
   // Unified candidate tables routing: try primary table first, and fallback to alternate table
   const candidateTables: Array<'inquiries' | 'leads'> =
     resolvedId.startsWith('lead') ? ['leads', 'inquiries'] : ['inquiries', 'leads'];
 
-  console.log('🚀 [API] Safe update payload for candidate tables', candidateTables, dbPayload);
+  console.log('🚀 [API] Safe update for candidate tables:', candidateTables, {
+    resolvedStatus,
+    cleanReminderAt,
+    cleanReminderNote,
+  });
 
   let updatedRow: any = null;
   let finalTargetTable: 'inquiries' | 'leads' = candidateTables[0];
 
   for (const table of candidateTables) {
     try {
+      const allowedCols = await getTableColumns(table);
+      const tablePayload: Record<string, any> = {
+        updated_at: dbPayload.updated_at,
+        metadata: mergedMetadata,
+      };
+
+      for (const [k, v] of Object.entries(dbPayload)) {
+        if (allowedCols.has(k) && k !== 'metadata') {
+          tablePayload[k] = v;
+        }
+      }
+
+      // Explicitly assign state properties if the table column exists in Supabase
+      if (allowedCols.has('accommodation_preference')) {
+        const val = extraPayload.accommodationPreference || extraPayload.accommodation_preference || dbPayload.accommodation_preference || dbPayload.accommodation_tier;
+        if (val) tablePayload.accommodation_preference = val;
+      }
+      if (allowedCols.has('accommodation_tier')) {
+        const val = extraPayload.accommodationTier || extraPayload.accommodation_tier || dbPayload.accommodation_tier;
+        if (val) tablePayload.accommodation_tier = val;
+      }
+      if (allowedCols.has('adults')) {
+        const val = extraPayload.adults ?? dbPayload.adults;
+        if (val !== undefined && val !== null && !isNaN(Number(val))) tablePayload.adults = Number(val);
+      }
+      if (allowedCols.has('children')) {
+        const val = extraPayload.children ?? dbPayload.children;
+        if (val !== undefined && val !== null && !isNaN(Number(val))) tablePayload.children = Number(val);
+      }
+      if (allowedCols.has('reminder_at') && hasReminderAtUpdate) {
+        tablePayload.reminder_at = cleanReminderAt;
+      }
+      if (allowedCols.has('reminder_note') && hasReminderNoteUpdate) {
+        tablePayload.reminder_note = cleanReminderNote;
+      }
+      if (allowedCols.has('budget')) {
+        const val = extraPayload.budget || dbPayload.budget;
+        if (val !== undefined) tablePayload.budget = val;
+      }
+      if (allowedCols.has('duration_days')) {
+        const val = extraPayload.durationDays ?? extraPayload.duration_days ?? dbPayload.duration_days;
+        if (val !== undefined && val !== null && !isNaN(Number(val))) tablePayload.duration_days = Number(val);
+      }
+      if (allowedCols.has('end_date')) {
+        const val = extraPayload.endDate || extraPayload.end_date || dbPayload.end_date;
+        if (val !== undefined) tablePayload.end_date = val;
+      }
+
       const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(resolvedId)}`, {
         method: 'PATCH',
         headers: {
           'apikey': SUPABASE_ANON_KEY,
           'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
           'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
+          'Prefer': 'return=representation',
         },
-        body: JSON.stringify(dbPayload)
+        body: JSON.stringify(tablePayload),
       });
 
       if (res.ok) {
@@ -439,8 +583,8 @@ export async function updateLeadOrInquiryStatus(
           break;
         }
       } else {
-        const errText = await res.text().catch(() => '');
-        console.warn(`[API] PATCH on ${table} non-200:`, res.status, errText);
+        const errBody = await res.json().catch(() => null);
+        console.error(`❌ [updateLeadOrInquiryStatus] Supabase PATCH to /rest/v1/${table} returned ${res.status}:`, errBody);
       }
     } catch (fetchErr) {
       console.warn(`[API] Error patching ${table}:`, fetchErr);
@@ -451,14 +595,47 @@ export async function updateLeadOrInquiryStatus(
   if (!updatedRow) {
     for (const table of candidateTables) {
       try {
+        const allowedCols = await getTableColumns(table);
+        const tablePayload: Record<string, any> = {
+          updated_at: dbPayload.updated_at,
+          metadata: mergedMetadata,
+        };
+
+        for (const [k, v] of Object.entries(dbPayload)) {
+          if (allowedCols.has(k) && k !== 'metadata') {
+            tablePayload[k] = v;
+          }
+        }
+
+        if (allowedCols.has('accommodation_preference')) {
+          const val = extraPayload.accommodationPreference || extraPayload.accommodation_preference || dbPayload.accommodation_preference || dbPayload.accommodation_tier;
+          if (val) tablePayload.accommodation_preference = val;
+        }
+        if (allowedCols.has('adults')) {
+          const val = extraPayload.adults ?? dbPayload.adults;
+          if (val !== undefined && val !== null && !isNaN(Number(val))) tablePayload.adults = Number(val);
+        }
+        if (allowedCols.has('children')) {
+          const val = extraPayload.children ?? dbPayload.children;
+          if (val !== undefined && val !== null && !isNaN(Number(val))) tablePayload.children = Number(val);
+        }
+        if (allowedCols.has('reminder_at') && hasReminderAtUpdate) {
+          tablePayload.reminder_at = cleanReminderAt;
+        }
+        if (allowedCols.has('reminder_note') && hasReminderNoteUpdate) {
+          tablePayload.reminder_note = cleanReminderNote;
+        }
+
         const { data, error } = await supabase
           .from(table)
-          .update(dbPayload)
+          .update(tablePayload)
           .eq('id', resolvedId)
           .select()
           .maybeSingle();
 
-        if (!error && data) {
+        if (error) {
+          console.error(`❌ [updateLeadOrInquiryStatus] Supabase SDK update error on ${table}:`, error);
+        } else if (data) {
           updatedRow = data;
           finalTargetTable = table;
           console.log(`✅ [API] SDK Fallback persisted update to ${table}:`, updatedRow);
@@ -470,18 +647,37 @@ export async function updateLeadOrInquiryStatus(
     }
   }
 
-  const rawRow = updatedRow || { id: resolvedId, ...dbPayload };
+  const rawRow = updatedRow || { id: resolvedId, ...dbPayload, metadata: mergedMetadata };
   const finalStaffId = (rawRow.assigned_staff_id !== undefined ? rawRow.assigned_staff_id : dbPayload.assigned_staff_id) ?? null;
   const finalStaffName = (rawRow.assigned_staff_name !== undefined ? rawRow.assigned_staff_name : dbPayload.assigned_staff_name) ?? null;
+  const finalMeta = rawRow.metadata && typeof rawRow.metadata === 'object' ? rawRow.metadata : mergedMetadata;
+
+  const finalReminderAt = hasReminderAtUpdate
+    ? (cleanReminderAt || undefined)
+    : (rawRow.reminder_at || rawRow.reminderAt || finalMeta?.reminder_at || finalMeta?.reminderAt || undefined);
+
+  const finalReminderNote = hasReminderNoteUpdate
+    ? (cleanReminderNote || undefined)
+    : (rawRow.reminder_note || rawRow.reminderNote || finalMeta?.reminder_note || finalMeta?.reminderNote || undefined);
 
   const mapped: Inquiry = {
     ...rawRow,
     id: rawRow.id || resolvedId,
-    status: (rawRow.status || dbPayload.status || 'NEW') as any,
+    status: (rawRow.status || resolvedStatus || dbPayload.status || 'NEW') as any,
     assignedStaffId: finalStaffId || undefined,
     assigned_staff_id: finalStaffId,
     assignedStaffName: finalStaffName || undefined,
     assigned_staff_name: finalStaffName,
+    metadata: finalMeta,
+    reminderAt: finalReminderAt,
+    reminder_at: finalReminderAt,
+    reminderNote: finalReminderNote,
+    reminder_note: finalReminderNote,
+    endDate: rawRow.end_date || rawRow.endDate || finalMeta?.end_date,
+    end_date: rawRow.end_date || rawRow.endDate || finalMeta?.end_date,
+    durationDays: rawRow.duration_days ?? finalMeta?.duration_days,
+    duration_days: rawRow.duration_days ?? finalMeta?.duration_days,
+    budget: rawRow.budget || finalMeta?.budget,
     updatedAt: rawRow.updated_at || dbPayload.updated_at,
   } as Inquiry;
 
@@ -1601,10 +1797,14 @@ export const api = {
       source: 'CRM_MANUAL_ENTRY',
     };
 
-    // 1. Exact top-level columns present in public.inquiries:
-    // id, title, type, full_name, customer_name, phone, whatsapp_number, email, city, check_in_date, guests, adults, children, plan, accommodation_tier, special_requests, notes, status, assigned_staff_id, assigned_staff_name, is_locked_for_staff, metadata, created_at, updated_at
-    const inquiriesPayload: Record<string, any> = {
+    // Retrieve currently exposed schema columns from PostgREST cache
+    const inqAllowed = await getTableColumns('inquiries');
+    const leadAllowed = await getTableColumns('leads');
+
+    // 1. All prospective properties for public.inquiries:
+    const allInquiriesProps: Record<string, any> = {
       id: rawLeadUuid,
+      lead_id: nextLeadId,
       title: titleVal,
       type: leadData.type || 'PACKAGE',
       full_name: customerName,
@@ -1614,11 +1814,18 @@ export const api = {
       email: emailVal || null,
       city: cityVal || null,
       check_in_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
+      start_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
+      end_date: leadData.endDate || null,
+      duration_days: durDays,
+      budget: leadData.budget || null,
       guests: (leadData.adults || 1) + (leadData.children || 0),
       adults: leadData.adults || 1,
       children: leadData.children || 0,
       plan: accomVal || null,
       accommodation_tier: accomVal || null,
+      accommodation_preference: accomVal || null,
+      reminder_at: leadData.reminderAt ? new Date(leadData.reminderAt).toISOString() : null,
+      reminder_note: leadData.reminderNote || null,
       special_requests: leadData.specialRequests || leadData.notes || '',
       notes: leadData.notes ? [{ id: `note-${Date.now()}`, text: leadData.notes, createdAt: new Date().toISOString() }] : [],
       status: statusVal || 'NEW',
@@ -1630,10 +1837,17 @@ export const api = {
       updated_at: new Date().toISOString(),
     };
 
-    // 2. Exact top-level columns present in public.leads:
-    // id, customer_name, full_name, phone, whatsapp_number, email, city, accommodation_tier, accommodation_preference, assigned_staff_id, assigned_staff_name, status, metadata, created_at, updated_at
-    const leadsDbPayload: Record<string, any> = {
+    const inquiriesPayload: Record<string, any> = { metadata: structuredMetadata };
+    for (const [k, v] of Object.entries(allInquiriesProps)) {
+      if (inqAllowed.has(k)) {
+        inquiriesPayload[k] = v;
+      }
+    }
+
+    // 2. All prospective properties for public.leads:
+    const allLeadsProps: Record<string, any> = {
       id: rawLeadUuid,
+      lead_id: nextLeadId,
       customer_name: customerName,
       full_name: customerName,
       phone: phoneVal,
@@ -1642,13 +1856,35 @@ export const api = {
       city: cityVal || null,
       accommodation_tier: accomVal || null,
       accommodation_preference: accomVal || null,
+      adults: leadData.adults || 1,
+      children: leadData.children || 0,
+      guests: (leadData.adults || 1) + (leadData.children || 0),
+      reminder_at: leadData.reminderAt ? new Date(leadData.reminderAt).toISOString() : null,
+      reminder_note: leadData.reminderNote || null,
+      end_date: leadData.endDate || null,
+      duration_days: durDays,
+      budget: leadData.budget || null,
+      title: titleVal,
+      type: leadData.type || 'PACKAGE',
+      check_in_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
+      start_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
+      special_requests: leadData.specialRequests || leadData.notes || '',
+      notes: leadData.notes ? [{ id: `note-${Date.now()}`, text: leadData.notes, createdAt: new Date().toISOString() }] : [],
       assigned_staff_id: leadData.assignedStaffId || null,
       assigned_staff_name: leadData.assignedStaffName || null,
       status: statusVal || 'NEW',
+      is_locked_for_staff: false,
       metadata: structuredMetadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+
+    const leadsDbPayload: Record<string, any> = { metadata: structuredMetadata };
+    for (const [k, v] of Object.entries(allLeadsProps)) {
+      if (leadAllowed.has(k)) {
+        leadsDbPayload[k] = v;
+      }
+    }
 
     let createdRow: any = null;
 

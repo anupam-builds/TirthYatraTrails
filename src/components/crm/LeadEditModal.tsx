@@ -243,7 +243,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
           whatsapp_number: rawPhone,
           phone: rawPhone,
           full_name: formData.customerName,
-          email: formData.customerEmail,
+          email: cleanEmail,
           package_interest: formData.title,
           start_date: formData.checkInDate,
           end_date: formData.endDate,

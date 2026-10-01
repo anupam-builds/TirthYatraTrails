@@ -52,6 +52,7 @@ import {
 import { LeadDetailsModal } from '../LeadDetailsModal.js';
 import { CreateLeadModal } from './CreateLeadModal.js';
 import { ReminderAlertBanner } from './ReminderAlertBanner.js';
+import { QuickReminderModal } from './QuickReminderModal.js';
 
 interface LeadTableViewProps {
   inquiries: Inquiry[];
@@ -98,6 +99,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [staffFilter, setStaffFilter] = useState<string>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedDetailedLead, setSelectedDetailedLead] = useState<Inquiry | null>(null);
+  const [selectedLeadForReminder, setSelectedLeadForReminder] = useState<Inquiry | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Accordion for inline notes
@@ -284,7 +286,15 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           else if (onEdit) onEdit(inq);
         }}
         onUpdateInquiry={async (id, updates) => {
-          await updateLeadOrInquiryStatus({ id, ...updates });
+          const res = await updateLeadOrInquiryStatus({ id, ...updates });
+          const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+          setLocalInquiries((prev) =>
+            prev.map((item) =>
+              String(item.id) === String(id)
+                ? { ...item, ...updates, ...updated }
+                : item
+            )
+          );
         }}
         isStaffMode={isStaffMode}
         currentStaffId={currentStaffId}
@@ -968,6 +978,24 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <span>Detailed</span>
                             </button>
 
+                            {/* Quick Reminder Action Button */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedLeadForReminder({ ...inq, leadId: seqLeadId })}
+                              title={
+                                inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
+                                  ? `Reminder Scheduled: ${getLeadReminderStatus(inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at).label} (Click to manage)`
+                                  : 'Schedule Follow-up Reminder'
+                              }
+                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-2xs'
+                                  : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-transparent hover:border-amber-200 dark:hover:border-amber-900'
+                              }`}
+                            >
+                              <Bell className="w-4 h-4" />
+                            </button>
+
                             {/* Quick Edit modal */}
                             <button
                               onClick={() => {
@@ -976,7 +1004,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 else if (onEdit) onEdit(editLead);
                               }}
                               title="Edit Lead Details"
-                              className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                             >
                               <Edit3 className="w-4 h-4" />
                             </button>
@@ -1118,6 +1146,44 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       <LeadDetailsModal
         lead={selectedDetailedLead}
         onClose={() => setSelectedDetailedLead(null)}
+        onUpdateLead={async (id, updates) => {
+          const res = await updateLeadOrInquiryStatus({ id, ...updates });
+          const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+          setLocalInquiries((prev) =>
+            prev.map((item) =>
+              String(item.id) === String(id)
+                ? { ...item, ...updates, ...updated }
+                : item
+            )
+          );
+          if (selectedDetailedLead && String(selectedDetailedLead.id) === String(id)) {
+            setSelectedDetailedLead((prev: any) => ({ ...prev, ...updates, ...updated }));
+          }
+        }}
+        onEditLead={(leadToEdit) => {
+          setSelectedDetailedLead(null);
+          if (onEditInquiry) onEditInquiry(leadToEdit);
+          else if (onEdit) onEdit(leadToEdit);
+        }}
+      />
+
+      {/* Quick Reminder Modal (1-click from table row) */}
+      <QuickReminderModal
+        lead={selectedLeadForReminder}
+        isOpen={Boolean(selectedLeadForReminder)}
+        onClose={() => setSelectedLeadForReminder(null)}
+        isStaffMode={isStaffMode}
+        onSave={async (id, updates) => {
+          const res = await updateLeadOrInquiryStatus({ id, ...updates });
+          const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+          setLocalInquiries((prev) =>
+            prev.map((item) =>
+              String(item.id) === String(id)
+                ? { ...item, ...updates, ...updated }
+                : item
+            )
+          );
+        }}
       />
 
       {/* Manual Entry Create Lead Modal */}

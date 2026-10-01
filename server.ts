@@ -823,10 +823,16 @@ app.get('/api/admin/schema/sql', (req, res) => {
     const accomMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20260930_accommodation_tier_leads_schema.sql');
     const reminderMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20260930_lead_reminders_and_trip_status.sql');
     const accomPrefMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261001_leads_accommodation_preference.sql');
+    const leadsSyncPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261001_leads_and_inquiries_schema_sync.sql');
 
     if (requested === 'hotel_inventory' && fs.existsSync(invMigrationPath)) {
       res.setHeader('Content-Type', 'text/plain');
       return res.send(fs.readFileSync(invMigrationPath, 'utf8'));
+    }
+
+    if (requested === 'leads' && fs.existsSync(leadsSyncPath)) {
+      res.setHeader('Content-Type', 'text/plain');
+      return res.send(fs.readFileSync(leadsSyncPath, 'utf8'));
     }
 
     if (requested === 'leads' && fs.existsSync(leadsMigrationPath)) {
@@ -841,6 +847,9 @@ app.get('/api/admin/schema/sql', (req, res) => {
       if (fs.existsSync(accomPrefMigrationPath)) {
         leadsSql += '\n\n' + fs.readFileSync(accomPrefMigrationPath, 'utf8');
       }
+      if (fs.existsSync(leadsSyncPath)) {
+        leadsSql += '\n\n' + fs.readFileSync(leadsSyncPath, 'utf8');
+      }
       return res.send(leadsSql);
     }
 
@@ -851,17 +860,21 @@ app.get('/api/admin/schema/sql', (req, res) => {
     if (fs.existsSync(adminMigrationPath)) {
       combinedSql += fs.readFileSync(adminMigrationPath, 'utf8') + '\n\n';
     }
-    if (fs.existsSync(leadsMigrationPath)) {
-      combinedSql += fs.readFileSync(leadsMigrationPath, 'utf8') + '\n\n';
-    }
-    if (fs.existsSync(accomMigrationPath)) {
-      combinedSql += fs.readFileSync(accomMigrationPath, 'utf8') + '\n\n';
-    }
-    if (fs.existsSync(reminderMigrationPath)) {
-      combinedSql += fs.readFileSync(reminderMigrationPath, 'utf8') + '\n\n';
-    }
-    if (fs.existsSync(accomPrefMigrationPath)) {
-      combinedSql += fs.readFileSync(accomPrefMigrationPath, 'utf8') + '\n\n';
+    if (fs.existsSync(leadsSyncPath)) {
+      combinedSql += fs.readFileSync(leadsSyncPath, 'utf8') + '\n\n';
+    } else {
+      if (fs.existsSync(leadsMigrationPath)) {
+        combinedSql += fs.readFileSync(leadsMigrationPath, 'utf8') + '\n\n';
+      }
+      if (fs.existsSync(accomMigrationPath)) {
+        combinedSql += fs.readFileSync(accomMigrationPath, 'utf8') + '\n\n';
+      }
+      if (fs.existsSync(reminderMigrationPath)) {
+        combinedSql += fs.readFileSync(reminderMigrationPath, 'utf8') + '\n\n';
+      }
+      if (fs.existsSync(accomPrefMigrationPath)) {
+        combinedSql += fs.readFileSync(accomPrefMigrationPath, 'utf8') + '\n\n';
+      }
     }
     if (combinedSql) {
       res.setHeader('Content-Type', 'text/plain');

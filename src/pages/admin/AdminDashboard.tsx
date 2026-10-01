@@ -595,6 +595,20 @@ export const AdminDashboard: React.FC = () => {
       <LeadDetailsModal
         lead={selectedDetailedLead}
         onClose={() => setSelectedDetailedLead(null)}
+        onUpdateLead={async (id, updates) => {
+          const res = await updateLeadOrInquiryStatus({ id, ...updates });
+          const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
+          setRecentInquiries((prev) =>
+            prev.map((item) =>
+              String(item.id) === String(id)
+                ? { ...item, ...updates, ...updated }
+                : item
+            )
+          );
+          if (selectedDetailedLead && String(selectedDetailedLead.id) === String(id)) {
+            setSelectedDetailedLead((prev: any) => ({ ...prev, ...updates, ...updated }));
+          }
+        }}
       />
     </AdminLayout>
   );
