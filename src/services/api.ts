@@ -1553,7 +1553,7 @@ export const api = {
   }): Promise<Inquiry> {
     const customerName = (leadData.fullName || leadData.customerName || 'Pilgrim Devotee').trim();
     const phoneVal = (leadData.whatsappNumber || leadData.customerPhone || '').trim();
-    const emailVal = (leadData.email || leadData.customerEmail || '').trim();
+    const emailVal = (leadData.email || leadData.customerEmail || '').trim().replace(/\s+/g, '');
     const cityVal = (leadData.userCity || '').trim();
     const titleVal = (leadData.packageInterest || leadData.title || 'Custom Pilgrimage Yatra').trim();
     const statusVal = (leadData.status || 'NEW').toString();
@@ -1571,10 +1571,25 @@ export const api = {
       }
     }
     const nextLeadId = `TTT${String(maxNum + 1).padStart(8, '0')}`;
-    const rawLeadUuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `lead-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    
+    // Ensure valid RFC4122 v4 UUID for database uuid column
+    const generateUUID = () => {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        try {
+          return crypto.randomUUID();
+        } catch {}
+      }
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+    const rawLeadUuid = generateUUID();
 
     const structuredMetadata: Record<string, any> = {
       lead_id: nextLeadId,
+      leadId: nextLeadId,
       full_name: customerName,
       customer_name: customerName,
       whatsapp_number: phoneVal,
@@ -1582,7 +1597,10 @@ export const api = {
       email: emailVal,
       resident_state: cityVal,
       user_city: cityVal,
+      city: cityVal,
       package_interest: titleVal,
+      title: titleVal,
+      type: leadData.type || 'PACKAGE',
       start_date: leadData.checkInDate || '',
       check_in_date: leadData.checkInDate || '',
       end_date: leadData.endDate || null,
@@ -1602,35 +1620,24 @@ export const api = {
       source: 'CRM_MANUAL_ENTRY',
     };
 
-    const payload: Record<string, any> = {
+    // Exact top-level columns present in the Supabase 'leads' table:
+    // id, customer_name, full_name, phone, whatsapp_number, email, city, accommodation_tier, accommodation_preference, assigned_staff_id, assigned_staff_name, status, metadata, created_at, updated_at
+    const leadsDbPayload: Record<string, any> = {
       id: rawLeadUuid,
-      lead_id: nextLeadId,
-      full_name: customerName,
       customer_name: customerName,
-      email: emailVal,
-      customer_email: emailVal,
+      full_name: customerName,
       phone: phoneVal,
       whatsapp_number: phoneVal,
-      customer_phone: phoneVal,
-      user_city: cityVal,
-      title: titleVal,
-      package_interest: titleVal,
-      type: leadData.type || 'PACKAGE',
-      status: statusVal,
-      check_in_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
-      end_date: leadData.endDate || null,
-      duration_days: durDays,
-      budget: leadData.budget || null,
-      accommodation_tier: accomVal,
-      accommodation_preference: accomVal,
+      email: emailVal || null,
+      city: cityVal || null,
+      accommodation_tier: accomVal || null,
+      accommodation_preference: accomVal || null,
       assigned_staff_id: leadData.assignedStaffId || null,
       assigned_staff_name: leadData.assignedStaffName || null,
-      reminder_at: leadData.reminderAt || null,
-      reminder_note: leadData.reminderNote || null,
-      special_requests: leadData.specialRequests || '',
-      notes: leadData.notes || '',
+      status: statusVal || 'NEW',
       metadata: structuredMetadata,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
     let createdRow: any = null;
@@ -1643,21 +1650,26 @@ export const api = {
           'Content-Type': 'application/json',
           'Prefer': 'return=representation',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(leadsDbPayload),
       });
 
       if (!res.ok) {
         const errText = await res.text();
         console.warn('⚠️ [createManualLead] Initial POST to leads returned non-200:', res.status, errText);
-        const fallbackPayload = { ...payload };
-        delete fallbackPayload.duration_days;
-        delete fallbackPayload.end_date;
-        delete fallbackPayload.budget;
-        delete fallbackPayload.accommodation_tier;
-        delete fallbackPayload.accommodation_preference;
-        delete fallbackPayload.reminder_at;
-        delete fallbackPayload.reminder_note;
-        delete fallbackPayload.lead_id;
+        // Resilient fallback: remove any specific column if rejected by schema
+        const fallbackPayload = { ...leadsDbPayload };
+        if (errText.includes('accommodation_preference')) {
+          delete fallbackPayload.accommodation_preference;
+        }
+        if (errText.includes('accommodation_tier')) {
+          delete fallbackPayload.accommodation_tier;
+        }
+        if (errText.includes('assigned_staff_name')) {
+          delete fallbackPayload.assigned_staff_name;
+        }
+        if (errText.includes('city')) {
+          delete fallbackPayload.city;
+        }
 
         res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
           method: 'POST',
@@ -1680,6 +1692,28 @@ export const api = {
     }
 
     try {
+      const inquiriesPayload: Record<string, any> = {
+        id: rawLeadUuid,
+        title: titleVal,
+        type: leadData.type || 'PACKAGE',
+        full_name: customerName,
+        customer_name: customerName,
+        phone: phoneVal,
+        whatsapp_number: phoneVal,
+        email: emailVal || null,
+        city: cityVal || null,
+        check_in_date: leadData.checkInDate || new Date().toISOString().split('T')[0],
+        accommodation_tier: accomVal || null,
+        accommodation_preference: accomVal || null,
+        assigned_staff_id: leadData.assignedStaffId || null,
+        assigned_staff_name: leadData.assignedStaffName || null,
+        status: statusVal || 'NEW',
+        special_requests: leadData.specialRequests || leadData.notes || '',
+        metadata: structuredMetadata,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
       fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
         method: 'POST',
         headers: {
@@ -1688,11 +1722,11 @@ export const api = {
           'Content-Type': 'application/json',
           'Prefer': 'return=minimal',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(inquiriesPayload),
       }).catch(() => {});
     } catch {}
 
-    const mapped = createdRow ? mapInquiryRow(createdRow) : mapInquiryRow(payload);
+    const mapped = createdRow ? mapInquiryRow(createdRow) : mapInquiryRow(leadsDbPayload);
     mapped.leadId = nextLeadId;
     mapped.customerName = customerName;
     mapped.fullName = customerName;
@@ -1704,9 +1738,11 @@ export const api = {
     mapped.customerEmail = emailVal;
     mapped.userCity = cityVal;
     mapped.title = titleVal;
-    mapped.status = statusVal;
+    mapped.packageInterest = titleVal;
+    mapped.status = statusVal as InquiryStatus;
     mapped.accommodationTier = accomVal;
     mapped.accommodation_tier = accomVal;
+    mapped.accommodationPreference = accomVal;
     mapped.checkInDate = leadData.checkInDate || new Date().toISOString().split('T')[0];
     mapped.endDate = leadData.endDate;
     mapped.end_date = leadData.endDate;
@@ -1722,6 +1758,8 @@ export const api = {
     mapped.reminderNote = leadData.reminderNote;
     mapped.reminder_note = leadData.reminderNote;
     mapped.notes = leadData.notes || '';
+    mapped.specialRequests = leadData.specialRequests || '';
+    mapped.metadata = structuredMetadata;
 
     localStore.submitInquiry(mapped);
     broadcastNewInquiry(mapped);
@@ -3760,14 +3798,15 @@ export function mapInquiryRow(row: any): Inquiry {
   const customerName = row.customer_name || row.customerName || row.full_name || row.fullName || 'Pilgrim Devotee';
   const customerEmail = row.customer_email || row.customerEmail || row.email || '';
   const phone = row.phone || row.customer_phone || row.customerPhone || row.whatsapp_number || row.whatsappNumber || '';
+  const metadataObj = row.metadata ? (typeof row.metadata === 'string' ? (() => { try { return JSON.parse(row.metadata); } catch { return row.metadata; } })() : row.metadata) : undefined;
   return {
     id: String(row.id),
-    leadId: row.lead_id || row.leadId,
+    leadId: row.lead_id || row.leadId || metadataObj?.lead_id || metadataObj?.leadId,
     userId: row.user_id || row.userId,
-    type: row.type || 'PACKAGE',
+    type: row.type || metadataObj?.type || 'PACKAGE',
     referenceId: row.reference_id || row.referenceId || row.id || '',
-    referenceName: row.reference_name || row.referenceName || row.title || 'Pilgrimage Booking',
-    title: row.title || 'Pilgrimage Inquiry',
+    referenceName: row.reference_name || row.referenceName || row.title || metadataObj?.title || 'Pilgrimage Booking',
+    title: row.title || metadataObj?.title || metadataObj?.package_interest || 'Pilgrimage Inquiry',
     fullName: row.full_name || row.fullName || customerName,
     customerName: customerName,
     email: customerEmail,
@@ -3776,20 +3815,21 @@ export function mapInquiryRow(row: any): Inquiry {
     customerPhone: phone,
     phone: phone,
     whatsapp_number: row.whatsapp_number || row.whatsappNumber || phone,
-    metadata: row.metadata ? (typeof row.metadata === 'string' ? (() => { try { return JSON.parse(row.metadata); } catch { return row.metadata; } })() : row.metadata) : undefined,
-    userCity: row.user_city || row.userCity,
-    checkInDate: row.check_in_date || row.checkInDate || new Date().toISOString().split('T')[0],
-    guests: Number(row.guests ?? 1),
-    adults: Number(row.adults ?? 1),
-    children: Number(row.children ?? 0),
-    childAges: row.child_ages || row.childAges,
-    planChosen: row.plan_chosen || row.planChosen || row.plan || row.selected_plan || row.selectedPlan,
-    selectedPlan: row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || row.plan,
-    plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen,
-    accommodationTier: row.accommodation_tier || row.accommodationTier || row.accommodation_preference || row.plan || (row.metadata && typeof row.metadata === 'object' ? (row.metadata.accommodation_tier || row.metadata.accommodation_preference) : undefined) || '3 Star Premium',
-    pickupLocation: row.pickup_location || row.pickupLocation,
-    dropoffLocation: row.dropoff_location || row.dropoffLocation,
-    specialRequests: row.special_requests || row.specialRequests,
+    metadata: metadataObj,
+    userCity: row.user_city || row.userCity || row.city || metadataObj?.user_city || metadataObj?.city || metadataObj?.resident_state,
+    checkInDate: row.check_in_date || row.checkInDate || metadataObj?.check_in_date || metadataObj?.start_date || metadataObj?.startDate || new Date().toISOString().split('T')[0],
+    guests: Number(row.guests ?? metadataObj?.guests ?? 1),
+    adults: Number(row.adults ?? metadataObj?.adults ?? 1),
+    children: Number(row.children ?? metadataObj?.children ?? 0),
+    childAges: row.child_ages || row.childAges || metadataObj?.child_ages,
+    planChosen: row.plan_chosen || row.planChosen || row.plan || row.selected_plan || row.selectedPlan || metadataObj?.accommodation_tier,
+    selectedPlan: row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || row.plan || metadataObj?.accommodation_tier,
+    plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || metadataObj?.accommodation_tier,
+    accommodationTier: row.accommodation_tier || row.accommodationTier || row.accommodation_preference || row.accommodationPreference || row.plan || metadataObj?.accommodation_tier || metadataObj?.accommodation_preference || '3 Star Premium',
+    accommodationPreference: row.accommodation_preference || row.accommodationPreference || row.accommodation_tier || row.accommodationTier || metadataObj?.accommodation_preference || metadataObj?.accommodation_tier || '3 Star Premium',
+    pickupLocation: row.pickup_location || row.pickupLocation || metadataObj?.pickup_city,
+    dropoffLocation: row.dropoff_location || row.dropoffLocation || metadataObj?.drop_city,
+    specialRequests: row.special_requests || row.specialRequests || metadataObj?.special_requests,
     status: (row.status ? (row.status.toUpperCase() as any) : 'NEW'),
     isResolved: Boolean(row.is_resolved ?? row.isResolved ?? (row.status === 'CLOSED' || row.status === 'CONFIRMED')),
     assignedStaffId: row.assigned_staff_id || row.assignedStaffId || undefined,

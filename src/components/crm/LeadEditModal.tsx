@@ -209,12 +209,13 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
         ? Number(formData.durationDays)
         : undefined;
 
+      const cleanEmail = (formData.customerEmail || formData.email || '').trim().replace(/\s+/g, '');
       const updates: Partial<Inquiry> = {
         ...formData,
         fullName: formData.customerName,
         customerName: formData.customerName,
-        email: formData.customerEmail,
-        customerEmail: formData.customerEmail,
+        email: cleanEmail,
+        customerEmail: cleanEmail,
         phone: rawPhone,
         whatsapp_number: rawPhone,
         whatsappNumber: rawPhone,
@@ -412,7 +413,14 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                     name="edit-modal-customer-email"
                     type="email"
                     value={formData.customerEmail || ''}
-                    onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/\s+/g, '');
+                      setFormData({ ...formData, customerEmail: cleaned });
+                    }}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim().replace(/\s+/g, '');
+                      setFormData({ ...formData, customerEmail: trimmed });
+                    }}
                     className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>

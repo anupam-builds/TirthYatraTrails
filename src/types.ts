@@ -258,6 +258,8 @@ export interface Inquiry {
   referenceId: string;
   referenceName: string;
   title: string;
+  packageInterest?: string;
+  package_interest?: string;
   fullName: string;
   customerName: string;
   email: string;

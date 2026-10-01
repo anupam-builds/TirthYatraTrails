@@ -130,6 +130,8 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
 
     const cleanName = fullName.trim();
     const cleanPhone = whatsappNumber.trim();
+    // Automatically trim and remove any accidental whitespace around '@' or throughout the email string
+    const cleanEmail = email.trim().replace(/\s+/g, '');
 
     if (!cleanName) {
       setErrorMsg('Please enter customer full name.');
@@ -138,6 +140,11 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
 
     if (!cleanPhone || cleanPhone.length < 7) {
       setErrorMsg('Please enter a valid WhatsApp or contact phone number.');
+      return;
+    }
+
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setErrorMsg('Please enter a valid email address (e.g. devotee@example.com) or leave it empty.');
       return;
     }
 
@@ -174,8 +181,8 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         customerName: cleanName,
         whatsappNumber: cleanPhone,
         customerPhone: cleanPhone,
-        email: email.trim() || undefined,
-        customerEmail: email.trim() || undefined,
+        email: cleanEmail || undefined,
+        customerEmail: cleanEmail || undefined,
         userCity: userCity.trim() || undefined,
         packageInterest: leadTitle,
         title: leadTitle,
@@ -308,7 +315,15 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
                     type="email"
                     placeholder="e.g. ramesh.sharma@example.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      // Automatically remove any accidental whitespace (including around '@')
+                      const cleaned = e.target.value.replace(/\s+/g, '');
+                      setEmail(cleaned);
+                    }}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim().replace(/\s+/g, '');
+                      setEmail(trimmed);
+                    }}
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium"
                   />
                 </div>
