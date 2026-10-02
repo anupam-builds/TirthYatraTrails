@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { User, StaffMember } from '../types.js';
 import { api } from '../services/api.js';
 import { localStore } from '../services/localStore.js';
-import { supabase } from '../lib/supabase.js';
+import { supabase, isJwtExpired, ensureActiveSupabaseSession } from '../lib/supabase.js';
 
 interface AuthContextType {
   // Customer
@@ -81,6 +81,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Strict database-backed re-assertion of admin privileges
           const isValidAdmin = await api.verifyAdminSession(stored);
           if (isValidAdmin) {
+            if (!stored.access_token || isJwtExpired(stored.access_token)) {
+              try {
+                const freshToken = await ensureActiveSupabaseSession();
+                if (freshToken) {
+                  stored.access_token = freshToken;
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.setItem('tyt_admin_token', btoa(JSON.stringify(stored)));
+                  }
+                }
+              } catch {}
+            }
             setAdminUser(stored);
           } else {
             console.warn('[AuthContext] Admin privileges revoked or not found in database. Terminating session.');
@@ -117,6 +128,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             const check = await api.checkStaffSession();
             if (check?.ok && check.staff && !check.staff.isBlocked && check.staff.isActive) {
+              if (!(check.staff as any).access_token || isJwtExpired((check.staff as any).access_token)) {
+                try {
+                  const freshToken = await ensureActiveSupabaseSession();
+                  if (freshToken) {
+                    (check.staff as any).access_token = freshToken;
+                    if (typeof window !== 'undefined') {
+                      sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(check.staff)));
+                    }
+                  }
+                } catch {}
+              }
               setStaffUser(check.staff);
             } else {
               clearStaffToken();
@@ -208,30 +230,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isRootAdmin = cleanEmail === 'anupamsaxena.dev@gmail.com';
     const isRootPassword = pass.trim() === '@Atharv_1996' || pass === 'password123' || pass === 'Admin@123';
 
-    // 1. Supabase Auth signInWithPassword
+    // 1. Supabase Auth signInWithPassword to establish session in sessionStorage
     let authUser: any = null;
+    let authSession: any = null;
     let authError: any = null;
 
-    if (isRootAdmin && (isRootPassword || !pass)) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
+      if (error) {
+        authError = error;
+      } else {
+        authUser = data?.user;
+        authSession = data?.session;
+      }
+    } catch (e: any) {
+      authError = e;
+    }
+
+    if (!authUser && isRootAdmin && (isRootPassword || !pass)) {
       authUser = {
         id: 'usr-root-admin',
         email: 'anupamsaxena.dev@gmail.com',
         user_metadata: { name: 'Anupam Saxena (Root Admin)' },
       };
-    } else {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: pass,
-        });
-        if (error) {
-          authError = error;
-        } else {
-          authUser = data?.user;
-        }
-      } catch (e: any) {
-        authError = e;
-      }
     }
 
     // Fallback: If Supabase auth user does not exist in remote auth.users, try local/server credentials fallback
@@ -266,14 +290,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("Access Denied: Email not authorized by existing admin.");
     }
 
+    // 4. Ensure authentic Supabase Auth session in sessionStorage
+    let validAccessToken = authSession?.access_token;
+    if (!validAccessToken || isJwtExpired(validAccessToken)) {
+      try {
+        const sessRes = await fetch('/api/auth/supabase-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: verifiedEmail }),
+        });
+        if (sessRes.ok) {
+          const sessData = await sessRes.json();
+          if (sessData?.session?.access_token) {
+            validAccessToken = sessData.session.access_token;
+            await supabase.auth.setSession({
+              access_token: sessData.session.access_token,
+              refresh_token: sessData.session.refresh_token,
+            });
+          }
+        }
+      } catch {}
+    }
+
     // Set authenticated admin state
-    const adminRecord: User = {
+    const adminRecord: any = {
       id: authUser?.id || (verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'usr-root-admin' : `usr-admin-${Date.now()}`),
       name: verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'Anupam Saxena (Root Admin)' : (authUser?.user_metadata?.name || verifiedEmail.split('@')[0]),
       email: verifiedEmail,
       phone: '',
       role: 'ADMIN',
       createdAt: allowlistData?.created_at || new Date().toISOString(),
+      access_token: validAccessToken,
     };
 
     setAdminSession(adminRecord);
@@ -321,18 +368,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("Access Denied: Email not authorized by existing admin.");
     }
 
+    // Ensure session is active
+    if (!(res.user as any).access_token || isJwtExpired((res.user as any).access_token)) {
+      try {
+        const fresh = await ensureActiveSupabaseSession();
+        if (fresh) {
+          (res.user as any).access_token = fresh;
+        }
+      } catch {}
+    }
+
     setAdminSession(res.user);
   };
 
   // Admin Logout
   const logoutAdmin = useCallback(() => {
+    try {
+      supabase.auth.signOut().catch(() => {});
+    } catch {}
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('tyt_admin_token');
       localStorage.removeItem('tyt_admin_token');
+      try {
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const k = window.sessionStorage.key(i);
+          if (k && (k.startsWith('sb-') || k.includes('auth-token'))) {
+            window.sessionStorage.removeItem(k);
+          }
+        }
+      } catch {}
       window.dispatchEvent(new CustomEvent('tirth-admin-auth-changed', { detail: null }));
     }
     setAdminUser(null);
-    supabase.auth.signOut().catch(() => {});
   }, []);
 
   // Instant cross-component sync for admin auth events
@@ -387,6 +454,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Staff Logout
   const logoutStaff = () => {
+    try {
+      supabase.auth.signOut().catch(() => {});
+    } catch {}
     if (staffUser?.id) {
       const staffId = staffUser.id;
       api.logoutStaff(staffId).catch(() => {});
@@ -394,6 +464,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('tyt_staff_token');
       localStorage.removeItem('tyt_staff_token');
+      try {
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const k = window.sessionStorage.key(i);
+          if (k && (k.startsWith('sb-') || k.includes('auth-token'))) {
+            window.sessionStorage.removeItem(k);
+          }
+        }
+      } catch {}
     }
     setStaffUser(null);
   };

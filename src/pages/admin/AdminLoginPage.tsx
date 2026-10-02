@@ -43,8 +43,15 @@ export const AdminLoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
 
-  // Immediate seamless redirection if admin is already authenticated
+  // Immediate seamless redirection if admin is already authenticated, or show session expired alert
   React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('reason') === 'session_expired' || searchParams.get('expired') === 'true') {
+        setError('Your session has expired or requires re-authentication. Please sign in again.');
+        setIsLampOn(true);
+      }
+    }
     if (isAdminAuthenticated && adminUser) {
       navigate(ADMIN_ROUTES.dashboard);
     }
@@ -250,7 +257,27 @@ export const AdminLoginPage: React.FC = () => {
         return;
       }
 
-      // 4. Authorize administrator session
+      // 4. Ensure authentic Supabase Auth session in sessionStorage
+      let validAccessToken = (authUser as any)?.access_token;
+      try {
+        const sessRes = await fetch('/api/auth/supabase-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: verifiedEmail }),
+        });
+        if (sessRes.ok) {
+          const sessData = await sessRes.json();
+          if (sessData?.session?.access_token) {
+            validAccessToken = sessData.session.access_token;
+            await supabase.auth.setSession({
+              access_token: sessData.session.access_token,
+              refresh_token: sessData.session.refresh_token,
+            });
+          }
+        }
+      } catch {}
+
+      // 5. Authorize administrator session
       const adminRecord = {
         id: authUser?.id || (verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'usr-root-admin' : `usr-admin-${Date.now()}`),
         name: verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'Anupam Saxena (Root Admin)' : (authUser?.user_metadata?.name || verifiedEmail.split('@')[0]),
@@ -258,6 +285,7 @@ export const AdminLoginPage: React.FC = () => {
         phone: '',
         role: 'ADMIN' as const,
         createdAt: allowlistData?.created_at || new Date().toISOString(),
+        access_token: validAccessToken,
       };
 
       // Set admin session in AuthContext state, sessionStorage, and broadcast event immediately

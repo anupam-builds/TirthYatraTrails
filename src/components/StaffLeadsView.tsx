@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase.js';
+import { supabase, handleUnauthorizedResponse } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
 import { api, mapInquiryRow } from '../services/api.js';
 import { Inquiry } from '../types.js';
@@ -55,6 +55,15 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
         supabase.from('leads').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false }),
         supabase.from('inquiries').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false })
       ]);
+
+      if (
+        (leadsRes.status === 'fulfilled' && ((leadsRes.value as any)?.error?.status === 401 || (leadsRes.value as any)?.error?.code === 'PGRST301')) ||
+        (inqRes.status === 'fulfilled' && ((inqRes.value as any)?.error?.status === 401 || (inqRes.value as any)?.error?.code === 'PGRST301'))
+      ) {
+        console.warn('⚠️ [StaffLeadsView] 401 Unauthorized encountered from Supabase. Redirecting to staff login portal.');
+        handleUnauthorizedResponse('/rest/v1/leads');
+        return;
+      }
 
       const leadsData = leadsRes.status === 'fulfilled' && (leadsRes.value as any)?.data ? (leadsRes.value as any).data : [];
       const inqData = inqRes.status === 'fulfilled' && (inqRes.value as any)?.data ? (inqRes.value as any).data : [];

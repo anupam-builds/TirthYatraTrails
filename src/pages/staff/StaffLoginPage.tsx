@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
@@ -27,6 +27,16 @@ export const StaffLoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('reason') === 'session_expired' || searchParams.get('expired') === 'true') {
+        setError('Your staff session has expired or requires re-authentication. Please sign in again.');
+        setIsLampOn(true);
+      }
+    }
+  }, []);
 
   const handleToggleLamp = () => {
     setIsLampOn((prev) => !prev);

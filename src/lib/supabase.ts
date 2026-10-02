@@ -26,13 +26,289 @@ if (!isSupabaseConfigured && typeof window !== 'undefined') {
 }
 
 /**
+ * Checks whether a standard 3-part JWT token has expired or is nearing expiration.
+ * Validates expiration timestamp with a 15-second clock skew buffer.
+ */
+export function isJwtExpired(token: string | null | undefined): boolean {
+  if (!token || typeof token !== 'string') return true;
+  const parts = token.trim().split('.');
+  if (parts.length !== 3) return true;
+  try {
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload);
+    if (payload.exp && typeof payload.exp === 'number') {
+      // Expired if current time exceeds exp minus 15 seconds buffer
+      return Date.now() >= (payload.exp * 1000 - 15000);
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Validates that a string is a standard 3-part JWT token AND is not expired.
+ * Prevents PGRST301 "Expected 3 parts in JWT; got 1" and "JWT expired" errors.
+ */
+export function isValidJwt(token: string | null | undefined): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.trim().split('.');
+  if (parts.length !== 3 || !parts.every((p) => p.length > 0)) return false;
+  return !isJwtExpired(token);
+}
+
+/**
+ * Retrieves the active user's session Bearer token from sessionStorage (or localStorage fallback).
+ * Prioritizes Supabase Auth session token, followed by admin/staff tokens with valid, unexpired JWTs.
+ */
+export function getActiveSessionToken(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const store = window.sessionStorage;
+    if (store) {
+      // 1. Inspect Supabase Auth stored session (sb-<projectRef>-auth-token or key containing auth-token)
+      for (let i = 0; i < store.length; i++) {
+        const key = store.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
+          const raw = store.getItem(key);
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (parsed?.access_token && isValidJwt(parsed.access_token)) {
+                return parsed.access_token;
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // 2. Check admin session token
+      const adminRaw = store.getItem('tyt_admin_token');
+      if (adminRaw) {
+        try {
+          const decoded = JSON.parse(atob(adminRaw));
+          if (decoded?.access_token && isValidJwt(decoded.access_token)) {
+            return decoded.access_token;
+          }
+        } catch {}
+      }
+
+      // 3. Check staff session token
+      const staffRaw = store.getItem('tyt_staff_token');
+      if (staffRaw) {
+        try {
+          const decoded = JSON.parse(atob(staffRaw));
+          if (decoded?.access_token && isValidJwt(decoded.access_token)) {
+            return decoded.access_token;
+          }
+        } catch {}
+      }
+    }
+
+    // 4. Check localStorage fallback (e.g. customer auth or persistent token)
+    if (window.localStorage) {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
+          const raw = window.localStorage.getItem(key);
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (parsed?.access_token && isValidJwt(parsed.access_token)) {
+                return parsed.access_token;
+              }
+            } catch {}
+          }
+        }
+      }
+
+      const custRaw = window.localStorage.getItem('tyt_auth_token');
+      if (custRaw && isValidJwt(custRaw)) {
+        return custRaw;
+      }
+    }
+  } catch (err) {
+    console.warn('[getActiveSessionToken] Failed to inspect storage:', err);
+  }
+
+  return null;
+}
+
+let isSyncingSession = false;
+
+/**
+ * Ensures an active, valid Supabase session is present in sessionStorage and supabase client
+ * when a staff or admin user is logged in. Prevents sending anonymous requests.
+ */
+export async function ensureActiveSupabaseSession(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+
+  const existingToken = getActiveSessionToken();
+  if (existingToken) return existingToken;
+
+  // Check if admin or staff user is logged in via sessionStorage
+  let userEmail = '';
+  let tokenType = '';
+  try {
+    const adminRaw = window.sessionStorage.getItem('tyt_admin_token');
+    if (adminRaw) {
+      const decoded = JSON.parse(atob(adminRaw));
+      if (decoded?.email) {
+        userEmail = decoded.email;
+        tokenType = 'admin';
+      }
+    }
+    if (!userEmail) {
+      const staffRaw = window.sessionStorage.getItem('tyt_staff_token');
+      if (staffRaw) {
+        const decoded = JSON.parse(atob(staffRaw));
+        if (decoded?.email) {
+          userEmail = decoded.email;
+          tokenType = 'staff';
+        }
+      }
+    }
+  } catch {}
+
+  if (!userEmail || isSyncingSession) return null;
+
+  isSyncingSession = true;
+  try {
+    const res = await fetch('/api/auth/supabase-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.session?.access_token) {
+        const session = data.session;
+        // Update Supabase client session in sessionStorage
+        try {
+          await supabase.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
+        } catch {}
+
+        // Update token in tyt_admin_token or tyt_staff_token
+        if (tokenType === 'admin') {
+          const adminRaw = window.sessionStorage.getItem('tyt_admin_token');
+          if (adminRaw) {
+            const parsed = JSON.parse(atob(adminRaw));
+            parsed.access_token = session.access_token;
+            window.sessionStorage.setItem('tyt_admin_token', btoa(JSON.stringify(parsed)));
+          }
+        } else if (tokenType === 'staff') {
+          const staffRaw = window.sessionStorage.getItem('tyt_staff_token');
+          if (staffRaw) {
+            const parsed = JSON.parse(atob(staffRaw));
+            parsed.access_token = session.access_token;
+            window.sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(parsed)));
+          }
+        }
+        return session.access_token;
+      }
+    }
+  } catch (syncErr) {
+    console.warn('[ensureActiveSupabaseSession] Session sync error:', syncErr);
+  } finally {
+    isSyncingSession = false;
+  }
+
+  return null;
+}
+
+let isHandling401 = false;
+
+/**
+ * Gracefully handles 401 Unauthorized responses by clearing stale tokens and redirecting
+ * the user back to their respective portal login screen (Admin, Staff, or Customer).
+ */
+export function handleUnauthorizedResponse(targetUrl?: string) {
+  if (typeof window === 'undefined' || isHandling401) return;
+
+  const currentPath = window.location.pathname;
+  if (currentPath.includes('/login')) return; // Avoid infinite redirect loop
+
+  isHandling401 = true;
+  setTimeout(() => {
+    isHandling401 = false;
+  }, 4000);
+
+  console.warn(`⚠️ [Supabase 401 Guard] 401 Unauthorized encountered on ${targetUrl || 'request'}. Redirecting to login.`);
+
+  const hasAdmin = Boolean(window.sessionStorage?.getItem('tyt_admin_token'));
+  const hasStaff = Boolean(window.sessionStorage?.getItem('tyt_staff_token'));
+  const hasCustomer = Boolean(window.sessionStorage?.getItem('tyt_auth_token') || window.localStorage?.getItem('tyt_auth_token'));
+  const isAdminRoute = currentPath.startsWith('/admin');
+  const isStaffRoute = currentPath.startsWith('/staff');
+
+  // Clear all Supabase client session tokens
+  try {
+    supabase.auth.signOut().catch(() => {});
+  } catch {}
+
+  const clearSupabaseAuthStorage = (store: Storage | null) => {
+    if (!store) return;
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const k = store.key(i);
+        if (k && (k.startsWith('sb-') || k.includes('auth-token'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => store.removeItem(k));
+    } catch {}
+  };
+
+  clearSupabaseAuthStorage(window.sessionStorage);
+  clearSupabaseAuthStorage(window.localStorage);
+
+  if (isAdminRoute || hasAdmin) {
+    if (window.sessionStorage) {
+      window.sessionStorage.removeItem('tyt_admin_token');
+    }
+    window.dispatchEvent(new CustomEvent('tirth-admin-auth-changed', { detail: null }));
+    window.location.href = '/admin/login?reason=session_expired';
+  } else if (isStaffRoute || hasStaff) {
+    if (window.sessionStorage) {
+      window.sessionStorage.removeItem('tyt_staff_token');
+    }
+    window.dispatchEvent(new CustomEvent('tirth-staff-auth-changed', { detail: null }));
+    window.location.href = '/staff/login?reason=session_expired';
+  } else if (hasCustomer || currentPath.startsWith('/my-') || currentPath.startsWith('/account')) {
+    if (window.sessionStorage) {
+      window.sessionStorage.removeItem('tyt_auth_token');
+    }
+    if (window.localStorage) {
+      window.localStorage.removeItem('tyt_auth_token');
+    }
+    window.location.href = '/login?reason=session_expired';
+  }
+}
+
+/**
  * Generates mandatory Supabase authentication and format headers.
- * Fixes PostgREST 400 Bad Request: "No API key found in request".
+ * Dynamically resolves and attaches the active user's session Bearer token from sessionStorage,
+ * falling back to the anon key only when unauthenticated.
  */
 export const getSupabaseHeaders = (extraHeaders: Record<string, string> = {}): Record<string, string> => {
+  const activeToken = getActiveSessionToken();
+  const bearerToken = activeToken || SUPABASE_ANON_KEY;
   const headers: Record<string, string> = {
     apikey: SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    Authorization: `Bearer ${bearerToken}`,
     'Content-Type': 'application/json',
     Prefer: 'return=representation',
   };
@@ -50,20 +326,39 @@ export function markSchemaReloaded() {
 /**
  * Custom fetch wrapper that intercepts every outgoing fetch request made by @supabase/supabase-js
  * (PostgREST queries, Auth tokens, Realtime WebSocket handshakes, and Storage calls)
- * and guarantees that 'apikey' and 'Authorization: Bearer <key>' are always attached.
+ * and guarantees that:
+ * 1. 'apikey' is always attached.
+ * 2. Active user's session Bearer token is attached (not anonymous if logged in).
+ * 3. 401 Unauthorized responses are intercepted and gracefully handled.
  */
 export const customFetch: typeof fetch = async (input, init) => {
   const reqInit: RequestInit = init ? { ...init } : {};
   const headers = new Headers(reqInit.headers || {});
 
-  if (SUPABASE_ANON_KEY) {
-    if (!headers.has('apikey')) {
-      headers.set('apikey', SUPABASE_ANON_KEY);
-    }
-    if (!headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+  if (SUPABASE_ANON_KEY && !headers.has('apikey')) {
+    headers.set('apikey', SUPABASE_ANON_KEY);
+  }
+
+  // Ensure active user's session Bearer token is attached (never anonymous if logged in)
+  let activeToken = getActiveSessionToken();
+  if (!activeToken && typeof window !== 'undefined') {
+    const hasAdmin = Boolean(window.sessionStorage?.getItem('tyt_admin_token'));
+    const hasStaff = Boolean(window.sessionStorage?.getItem('tyt_staff_token'));
+    if (hasAdmin || hasStaff) {
+      activeToken = await ensureActiveSupabaseSession();
     }
   }
+
+  const currentAuth = headers.get('Authorization') || '';
+
+  if (activeToken) {
+    if (!currentAuth || currentAuth === `Bearer ${SUPABASE_ANON_KEY}` || currentAuth.includes(SUPABASE_ANON_KEY)) {
+      headers.set('Authorization', `Bearer ${activeToken}`);
+    }
+  } else if (!currentAuth && SUPABASE_ANON_KEY) {
+    headers.set('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+  }
+
   if (!headers.has('Prefer')) {
     headers.set('Prefer', 'return=representation');
   }
@@ -538,12 +833,20 @@ export const customFetch: typeof fetch = async (input, init) => {
   }
 
   reqInit.headers = headers;
-  return fetch(input, reqInit);
+  const res = await fetch(input, reqInit);
+
+  // Gracefully handle 401 Unauthorized across all Supabase operations
+  if (res.status === 401) {
+    console.warn(`[Supabase 401 Guard] 401 Unauthorized encountered on ${urlStr}`);
+    handleUnauthorizedResponse(urlStr);
+  }
+
+  return res;
 };
 
 /**
- * Global Supabase singleton client configured with guaranteed header injection,
- * automatic token refresh, and resilient realtime websocket parameters.
+ * Global Supabase singleton client configured with guaranteed session persistence in sessionStorage,
+ * dynamic user Bearer token injection, automatic token refresh, and resilient realtime parameters.
  */
 export const supabase: SupabaseClient = createClient(
   SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co',
@@ -551,19 +854,18 @@ export const supabase: SupabaseClient = createClient(
   {
     auth: {
       storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+      storageKey: 'sb-tbsvmgmhazsiciimpuim-auth-token',
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
     },
     global: {
-      headers: getSupabaseHeaders(),
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+      },
       fetch: customFetch,
     },
     realtime: {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
       params: {
         apikey: SUPABASE_ANON_KEY,
         eventsPerSecond: 15,
@@ -574,7 +876,7 @@ export const supabase: SupabaseClient = createClient(
 
 /**
  * Dedicated REST helper for direct PostgREST calls bypassing or supplementing the SDK.
- * Injects required 'apikey', 'Authorization', and 'Prefer: return=representation' headers.
+ * Injects required 'apikey', dynamic 'Authorization', and 'Prefer: return=representation' headers.
  */
 export async function supabaseRest<T = any>(
   tableOrPath: string,
@@ -603,6 +905,9 @@ export async function supabaseRest<T = any>(
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        handleUnauthorizedResponse(cleanPath);
+      }
       let errBody: any;
       try {
         errBody = await response.json();

@@ -31,16 +31,17 @@ function getServiceRoleKey(): string {
   );
 }
 
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  process.env.SUPABASE_URL ||
+const SUPABASE_URL = (
   process.env.VITE_SUPABASE_URL ||
-  'https://tbsvmgmhazsiciimpuim.supabase.co';
+  process.env.SUPABASE_URL ||
+  'https://tbsvmgmhazsiciimpuim.supabase.co'
+).trim();
 
-const SUPABASE_ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
+const SUPABASE_ANON_KEY = (
   process.env.VITE_SUPABASE_ANON_KEY ||
-  'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
+  process.env.SUPABASE_ANON_KEY ||
+  'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea'
+).trim();
 
 const SUPABASE_SERVICE_ROLE_KEY =
   (process as any).SUPABASE_SERVICE_ROLE_KEY ||
@@ -219,6 +220,107 @@ app.get(['/auth/callback', '/auth/callback/'], async (req, res) => {
   }
 });
 
+async function mintSupabaseAuthSession(email: string, role: string = 'authenticated') {
+  const cleanEmail = String(email || '').toLowerCase().trim();
+  if (!cleanEmail) return null;
+  try {
+    let { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: cleanEmail,
+    });
+
+    if (linkErr && linkErr.message.includes('User not found')) {
+      const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        email_confirm: true,
+        user_metadata: { role },
+      });
+      if (createErr) {
+        console.warn('[mintSupabaseAuthSession] createUser error:', createErr.message);
+      }
+      const retry = await supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
+        email: cleanEmail,
+      });
+      linkData = retry.data;
+    }
+
+    if (!linkData?.properties?.hashed_token) {
+      console.warn('[mintSupabaseAuthSession] missing hashed_token. linkErr:', linkErr?.message);
+      return null;
+    }
+
+    const { data: sessionData, error: sessionErr } = await supabaseServer.auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: 'email',
+    });
+
+    if (sessionErr || !sessionData?.session) {
+      console.warn('[mintSupabaseAuthSession] verifyOtp failed:', sessionErr?.message, sessionErr);
+      return null;
+    }
+
+    return {
+      access_token: sessionData.session.access_token,
+      refresh_token: sessionData.session.refresh_token,
+      expires_at: sessionData.session.expires_at,
+      expires_in: sessionData.session.expires_in,
+      user: sessionData.user,
+    };
+  } catch (err: any) {
+    console.warn('[mintSupabaseAuthSession] failed:', err?.message);
+    return null;
+  }
+}
+
+app.post('/api/auth/supabase-session', async (req, res) => {
+  try {
+    let targetEmail = req.body.email ? String(req.body.email).toLowerCase().trim() : '';
+
+    if (!targetEmail) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.replace('Bearer ', '');
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+            targetEmail = payload.email || '';
+          } else {
+            const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+            targetEmail = decoded.email || '';
+          }
+        } catch {}
+      }
+    }
+
+    if (!targetEmail) {
+      return res.status(400).json({ error: 'Valid user email or session token required.' });
+    }
+
+    const cleanEmail = targetEmail.toLowerCase().trim();
+    const isRoot = cleanEmail === 'anupamsaxena.dev@gmail.com';
+    const isAllowlisted = db.isEmailInAdminAllowlist(cleanEmail);
+    const staff = db.findStaffByEmail(cleanEmail);
+    const regularUser = db.getUserByEmail(cleanEmail);
+
+    if (!isRoot && !isAllowlisted && (!staff || staff.isBlocked || !staff.isActive) && !regularUser) {
+      return res.status(403).json({ error: 'Unauthorized email for Supabase session.' });
+    }
+
+    const role = (isRoot || isAllowlisted) ? 'ADMIN' : (staff ? 'STAFF' : 'USER');
+    const session = await mintSupabaseAuthSession(cleanEmail, role);
+
+    if (!session) {
+      return res.status(500).json({ error: 'Could not generate authentic Supabase session.' });
+    }
+
+    return res.json({ ok: true, session });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Internal error' });
+  }
+});
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password, portal } = req.body;
@@ -239,7 +341,8 @@ app.post('/api/auth/login', async (req, res) => {
           createdAt: '2026-01-01T00:00:00.000Z',
         };
         const token = Buffer.from(JSON.stringify(rootRecord)).toString('base64');
-        return res.json({ user: rootRecord, token });
+        const supabaseSession = await mintSupabaseAuthSession('anupamsaxena.dev@gmail.com', 'ADMIN');
+        return res.json({ user: rootRecord, token, session: supabaseSession });
       }
     }
 
@@ -256,7 +359,8 @@ app.post('/api/auth/login', async (req, res) => {
     }
     const { password: _, ...safeUser } = userRecord;
     const token = Buffer.from(JSON.stringify(safeUser)).toString('base64');
-    return res.json({ user: safeUser, token });
+    const supabaseSession = await mintSupabaseAuthSession(cleanEmail, userRecord.role || 'USER');
+    return res.json({ user: safeUser, token, session: supabaseSession });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Internal server error' });
   }
@@ -268,7 +372,8 @@ app.post('/api/auth/staff/login', async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
-    const staffMember = db.findStaffByEmail(email);
+    const cleanEmail = String(email || '').toLowerCase().trim();
+    const staffMember = db.findStaffByEmail(cleanEmail);
     if (!staffMember) {
       return res.status(401).json({ error: 'No staff account found.' });
     }
@@ -284,7 +389,8 @@ app.post('/api/auth/staff/login', async (req, res) => {
     const refreshedStaff = db.getStaffMemberById(staffMember.id) || staffMember;
     const { password: _, ...safeStaff } = refreshedStaff;
     const token = Buffer.from(JSON.stringify(safeStaff)).toString('base64');
-    return res.json({ user: safeStaff, token });
+    const supabaseSession = await mintSupabaseAuthSession(cleanEmail, 'STAFF');
+    return res.json({ user: safeStaff, token, session: supabaseSession });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -396,7 +502,7 @@ app.post('/api/admin/auth/send-otp', async (req, res) => {
   }
 });
 
-app.post('/api/admin/auth/verify-otp', (req, res) => {
+app.post('/api/admin/auth/verify-otp', async (req, res) => {
   try {
     const rawEmail = req.body.admin_email || req.body.email || '';
     const rawToken = req.body.otp_token || req.body.token || '';
@@ -430,10 +536,13 @@ app.post('/api/admin/auth/verify-otp', (req, res) => {
       });
     }
 
+    const supabaseSession = await mintSupabaseAuthSession(cleanEmail, 'ADMIN');
+
     return res.json({
       ok: true,
       verified: true,
       email: cleanEmail,
+      session: supabaseSession,
       message: 'Email & OTP verified successfully. Please enter administrator password to complete login.',
     });
   } catch (err: any) {
@@ -530,7 +639,7 @@ app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async 
   // 1. ENV CHECK:
   // Ensure the API route checks for process.env.NEXT_PUBLIC_SUPABASE_URL and process.env.SUPABASE_SERVICE_ROLE_KEY.
   // If either is missing, return a clear JSON error response ({ error: "Missing server environment variables" }) with status 500 rather than crashing.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: 'Missing server environment variables' });
   }
 
@@ -1685,24 +1794,30 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Vite middleware or static bundle for production
-if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
-  const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
-  app.use(vite.middlewares);
-} else {
-  const distPath = path.join(process.cwd(), 'dist');
-  if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+async function startServer() {
+  if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+  }
+
+  // Only listen locally if not on Vercel
+  if (process.env.VERCEL !== '1') {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`TirthYatraTrails server running on http://0.0.0.0:${PORT}`);
     });
   }
 }
 
-// Only listen locally if not on Vercel
-if (process.env.VERCEL !== '1') {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`TirthYatraTrails server running on http://0.0.0.0:${PORT}`);
-  });
-}
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+});
 
 export default app;

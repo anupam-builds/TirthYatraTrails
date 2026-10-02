@@ -63,28 +63,8 @@ import {
 // ==========================================
 // 2. SUPABASE CLIENT INITIALIZATION
 // ==========================================
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    '⚠️ [TirthYatraTrails] Supabase credentials missing! Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.'
-  );
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+import { supabase } from '../../lib/supabase.js';
+export { supabase };
 
 // ==========================================
 // 3. TYPES & DATA CONTRACTS

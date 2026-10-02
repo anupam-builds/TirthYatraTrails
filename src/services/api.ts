@@ -1,5 +1,5 @@
 import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
@@ -108,13 +108,7 @@ export async function resilientPatchRecord(
     ? [tablesOrTarget, ...allKnownTables.filter((t) => t !== tablesOrTarget)]
     : [targetTable, ...allKnownTables.filter((t) => t !== targetTable)];
 
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-  const explicitHeaders = {
-    apikey: anonKey,
-    Authorization: `Bearer ${anonKey}`,
-    'Content-Type': 'application/json',
-    Prefer: 'return=representation',
-  };
+  const explicitHeaders = getSupabaseHeaders();
 
   const candidateIds = getCandidateLeadIds(cleanId);
   const candidateColumns = ['id', 'lead_id', 'reference_id'];
@@ -131,6 +125,9 @@ export async function resilientPatchRecord(
           });
 
           if (!res.ok) {
+            if (res.status === 401) {
+              handleUnauthorizedResponse(url);
+            }
             const errData = await res.json().catch(() => null);
             console.error('PATCH failed details:', { status: res.status, errData, payload: cleanPayload });
 
@@ -217,18 +214,17 @@ export function cleanUnassignedValue(val?: string | null): string | null {
  */
 export async function toggleStaffBlock(staffId: string, isBlocked: boolean) {
   const targetTable = staffId.startsWith('stf-') ? 'staff_members' : 'profiles';
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(staffId)}`, {
+  const url = `${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${encodeURIComponent(staffId)}`;
+  const res = await fetch(url, {
     method: 'PATCH',
-    headers: {
-      'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation',
-    },
+    headers: getSupabaseHeaders(),
     body: JSON.stringify({ is_blocked: isBlocked }),
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      handleUnauthorizedResponse(url);
+    }
     const errText = await res.text();
     console.error(`Toggle block failed (${res.status}):`, errText);
     throw new Error(`Block/Grant toggle failed: ${res.status}`);
@@ -290,10 +286,7 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
 
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?limit=1`, {
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      headers: getSupabaseHeaders(),
     });
     if (res.ok) {
       const data = await res.json().catch(() => null);
@@ -563,14 +556,10 @@ export async function updateLeadOrInquiryStatus(
         if (val !== undefined) tablePayload.end_date = val;
       }
 
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(resolvedId)}`, {
+      const patchUrl = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(resolvedId)}`;
+      const res = await fetch(patchUrl, {
         method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation',
-        },
+        headers: getSupabaseHeaders(),
         body: JSON.stringify(tablePayload),
       });
 
@@ -583,6 +572,9 @@ export async function updateLeadOrInquiryStatus(
           break;
         }
       } else {
+        if (res.status === 401) {
+          handleUnauthorizedResponse(patchUrl);
+        }
         const errBody = await res.json().catch(() => null);
         console.error(`❌ [updateLeadOrInquiryStatus] Supabase PATCH to /rest/v1/${table} returned ${res.status}:`, errBody);
       }
@@ -784,14 +776,13 @@ export async function submitCustomerInquiry(formData: any) {
 
   let res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
     method: 'POST',
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    },
+    headers: getSupabaseHeaders(),
     body: JSON.stringify(payload),
   });
+
+  if (res.status === 401) {
+    handleUnauthorizedResponse('/rest/v1/inquiries');
+  }
 
   // If table does not yet have end_date/duration_days/budget/accommodation_tier columns in PostgREST cache, retry cleanly with metadata
   if (!res.ok && res.status === 400) {
@@ -815,14 +806,12 @@ export async function submitCustomerInquiry(formData: any) {
       };
       res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
         method: 'POST',
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation',
-        },
+        headers: getSupabaseHeaders(),
         body: JSON.stringify(fallbackPayload),
       });
+      if (res.status === 401) {
+        handleUnauthorizedResponse('/rest/v1/inquiries');
+      }
     } else {
       console.error(`POST inquiries failed (${res.status}):`, errText);
       throw new Error(`Inquiry submission failed: ${res.status}`);
@@ -1350,23 +1339,91 @@ export const api = {
         last_active: new Date().toISOString(),
       }, { onConflict: 'staff_id' });
 
+      // Also establish Supabase Auth session in sessionStorage
+      let supabaseAccessToken: string | undefined;
+      try {
+        const { data: authData } = await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+        if (authData?.session?.access_token) {
+          supabaseAccessToken = authData.session.access_token;
+        }
+      } catch {}
+
+      if (!supabaseAccessToken) {
+        try {
+          const sessRes = await fetch('/api/auth/supabase-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.trim().toLowerCase() }),
+          });
+          if (sessRes.ok) {
+            const sessData = await sessRes.json();
+            if (sessData?.session?.access_token) {
+              supabaseAccessToken = sessData.session.access_token;
+              await supabase.auth.setSession({
+                access_token: sessData.session.access_token,
+                refresh_token: sessData.session.refresh_token,
+              });
+            }
+          }
+        } catch {}
+      }
+
       const { password: _, ...safeStaff } = data;
-      const mapped: StaffMember = {
+      const mapped: StaffMember & { access_token?: string } = {
         ...safeStaff,
         isBlocked: safeStaff.is_blocked,
         isActive: safeStaff.is_active,
         isOnline: true,
         isCurrentlyLoggedIn: true,
+        access_token: supabaseAccessToken,
       };
       return { user: mapped, token: btoa(JSON.stringify(mapped)) };
     } catch (err: any) {
       if (err.message?.includes('Access Blocked')) throw err;
       const res = localStore.loginStaff(email, password);
+      // Attempt session sync for localStore fallback as well
+      try {
+        const sessRes = await fetch('/api/auth/supabase-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        });
+        if (sessRes.ok) {
+          const sessData = await sessRes.json();
+          if (sessData?.session?.access_token) {
+            await supabase.auth.setSession({
+              access_token: sessData.session.access_token,
+              refresh_token: sessData.session.refresh_token,
+            });
+            if (res.user) {
+              (res.user as any).access_token = sessData.session.access_token;
+              res.token = btoa(JSON.stringify(res.user));
+            }
+          }
+        }
+      } catch {}
       return res;
     }
   },
 
   async logoutStaff(staffId?: string): Promise<void> {
+    try {
+      await supabase.auth.signOut().catch(() => {});
+    } catch {}
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.removeItem('tyt_staff_token');
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const k = window.sessionStorage.key(i);
+          if (k && (k.startsWith('sb-') || k.includes('auth-token'))) {
+            window.sessionStorage.removeItem(k);
+          }
+        }
+      } catch {}
+    }
     if (staffId) {
       try {
         await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
@@ -1618,14 +1675,13 @@ export const api = {
 
       let res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
         method: 'POST',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation',
-        },
+        headers: getSupabaseHeaders(),
         body: JSON.stringify(payload),
       });
+
+      if (res.status === 401) {
+        handleUnauthorizedResponse('/rest/v1/inquiries');
+      }
 
       // If table has schema mismatch, log detailed JSON error and retry with fallback
       if (!res.ok && res.status === 400) {
@@ -1634,28 +1690,24 @@ export const api = {
         delete payload.accommodation_tier;
         res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
           method: 'POST',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-          },
+          headers: getSupabaseHeaders(),
           body: JSON.stringify(payload),
         });
+        if (res.status === 401) {
+          handleUnauthorizedResponse('/rest/v1/inquiries');
+        }
       }
 
       if (!res.ok && res.status === 404) {
         // Fallback to 'leads' table if 'inquiries' table is not present
         res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
           method: 'POST',
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            Prefer: 'return=representation',
-          },
+          headers: getSupabaseHeaders(),
           body: JSON.stringify(payload),
         });
+        if (res.status === 401) {
+          handleUnauthorizedResponse('/rest/v1/leads');
+        }
       }
 
       if (!res.ok) {
@@ -1674,12 +1726,7 @@ export const api = {
       try {
         fetch(`${SUPABASE_URL}/rest/v1/leads`, {
           method: 'POST',
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            Prefer: 'return=minimal',
-          },
+          headers: getSupabaseHeaders({ Prefer: 'return=minimal' }),
           body: JSON.stringify(payload),
         }).catch(() => {});
       } catch {}
@@ -1892,16 +1939,14 @@ export const api = {
     try {
       const inqRes = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
         method: 'POST',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation',
-        },
+        headers: getSupabaseHeaders(),
         body: JSON.stringify(inquiriesPayload),
       });
 
       if (!inqRes.ok) {
+        if (inqRes.status === 401) {
+          handleUnauthorizedResponse('/rest/v1/inquiries');
+        }
         const errBody = await inqRes.json().catch(() => null);
         console.error('❌ [createManualLead] Supabase POST to /rest/v1/inquiries returned', inqRes.status, errBody);
       } else {
@@ -1916,16 +1961,14 @@ export const api = {
     try {
       const leadsRes = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation',
-        },
+        headers: getSupabaseHeaders(),
         body: JSON.stringify(leadsDbPayload),
       });
 
       if (!leadsRes.ok) {
+        if (leadsRes.status === 401) {
+          handleUnauthorizedResponse('/rest/v1/leads');
+        }
         const errBody = await leadsRes.json().catch(() => null);
         console.error('❌ [createManualLead] Supabase POST to /rest/v1/leads returned', leadsRes.status, errBody);
       } else if (!createdRow) {
@@ -1990,6 +2033,15 @@ export const api = {
         qLeads = qLeads.eq('user_id', userId);
       }
       const [resInq, resLeads] = await Promise.allSettled([qInq, qLeads]);
+
+      if (
+        (resInq.status === 'fulfilled' && ((resInq.value as any)?.error?.status === 401 || (resInq.value as any)?.error?.code === 'PGRST301')) ||
+        (resLeads.status === 'fulfilled' && ((resLeads.value as any)?.error?.status === 401 || (resLeads.value as any)?.error?.code === 'PGRST301'))
+      ) {
+        console.warn('⚠️ [getInquiries] 401 Unauthorized encountered from Supabase. Redirecting to login portal.');
+        handleUnauthorizedResponse('/rest/v1/inquiries');
+      }
+
       const inqData = resInq.status === 'fulfilled' && (resInq.value as any)?.data ? (resInq.value as any).data : [];
       const leadsData = resLeads.status === 'fulfilled' && (resLeads.value as any)?.data ? (resLeads.value as any).data : [];
 
@@ -2005,7 +2057,10 @@ export const api = {
         return unique.map(mapInquiryRow);
       }
       return localStore.getInquiries(userId);
-    } catch {
+    } catch (err: any) {
+      if (err?.status === 401) {
+        handleUnauthorizedResponse('/rest/v1/inquiries');
+      }
       return localStore.getInquiries(userId);
     }
   },
@@ -2523,13 +2578,7 @@ export const api = {
       ? { id: String(id).trim(), ...cleanPayload }
       : { ...cleanPayload };
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     console.log('Sending hotel payload:', JSON.stringify(insertPayload, null, 2));
 
@@ -2615,13 +2664,7 @@ export const api = {
     delete rawPayload.id;
     let payload = { ...rawPayload };
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     console.log(`[Supabase updateHotel] Updating table: 'hotels', payload ID: "${targetId}"`, {
       id: targetId,
@@ -2953,13 +2996,7 @@ export const api = {
       try { insertPayload.transfers = JSON.parse(insertPayload.transfers); } catch {}
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     // Debug Logging
     console.log('Sending package payload:', JSON.stringify(insertPayload, null, 2));
@@ -3062,13 +3099,7 @@ export const api = {
       try { payload.transfers = JSON.parse(payload.transfers); } catch {}
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     console.log('Sending package update payload:', JSON.stringify(payload, null, 2));
 
@@ -3145,13 +3176,7 @@ export const api = {
 
     if (!id) return false;
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     // 1. Direct PostgREST DELETE call safely targeting only /rest/v1/packages?id=eq.${id}
     try {
@@ -3192,13 +3217,7 @@ export const api = {
       payload.transit_hubs = city.transitHubs || [];
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     // 1. First attempt direct PostgREST REST fetch with explicit headers to eliminate 400 Bad Request
     try {
@@ -3268,13 +3287,7 @@ export const api = {
     const payload = cityToRow(city);
     delete payload.id;
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     // 1. Direct PostgREST PATCH with explicit headers
     try {
@@ -3352,12 +3365,7 @@ export const api = {
   },
 
   async deleteCity(id: string): Promise<boolean> {
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(id)}`, {
@@ -3399,13 +3407,7 @@ export const api = {
       insertPayload.rating = Math.max(1, Math.min(5, Math.round(Number(insertPayload.rating) || 5)));
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     console.log('Sending review payload:', JSON.stringify(insertPayload, null, 2));
 
@@ -3486,13 +3488,7 @@ export const api = {
       payload.rating = Math.max(1, Math.min(5, Math.round(Number(payload.rating) || 5)));
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     try {
       const restUrl = `${SUPABASE_URL}/rest/v1/reviews?id=eq.${encodeURIComponent(id)}`;
@@ -3558,16 +3554,14 @@ export const api = {
   },
 
   async deleteReview(id: string): Promise<boolean> {
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/reviews?id=eq.${encodeURIComponent(id)}`, {
+      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/reviews?id=eq.${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${anonKey}`,
-          Prefer: 'return=representation',
-        },
+        headers: getSupabaseHeaders({ Prefer: 'return=representation' }),
       });
+      if (delRes.status === 401) {
+        handleUnauthorizedResponse(`${SUPABASE_URL}/rest/v1/reviews`);
+      }
     } catch {}
     try {
       await supabase.from('reviews').delete().eq('id', id);
@@ -3937,13 +3931,7 @@ export const api = {
       payload.id = String(story.id).trim();
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-    const explicitHeaders = {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    };
+    const explicitHeaders = getSupabaseHeaders();
 
     try {
       const restUrl = `${SUPABASE_URL}/rest/v1/travel_stories`;
