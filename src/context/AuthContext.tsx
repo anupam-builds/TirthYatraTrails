@@ -290,24 +290,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("Access Denied: Email not authorized by existing admin.");
     }
 
-    // 4. Ensure authentic Supabase Auth session in sessionStorage
+    // 4. Retrieve client-side session token
     let validAccessToken = authSession?.access_token;
     if (!validAccessToken || isJwtExpired(validAccessToken)) {
       try {
-        const sessRes = await fetch('/api/auth/supabase-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: verifiedEmail }),
-        });
-        if (sessRes.ok) {
-          const sessData = await sessRes.json();
-          if (sessData?.session?.access_token) {
-            validAccessToken = sessData.session.access_token;
-            await supabase.auth.setSession({
-              access_token: sessData.session.access_token,
-              refresh_token: sessData.session.refresh_token,
-            });
-          }
+        const { data: currentSession } = await supabase.auth.getSession();
+        if (currentSession?.session?.access_token) {
+          validAccessToken = currentSession.session.access_token;
         }
       } catch {}
     }

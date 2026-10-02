@@ -1353,20 +1353,9 @@ export const api = {
 
       if (!supabaseAccessToken) {
         try {
-          const sessRes = await fetch('/api/auth/supabase-session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.trim().toLowerCase() }),
-          });
-          if (sessRes.ok) {
-            const sessData = await sessRes.json();
-            if (sessData?.session?.access_token) {
-              supabaseAccessToken = sessData.session.access_token;
-              await supabase.auth.setSession({
-                access_token: sessData.session.access_token,
-                refresh_token: sessData.session.refresh_token,
-              });
-            }
+          const { data: sessData } = await supabase.auth.getSession();
+          if (sessData?.session?.access_token) {
+            supabaseAccessToken = sessData.session.access_token;
           }
         } catch {}
       }
@@ -1384,25 +1373,11 @@ export const api = {
     } catch (err: any) {
       if (err.message?.includes('Access Blocked')) throw err;
       const res = localStore.loginStaff(email, password);
-      // Attempt session sync for localStore fallback as well
       try {
-        const sessRes = await fetch('/api/auth/supabase-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim().toLowerCase() }),
-        });
-        if (sessRes.ok) {
-          const sessData = await sessRes.json();
-          if (sessData?.session?.access_token) {
-            await supabase.auth.setSession({
-              access_token: sessData.session.access_token,
-              refresh_token: sessData.session.refresh_token,
-            });
-            if (res.user) {
-              (res.user as any).access_token = sessData.session.access_token;
-              res.token = btoa(JSON.stringify(res.user));
-            }
-          }
+        const { data: sessData } = await supabase.auth.getSession();
+        if (sessData?.session?.access_token && res.user) {
+          (res.user as any).access_token = sessData.session.access_token;
+          res.token = btoa(JSON.stringify(res.user));
         }
       } catch {}
       return res;

@@ -154,76 +154,17 @@ export async function ensureActiveSupabaseSession(): Promise<string | null> {
   const existingToken = getActiveSessionToken();
   if (existingToken) return existingToken;
 
-  // Check if admin or staff user is logged in via sessionStorage
-  let userEmail = '';
-  let tokenType = '';
+  // Pure Client-Side Auth: Try retrieving or refreshing session directly via supabase.auth
   try {
-    const adminRaw = window.sessionStorage.getItem('tyt_admin_token');
-    if (adminRaw) {
-      const decoded = JSON.parse(atob(adminRaw));
-      if (decoded?.email) {
-        userEmail = decoded.email;
-        tokenType = 'admin';
-      }
+    const { data: getSess } = await supabase.auth.getSession();
+    if (getSess?.session?.access_token && isValidJwt(getSess.session.access_token)) {
+      return getSess.session.access_token;
     }
-    if (!userEmail) {
-      const staffRaw = window.sessionStorage.getItem('tyt_staff_token');
-      if (staffRaw) {
-        const decoded = JSON.parse(atob(staffRaw));
-        if (decoded?.email) {
-          userEmail = decoded.email;
-          tokenType = 'staff';
-        }
-      }
+    const { data: refSess } = await supabase.auth.refreshSession();
+    if (refSess?.session?.access_token && isValidJwt(refSess.session.access_token)) {
+      return refSess.session.access_token;
     }
   } catch {}
-
-  if (!userEmail || isSyncingSession) return null;
-
-  isSyncingSession = true;
-  try {
-    const res = await fetch('/api/auth/supabase-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: userEmail }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.session?.access_token) {
-        const session = data.session;
-        // Update Supabase client session in sessionStorage
-        try {
-          await supabase.auth.setSession({
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          });
-        } catch {}
-
-        // Update token in tyt_admin_token or tyt_staff_token
-        if (tokenType === 'admin') {
-          const adminRaw = window.sessionStorage.getItem('tyt_admin_token');
-          if (adminRaw) {
-            const parsed = JSON.parse(atob(adminRaw));
-            parsed.access_token = session.access_token;
-            window.sessionStorage.setItem('tyt_admin_token', btoa(JSON.stringify(parsed)));
-          }
-        } else if (tokenType === 'staff') {
-          const staffRaw = window.sessionStorage.getItem('tyt_staff_token');
-          if (staffRaw) {
-            const parsed = JSON.parse(atob(staffRaw));
-            parsed.access_token = session.access_token;
-            window.sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(parsed)));
-          }
-        }
-        return session.access_token;
-      }
-    }
-  } catch (syncErr) {
-    console.warn('[ensureActiveSupabaseSession] Session sync error:', syncErr);
-  } finally {
-    isSyncingSession = false;
-  }
 
   return null;
 }
