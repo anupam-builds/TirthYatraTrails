@@ -55,6 +55,7 @@ import {
   RotateCcw,
   Check,
   Settings,
+  X,
 } from 'lucide-react';
 
 export const StaffPortalPage: React.FC = () => {
@@ -63,7 +64,37 @@ export const StaffPortalPage: React.FC = () => {
   const { navigate } = useRouter();
   const { theme, isDark, setTheme, toggleTheme } = useTheme();
 
+  // Safety Confirmation Dialog for Logout (replicated from Admin side)
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  // Close modal on Escape key press
+  useEffect(() => {
+    if (!showLogoutModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isLoggingOut) {
+        setShowLogoutModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showLogoutModal, isLoggingOut]);
+
+  // Execute confirmed logout
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      if (staffUser?.id) {
+        await api.logoutStaff(staffUser.id).catch(() => {});
+      }
+      await supabase.auth.signOut().catch(() => {});
+    } finally {
+      logoutStaff();
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
+      navigate('/staff/login');
+    }
+  };
 
   const [activePortalTab, setActivePortalTab] = useState<'LEADS' | 'SETTINGS'>('LEADS');
   const [isPlayingTest, setIsPlayingTest] = useState(false);
@@ -643,10 +674,8 @@ export const StaffPortalPage: React.FC = () => {
 
           {/* Logout */}
           <button
-            onClick={() => {
-              logoutStaff();
-              navigate('/staff/login');
-            }}
+            id="staff-header-logout-btn"
+            onClick={() => setShowLogoutModal(true)}
             className="p-2 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-300 rounded-xl transition-colors border border-red-200 dark:border-transparent cursor-pointer"
             title="Sign out of Staff Portal"
           >
@@ -1144,6 +1173,107 @@ export const StaffPortalPage: React.FC = () => {
                 className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-600/20 cursor-pointer"
               >
                 Acknowledge &amp; Return to Login
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAFETY LOGOUT CONFIRMATION MODAL */}
+      {showLogoutModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="staff-logout-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => !isLoggingOut && setShowLogoutModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white dark:bg-[#0c1e36] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl text-slate-900 dark:text-slate-100 relative animate-in zoom-in-95 duration-150"
+          >
+            {/* Close modal X button */}
+            <button
+              onClick={() => !isLoggingOut && setShowLogoutModal(false)}
+              disabled={isLoggingOut}
+              aria-label="Close dialog"
+              className="absolute top-5 right-5 p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Header with warning icon badge */}
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                <LogOut className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0 pr-6">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-md border border-red-200 dark:border-red-900/50 inline-block mb-1">
+                  Security Confirmation
+                </span>
+                <h3 id="staff-logout-modal-title" className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug">
+                  Are you sure you want to log out?
+                </h3>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="mt-4 space-y-3 text-xs text-slate-600 dark:text-slate-300">
+              <p className="leading-relaxed">
+                You will be signed out of the active staff session. To regain access to your assigned pilgrim leads, live inquiries, and call tasks, you will need to re-authenticate with your staff credentials.
+              </p>
+
+              {/* Active Staff Identity Badge */}
+              {staffUser && (
+                <div className="p-3 bg-slate-50 dark:bg-[#071322] border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold flex items-center justify-center shrink-0 text-xs">
+                    {staffUser.name ? staffUser.name.charAt(0).toUpperCase() : 'S'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-900 dark:text-white truncate text-xs">
+                      {staffUser.name}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate font-mono">
+                      {staffUser.email}
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-sm uppercase shrink-0">
+                    {staffUser.designation || 'Staff Specialist'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons: Cancel and Yes, Log Out */}
+            <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+              <button
+                type="button"
+                id="btn-cancel-staff-logout"
+                onClick={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                id="btn-confirm-staff-logout"
+                onClick={handleConfirmLogout}
+                disabled={isLoggingOut}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-lg shadow-red-600/30 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isLoggingOut ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Signing Out...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Yes, Log Out</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
