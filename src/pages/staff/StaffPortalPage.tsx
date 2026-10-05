@@ -1126,7 +1126,13 @@ export const StaffPortalPage: React.FC = () => {
               currentStaffName={staffUser.name}
               onUpdateStatus={handleUpdateStatus}
               onAssignStaff={undefined}
-              onEditInquiry={(inq) => setSelectedInquiryForEdit(inq)}
+              onEditInquiry={(inq) => {
+                if (inq?.status === 'CLOSED' || (inq as any)?.isLockedForStaff) {
+                  alert('You cannot change a closed lead.');
+                  return;
+                }
+                setSelectedInquiryForEdit(inq);
+              }}
               onAddNote={handleAddNote}
               onLeadCreated={(newLead) => setInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)])}
             />

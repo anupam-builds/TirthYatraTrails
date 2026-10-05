@@ -198,7 +198,13 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
       <LeadTableView
         inquiries={mappedInquiries}
         loading={loading}
-        onEdit={onEditLead}
+        onEdit={(lead) => {
+          if (lead?.status === 'CLOSED' || (lead as any)?.isLockedForStaff) {
+            alert('You cannot change a closed lead.');
+            return;
+          }
+          if (onEditLead) onEditLead(lead);
+        }}
         onView={onViewLead}
         isStaffMode={true}
         currentStaffId={currentStaffId}

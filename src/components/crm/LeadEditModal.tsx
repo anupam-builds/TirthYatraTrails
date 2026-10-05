@@ -109,11 +109,23 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
     }
   }, [inquiry]);
 
+  // Defensive guard: if a staff member attempts to open or edit a closed lead, intercept gracefully
+  useEffect(() => {
+    if (isOpen && inquiry && isStaffMode && (inquiry.status === 'CLOSED' || (inquiry as any).isLockedForStaff)) {
+      alert('You cannot change a closed lead.');
+      onClose();
+    }
+  }, [isOpen, inquiry, isStaffMode, onClose]);
+
   if (!isOpen || !inquiry) return null;
 
+  if (isStaffMode && (inquiry.status === 'CLOSED' || (inquiry as any).isLockedForStaff)) {
+    return null;
+  }
+
   const rawInq = inquiry as any;
-  const leadId = (rawInq.leadId && /^TTT\d{8}$/i.test(rawInq.leadId)) ? rawInq.leadId : formatLeadId(rawInq.id);
-  const isLocked = Boolean((inquiry.isLockedForStaff || inquiry.status === 'CLOSED') && isStaffMode);
+  const leadId = (rawInq.leadId && /^TTT\d{8}$/i.test(rawInq.leadId)) ? rawInq.leadId : (rawInq.id ? formatLeadId(rawInq.id) : 'TTT00000000');
+  const isLocked = Boolean(((inquiry as any)?.isLockedForStaff || inquiry?.status === 'CLOSED') && isStaffMode);
   const statusOptions = isStaffMode ? STAFF_CRM_STATUS_LIST : ADMIN_CRM_STATUS_LIST;
 
   const handleCopyLeadId = () => {
@@ -186,7 +198,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLocked) {
-      alert('This inquiry is locked and cannot be edited by staff.');
+      alert('You cannot change a closed lead.');
       return;
     }
 
@@ -279,6 +291,10 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
   };
 
   const handlePostNote = async () => {
+    if (isLocked) {
+      alert('You cannot change a closed lead.');
+      return;
+    }
     if (!newNoteText.trim() || !onAddNote) return;
     setAddingNote(true);
     try {
@@ -345,6 +361,14 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Locked Lead Notice for Staff */}
+        {isLocked && (
+          <div className="mx-6 mt-4 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center gap-2.5">
+            <Lock className="w-4 h-4 text-rose-500 shrink-0" />
+            <span>This lead is Closed and permanently locked for staff. You cannot change a closed lead.</span>
+          </div>
+        )}
 
         {/* Modal Body Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">

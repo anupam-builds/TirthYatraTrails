@@ -48,6 +48,8 @@ import {
   Plus,
   Bell,
   Compass,
+  XCircle,
+  CalendarClock,
 } from 'lucide-react';
 import { LeadDetailsModal } from '../LeadDetailsModal.js';
 import { CreateLeadModal } from './CreateLeadModal.js';
@@ -147,7 +149,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     });
   }, [inquiries, localInquiries, isStaffMode, currentStaffId, currentStaffName]);
 
-  // Status options: Admin has 4 (New, Contacted, Confirmed, Closed), Staff has 3 (New, Contacted, Closed)
+  // Status options: Admin has 7 (New, Contacted, Cancelled, Postponed, Confirmed, Trip, Closed), Staff has 7
   const statusOptions = isAdmin ? ADMIN_CRM_STATUS_LIST : STAFF_CRM_STATUS_LIST;
 
   // Summary Metrics calculation matching workflow
@@ -156,6 +158,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const contactedCount = baseInquiries.filter((i) => i.status === 'CONTACTED').length;
   const confirmedCount = baseInquiries.filter((i) => i.status === 'CONFIRMED').length;
   const tripCount = baseInquiries.filter((i) => i.status === 'TRIP' || i.status === 'Trip').length;
+  const cancelledCount = baseInquiries.filter((i) => i.status === 'CANCELLED' || i.status === 'Cancelled').length;
+  const postponedCount = baseInquiries.filter((i) => i.status === 'POSTPONED' || i.status === 'Postponed').length;
   const closedCount = baseInquiries.filter((i) => i.status === 'CLOSED').length;
   const unassignedCount = baseInquiries.filter((i) => {
     const raw = (i as any).assigned_staff_id || i.assignedStaffId;
@@ -319,14 +323,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       />
 
       {/* 1. SUMMARY METRICS CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-3.5">
         {/* Total Enquiries */}
         <div
           onClick={() => {
             setStatusFilter('ALL');
-            setStaffFilter('ALL');
+            if (isAdmin) setStaffFilter('ALL');
           }}
-          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
             statusFilter === 'ALL' && staffFilter === 'ALL'
               ? 'bg-orange-50 border-orange-300 dark:bg-orange-950/40 dark:border-orange-700 ring-2 ring-orange-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-orange-200'
@@ -351,7 +355,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* New Leads */}
         <div
           onClick={() => setStatusFilter('NEW')}
-          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
             statusFilter === 'NEW'
               ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700 ring-2 ring-amber-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-amber-200'
@@ -374,7 +378,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Contacted */}
         <div
           onClick={() => setStatusFilter('CONTACTED')}
-          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
             statusFilter === 'CONTACTED'
               ? 'bg-blue-50 border-blue-300 dark:bg-blue-950/40 dark:border-blue-700 ring-2 ring-blue-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-blue-200'
@@ -397,7 +401,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Confirmed Bookings */}
         <div
           onClick={() => setStatusFilter('CONFIRMED')}
-          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
             statusFilter === 'CONFIRMED'
               ? 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-700 ring-2 ring-emerald-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-emerald-200'
@@ -420,7 +424,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Trip - Itinerary Ready & Finalized for Travel */}
         <div
           onClick={() => setStatusFilter('TRIP')}
-          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
             statusFilter === 'TRIP' || statusFilter === 'Trip'
               ? 'bg-purple-50 border-purple-300 dark:bg-purple-950/40 dark:border-purple-700 ring-2 ring-purple-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-purple-200'
@@ -440,10 +444,56 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           </div>
         </div>
 
+        {/* Cancelled */}
+        <div
+          onClick={() => setStatusFilter('CANCELLED')}
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+            statusFilter === 'CANCELLED' || statusFilter === 'Cancelled'
+              ? 'bg-red-50 border-red-300 dark:bg-red-950/40 dark:border-red-700 ring-2 ring-red-500/20'
+              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-red-200'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-red-700 dark:text-red-400">Cancelled</span>
+            <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center text-red-600 dark:text-red-400">
+              <XCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-red-700 dark:text-red-300 font-mono">
+              {cancelledCount}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400">void / cancelled</span>
+          </div>
+        </div>
+
+        {/* Postponed */}
+        <div
+          onClick={() => setStatusFilter('POSTPONED')}
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+            statusFilter === 'POSTPONED' || statusFilter === 'Postponed'
+              ? 'bg-orange-50 border-orange-300 dark:bg-orange-950/40 dark:border-orange-700 ring-2 ring-orange-500/20'
+              : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-orange-200'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-orange-700 dark:text-orange-400">Postponed</span>
+            <div className="w-8 h-8 rounded-xl bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400">
+              <CalendarClock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-orange-700 dark:text-orange-300 font-mono">
+              {postponedCount}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400">dates deferred</span>
+          </div>
+        </div>
+
         {/* Closed */}
         <div
           onClick={() => setStatusFilter('CLOSED')}
-          className={`p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
+          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer shadow-xs ${
             statusFilter === 'CLOSED'
               ? 'bg-slate-100 border-slate-300 dark:bg-slate-800 dark:border-slate-700 ring-2 ring-slate-400/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-slate-300'
@@ -1051,15 +1101,19 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             {isStaffMode && isLocked ? (
                               <button
                                 type="button"
-                                disabled={true}
-                                title="Editing is locked for staff on closed leads"
-                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed select-none"
+                                onClick={() => alert('You cannot change a closed lead.')}
+                                title="You cannot change a closed lead."
+                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 opacity-50 hover:opacity-100 hover:text-rose-500 cursor-not-allowed transition-all select-none"
                               >
                                 <Edit3 className="w-4 h-4" />
                               </button>
                             ) : (
                               <button
                                 onClick={() => {
+                                  if (isStaffMode && (inq.status === 'CLOSED' || inq.isLockedForStaff)) {
+                                    alert('You cannot change a closed lead.');
+                                    return;
+                                  }
                                   const editLead = { ...inq, leadId: seqLeadId };
                                   if (onEditInquiry) onEditInquiry(editLead);
                                   else if (onEdit) onEdit(editLead);
@@ -1236,8 +1290,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       {/* Slide-over Detailed Drawer / Modal */}
       <LeadDetailsModal
         lead={selectedDetailedLead}
+        isStaffMode={isStaffMode}
         onClose={() => setSelectedDetailedLead(null)}
         onUpdateLead={async (id, updates) => {
+          if (isStaffMode && (selectedDetailedLead?.status === 'CLOSED' || selectedDetailedLead?.isLockedForStaff)) {
+            alert('You cannot change a closed lead.');
+            return;
+          }
           const res = await updateLeadOrInquiryStatus({ id, ...updates });
           const updated = Array.isArray(res) ? (res[0] || {}) : (res || {});
           setLocalInquiries((prev) =>
@@ -1252,6 +1311,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           }
         }}
         onEditLead={(leadToEdit) => {
+          if (isStaffMode && (leadToEdit?.status === 'CLOSED' || leadToEdit?.isLockedForStaff)) {
+            alert('You cannot change a closed lead.');
+            return;
+          }
           setSelectedDetailedLead(null);
           if (onEditInquiry) onEditInquiry(leadToEdit);
           else if (onEdit) onEdit(leadToEdit);

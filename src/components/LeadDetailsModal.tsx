@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle, Bell, Clock, Edit3, Check, RotateCcw } from 'lucide-react';
+import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle, Bell, Clock, Edit3, Check, RotateCcw, Lock } from 'lucide-react';
 import { formatLeadId } from '../utils/formatters.js';
 import { parseAccommodationTier, getLeadReminderStatus, CRM_STATUS_CONFIG } from '../utils/crmUtils.js';
 import { updateLeadOrInquiryStatus } from '../services/api.js';
@@ -22,9 +22,10 @@ interface LeadDetailsModalProps {
   onClose: () => void;
   onUpdateLead?: (id: string, updates: any) => Promise<void>;
   onEditLead?: (lead: any) => void;
+  isStaffMode?: boolean;
 }
 
-export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClose, onUpdateLead, onEditLead }) => {
+export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClose, onUpdateLead, onEditLead, isStaffMode = false }) => {
   const [currentLead, setCurrentLead] = useState<any>(lead);
   const [isEditingReminder, setIsEditingReminder] = useState(false);
   const [reminderAtInput, setReminderAtInput] = useState('');
@@ -45,29 +46,35 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
     }
   }, [lead]);
 
-  if (!currentLead) return null;
-  const meta = currentLead.metadata || {};
+  // Defensive guard against null leads
+  const activeLead = lead || currentLead;
+  if (!activeLead || typeof activeLead !== 'object') return null;
 
-  const fullName = lead.full_name || lead.name || lead.fullName || lead.customerName || 'N/A';
-  const whatsappNum = lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || lead.whatsappNumber || lead.customerPhone || meta.whatsapp_number || meta.phone || '';
-  const email = lead.email || lead.customerEmail || 'N/A';
-  const residentStateCity = meta.resident_state || lead.resident_state || lead.city || lead.userCity || 'N/A';
+  const isClosed = activeLead?.status === 'CLOSED';
+  const isLockedForStaff = Boolean(isStaffMode && (isClosed || activeLead?.isLockedForStaff));
 
-  const packageInterest = meta.package_interest || lead.package_name || lead.packageName || lead.title || 'N/A';
-  const startDate = meta.start_date || lead.start_date || lead.checkInDate || lead.arrival_date || 'Flexible / TBD';
-  const endDate = meta.end_date || lead.end_date || lead.endDate || 'Flexible / TBD';
-  const durationDays = lead.duration_days ?? lead.durationDays ?? meta.duration_days ?? (lead.duration ? parseInt(lead.duration) : null);
-  const duration = durationDays ? `${durationDays} Days` : (meta.duration || lead.duration || 'Standard Itinerary');
-  const budget = lead.budget || meta.budget || 'Not specified';
-  const adults = meta.adults ?? lead.adults ?? 1;
-  const children = meta.children ?? lead.children ?? 0;
-  const pickupCity = meta.pickup_city || lead.pickup_city || lead.pickupLocation || 'N/A';
-  const dropCity = meta.drop_city || lead.drop_city || lead.dropoffLocation || 'Same as pickup';
+  const meta = activeLead?.metadata || {};
 
-  const accommodationTier = meta.accommodation_tier || lead.accommodation_tier || lead.accommodationTier || lead.plan || lead.selectedPlan || '3 Star Premium';
-  const specialRequests = meta.special_requests || lead.special_requests || lead.specialRequests || lead.message || 'No special requests specified.';
+  const fullName = activeLead?.full_name || activeLead?.name || activeLead?.fullName || activeLead?.customerName || 'N/A';
+  const whatsappNum = activeLead?.whatsapp_number || activeLead?.phone || activeLead?.metadata?.whatsapp_number || activeLead?.metadata?.phone || activeLead?.whatsappNumber || activeLead?.customerPhone || meta?.whatsapp_number || meta?.phone || '';
+  const email = activeLead?.email || activeLead?.customerEmail || 'N/A';
+  const residentStateCity = meta?.resident_state || activeLead?.resident_state || activeLead?.city || activeLead?.userCity || 'N/A';
 
-  const leadDisplayId = lead.leadId && /^TTT\d{8}$/i.test(lead.leadId) ? lead.leadId : formatLeadId(lead.id);
+  const packageInterest = meta?.package_interest || activeLead?.package_name || activeLead?.packageName || activeLead?.title || 'N/A';
+  const startDate = meta?.start_date || activeLead?.start_date || activeLead?.checkInDate || activeLead?.arrival_date || 'Flexible / TBD';
+  const endDate = meta?.end_date || activeLead?.end_date || activeLead?.endDate || 'Flexible / TBD';
+  const durationDays = activeLead?.duration_days ?? activeLead?.durationDays ?? meta?.duration_days ?? (activeLead?.duration ? parseInt(activeLead.duration) : null);
+  const duration = durationDays ? `${durationDays} Days` : (meta?.duration || activeLead?.duration || 'Standard Itinerary');
+  const budget = activeLead?.budget || meta?.budget || 'Not specified';
+  const adults = meta?.adults ?? activeLead?.adults ?? 1;
+  const children = meta?.children ?? activeLead?.children ?? 0;
+  const pickupCity = meta?.pickup_city || activeLead?.pickup_city || activeLead?.pickupLocation || 'N/A';
+  const dropCity = meta?.drop_city || activeLead?.drop_city || activeLead?.dropoffLocation || 'Same as pickup';
+
+  const accommodationTier = meta?.accommodation_tier || activeLead?.accommodation_tier || activeLead?.accommodationTier || activeLead?.plan || activeLead?.selectedPlan || '3 Star Premium';
+  const specialRequests = meta?.special_requests || activeLead?.special_requests || activeLead?.specialRequests || activeLead?.message || 'No special requests specified.';
+
+  const leadDisplayId = activeLead?.leadId && /^TTT\d{8}$/i.test(activeLead.leadId) ? activeLead.leadId : (activeLead?.id ? formatLeadId(activeLead.id) : 'N/A');
 
   const handleOpenWhatsApp = () => {
     const rawPhone = whatsappNum.replace(/\D/g, '');
@@ -108,6 +115,14 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Locked Lead Notice for Staff */}
+          {isLockedForStaff && (
+            <div className="mt-4 p-3 rounded-2xl bg-amber-950/40 border border-amber-500/30 text-amber-200 text-xs font-semibold flex items-center gap-2.5">
+              <Lock className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>This lead is Closed and permanently locked for staff. You cannot change a closed lead.</span>
+            </div>
+          )}
 
           <div className="space-y-5 mt-6 text-sm">
             {/* 1. Contact Details */}
@@ -259,10 +274,18 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                   <button
                     type="button"
                     onClick={() => {
+                      if (isLockedForStaff) {
+                        alert('You cannot change a closed lead.');
+                        return;
+                      }
                       onClose();
-                      onEditLead(currentLead);
+                      onEditLead(activeLead);
                     }}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-400 hover:text-orange-300 hover:underline cursor-pointer"
+                    className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+                      isLockedForStaff
+                        ? 'text-slate-500 cursor-not-allowed opacity-60'
+                        : 'text-orange-400 hover:text-orange-300 hover:underline cursor-pointer'
+                    }`}
                   >
                     <Edit3 className="w-3 h-3" />
                     <span>Full Editor</span>
@@ -274,25 +297,25 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Current Status:</span>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
-                    CRM_STATUS_CONFIG[currentLead.status as InquiryStatus]?.badgeClass ||
+                    CRM_STATUS_CONFIG[activeLead.status as InquiryStatus]?.badgeClass ||
                     'bg-slate-800 text-slate-300 border-slate-700'
                   }`}>
-                    {CRM_STATUS_CONFIG[currentLead.status as InquiryStatus]?.label || currentLead.status || 'NEW'}
+                    {CRM_STATUS_CONFIG[activeLead.status as InquiryStatus]?.label || activeLead.status || 'NEW'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Assigned Representative:</span>
                   <span className="text-slate-200 font-semibold">
-                    {currentLead.assignedStaffName || currentLead.assigned_staff_name || 'Unassigned (General Pool)'}
+                    {activeLead.assignedStaffName || activeLead.assigned_staff_name || 'Unassigned (General Pool)'}
                   </span>
                 </div>
 
                 {/* Reminder Alert Badge & Management */}
                 <div className="pt-2 border-t border-slate-700/50 space-y-2">
                   {(() => {
-                    const reminderTs = currentLead.reminder_at || currentLead.reminderAt || meta.reminder_at;
+                    const reminderTs = activeLead.reminder_at || activeLead.reminderAt || meta.reminder_at;
                     const remStatus = reminderTs ? getLeadReminderStatus(reminderTs) : null;
-                    const remNote = currentLead.reminder_note || currentLead.reminderNote || meta.reminder_note;
+                    const remNote = activeLead.reminder_note || activeLead.reminderNote || meta.reminder_note;
 
                     return (
                       <div className="space-y-2">
@@ -333,8 +356,18 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                           <div className="pt-1 flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setIsEditingReminder(true)}
-                              className="px-3 py-1.5 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-600/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                              onClick={() => {
+                                if (isLockedForStaff) {
+                                  alert('You cannot change a closed lead.');
+                                  return;
+                                }
+                                setIsEditingReminder(true);
+                              }}
+                              className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                isLockedForStaff
+                                  ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed opacity-60'
+                                  : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border-amber-600/40 cursor-pointer'
+                              }`}
                             >
                               <Bell className="w-3.5 h-3.5" />
                               <span>{reminderTs ? 'Reschedule / Edit Reminder' : '+ Set Follow-up Reminder'}</span>
@@ -342,8 +375,12 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                             {reminderTs && (
                               <button
                                 type="button"
-                                disabled={savingReminder}
+                                disabled={savingReminder || isLockedForStaff}
                                 onClick={async () => {
+                                  if (isLockedForStaff) {
+                                    alert('You cannot change a closed lead.');
+                                    return;
+                                  }
                                   try {
                                     setSavingReminder(true);
                                     const updates = {
@@ -353,9 +390,9 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                                       reminderNote: null,
                                     };
                                     if (onUpdateLead) {
-                                      await onUpdateLead(currentLead.id, updates);
+                                      await onUpdateLead(activeLead.id, updates);
                                     } else {
-                                      await updateLeadOrInquiryStatus({ id: currentLead.id, ...updates });
+                                      await updateLeadOrInquiryStatus({ id: activeLead.id, ...updates });
                                     }
                                     setCurrentLead((prev: any) => ({
                                       ...prev,
@@ -375,7 +412,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                                     setSavingReminder(false);
                                   }
                                 }}
-                                className="px-2.5 py-1.5 rounded-lg text-[11px] text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-900/60 font-semibold transition-all cursor-pointer"
+                                className="px-2.5 py-1.5 rounded-lg text-[11px] text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-900/60 font-semibold transition-all cursor-pointer disabled:opacity-40"
                               >
                                 Clear
                               </button>
@@ -447,8 +484,12 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                               </button>
                               <button
                                 type="button"
-                                disabled={savingReminder}
+                                disabled={savingReminder || isLockedForStaff}
                                 onClick={async () => {
+                                  if (isLockedForStaff) {
+                                    alert('You cannot change a closed lead.');
+                                    return;
+                                  }
                                   try {
                                     setSavingReminder(true);
                                     const isoTime = reminderAtInput ? new Date(reminderAtInput).toISOString() : null;
@@ -460,9 +501,9 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                                       reminderNote: noteVal,
                                     };
                                     if (onUpdateLead) {
-                                      await onUpdateLead(currentLead.id, updates);
+                                      await onUpdateLead(activeLead.id, updates);
                                     } else {
-                                      await updateLeadOrInquiryStatus({ id: currentLead.id, ...updates });
+                                      await updateLeadOrInquiryStatus({ id: activeLead.id, ...updates });
                                     }
                                     setCurrentLead((prev: any) => ({
                                       ...prev,
@@ -505,10 +546,18 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
               <button
                 type="button"
                 onClick={() => {
+                  if (isLockedForStaff) {
+                    alert('You cannot change a closed lead.');
+                    return;
+                  }
                   onClose();
-                  onEditLead(currentLead);
+                  onEditLead(activeLead);
                 }}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
+                  isLockedForStaff
+                    ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed opacity-60'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer'
+                }`}
               >
                 <Edit3 className="w-3.5 h-3.5 text-orange-400" />
                 <span>Edit Full Lead</span>
