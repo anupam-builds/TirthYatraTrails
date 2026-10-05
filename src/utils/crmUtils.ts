@@ -23,6 +23,30 @@ export const CRM_STATUS_CONFIG: Record<InquiryStatus, StatusConfig> = {
     badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800',
     dotClass: 'bg-blue-500',
   },
+  FOLLOW_UP_REQUIRED: {
+    key: 'FOLLOW_UP_REQUIRED',
+    label: 'Follow-up Required',
+    badgeClass: 'bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800',
+    dotClass: 'bg-rose-500',
+  },
+  'Follow-up Required': {
+    key: 'FOLLOW_UP_REQUIRED',
+    label: 'Follow-up Required',
+    badgeClass: 'bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800',
+    dotClass: 'bg-rose-500',
+  },
+  NEGOTIATION: {
+    key: 'NEGOTIATION',
+    label: 'Negotiation',
+    badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-300 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800',
+    dotClass: 'bg-indigo-500',
+  },
+  Negotiation: {
+    key: 'NEGOTIATION',
+    label: 'Negotiation',
+    badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-300 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800',
+    dotClass: 'bg-indigo-500',
+  },
   CONFIRMED: {
     key: 'CONFIRMED',
     label: 'Confirmed',
@@ -81,22 +105,26 @@ export const CRM_STATUS_CONFIG: Record<InquiryStatus, StatusConfig> = {
 };
 
 /**
- * Admin status list matching the Admin Dashboard: NEW, CONTACTED, CONFIRMED, TRIP, CLOSED (5 options)
+ * Admin status list: NEW, CONTACTED, FOLLOW_UP_REQUIRED, NEGOTIATION, CONFIRMED, TRIP, CLOSED
  */
 export const ADMIN_CRM_STATUS_LIST: InquiryStatus[] = [
   'NEW',
   'CONTACTED',
+  'FOLLOW_UP_REQUIRED',
+  'NEGOTIATION',
   'CONFIRMED',
   'TRIP',
   'CLOSED',
 ];
 
 /**
- * Staff status list: NEW, CONTACTED, CONFIRMED, TRIP, CLOSED (5 synchronized options)
+ * Staff status list: NEW, CONTACTED, FOLLOW_UP_REQUIRED, NEGOTIATION, CONFIRMED, TRIP, CLOSED
  */
 export const STAFF_CRM_STATUS_LIST: InquiryStatus[] = [
   'NEW',
   'CONTACTED',
+  'FOLLOW_UP_REQUIRED',
+  'NEGOTIATION',
   'CONFIRMED',
   'TRIP',
   'CLOSED',
@@ -109,10 +137,12 @@ export const CRM_STATUS_LIST: InquiryStatus[] = ADMIN_CRM_STATUS_LIST;
  */
 export function normalizeInquiryStatus(status?: string): InquiryStatus {
   if (!status) return 'NEW';
-  const s = status.toUpperCase().trim();
+  const s = status.toUpperCase().trim().replace(/[\s-]+/g, '_');
   if (s === 'TRIP') return 'TRIP';
   if (s === 'CONFIRMED' || s === 'WON') return 'CONFIRMED';
   if (s === 'CLOSED' || s === 'LOST') return 'CLOSED';
+  if (s === 'FOLLOW_UP_REQUIRED' || s === 'FOLLOW_UP' || s === 'FOLLOWUP_REQUIRED' || s === 'FOLLOWUP') return 'FOLLOW_UP_REQUIRED';
+  if (s === 'NEGOTIATION' || s === 'NEGOTIATING') return 'NEGOTIATION';
   if (s === 'CONTACTED' || s === 'IN_PROGRESS' || s === 'QUOTATION_SENT') return 'CONTACTED';
   return 'NEW';
 }

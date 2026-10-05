@@ -2275,8 +2275,8 @@ export const api = {
   async permanentlyDeleteInquiry(id: string) { return localStore.permanentlyDeleteInquiry(id); },
   async emptyTrash() { return localStore.emptyTrash(); },
 
-  async updateInquiryStatusByStaff(id: string, status: 'NEW' | 'CONTACTED' | 'CLOSED', staff: { id: string; name: string }) {
-    return this.updateLeadStatus(id, status, staff.id, staff.name);
+  async updateInquiryStatusByStaff(id: string, status: InquiryStatus | string, staff: { id: string; name: string }) {
+    return this.updateLeadStatus(id, status as any, staff.id, staff.name);
   },
 
   async adminUnlockInquiry(id: string, newStatus: Inquiry['status'] = 'CONTACTED') {

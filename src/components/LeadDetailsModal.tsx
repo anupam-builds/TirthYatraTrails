@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle, Bell, Clock, Edit3, Check, RotateCcw } from 'lucide-react';
 import { formatLeadId } from '../utils/formatters.js';
-import { parseAccommodationTier, getLeadReminderStatus } from '../utils/crmUtils.js';
+import { parseAccommodationTier, getLeadReminderStatus, CRM_STATUS_CONFIG } from '../utils/crmUtils.js';
 import { updateLeadOrInquiryStatus } from '../services/api.js';
+import { InquiryStatus } from '../types.js';
 
 function toDatetimeLocal(isoStr?: string): string {
   if (!isoStr) return '';
@@ -273,17 +274,10 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Current Status:</span>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
-                    (currentLead.status === 'TRIP' || currentLead.status === 'Trip')
-                      ? 'bg-purple-950/90 text-purple-300 border-purple-800'
-                      : currentLead.status === 'CONFIRMED'
-                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-800'
-                      : currentLead.status === 'CONTACTED'
-                      ? 'bg-blue-950/90 text-blue-300 border-blue-800'
-                      : currentLead.status === 'CLOSED'
-                      ? 'bg-slate-800 text-slate-300 border-slate-700'
-                      : 'bg-amber-950/90 text-amber-300 border-amber-800'
+                    CRM_STATUS_CONFIG[currentLead.status as InquiryStatus]?.badgeClass ||
+                    'bg-slate-800 text-slate-300 border-slate-700'
                   }`}>
-                    {currentLead.status || 'NEW'}
+                    {CRM_STATUS_CONFIG[currentLead.status as InquiryStatus]?.label || currentLead.status || 'NEW'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

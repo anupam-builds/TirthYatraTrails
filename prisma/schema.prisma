@@ -17,7 +17,10 @@ enum Role {
 enum InquiryStatus {
   NEW
   CONTACTED
+  FOLLOW_UP_REQUIRED
+  NEGOTIATION
   CONFIRMED
+  TRIP
   CLOSED
 }
 

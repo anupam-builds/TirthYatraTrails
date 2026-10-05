@@ -239,16 +239,20 @@ export interface TravelStory {
 
 export type InquiryStatus =
   | 'NEW'
-  | 'IN_PROGRESS'
-  | 'QUOTATION_SENT'
-  | 'ONLY_QUERY'
   | 'CONTACTED'
+  | 'FOLLOW_UP_REQUIRED'
+  | 'Follow-up Required'
+  | 'NEGOTIATION'
+  | 'Negotiation'
   | 'CONFIRMED'
   | 'TRIP'
   | 'Trip'
+  | 'CLOSED'
+  | 'IN_PROGRESS'
+  | 'QUOTATION_SENT'
+  | 'ONLY_QUERY'
   | 'WON'
-  | 'LOST'
-  | 'CLOSED';
+  | 'LOST';
 
 export interface Inquiry {
   id: string;

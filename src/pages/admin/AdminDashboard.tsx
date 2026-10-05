@@ -3,9 +3,9 @@ import { AdminLayout } from './AdminLayout.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { ADMIN_ROUTES } from '../../constants/routes.js';
 import { api, updateLeadOrInquiryStatus } from '../../services/api.js';
-import { City, Hotel, Package, Inquiry } from '../../types.js';
+import { City, Hotel, Package, Inquiry, InquiryStatus } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
-import { generateCustomerWhatsAppLink } from '../../utils/crmUtils.js';
+import { generateCustomerWhatsAppLink, ADMIN_CRM_STATUS_LIST, CRM_STATUS_CONFIG } from '../../utils/crmUtils.js';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import { BaseSelect } from '../../components/FormField.js';
 import {
@@ -482,19 +482,15 @@ export const AdminDashboard: React.FC = () => {
                           value={inq.status}
                           onChange={(e) => handleUpdateStatus(inq.id, e.target.value as any)}
                           className={`text-[10px] font-bold px-2 py-1 rounded-lg border focus:outline-none cursor-pointer ${
-                            inq.status === 'NEW'
-                              ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800'
-                              : inq.status === 'CONTACTED'
-                              ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800'
-                              : inq.status === 'CONFIRMED'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800'
-                              : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                            CRM_STATUS_CONFIG[inq.status as InquiryStatus]?.badgeClass ||
+                            'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                           }`}
                         >
-                          <option value="NEW">NEW</option>
-                          <option value="CONTACTED">CONTACTED</option>
-                          <option value="CONFIRMED">CONFIRMED</option>
-                          <option value="CLOSED">CLOSED</option>
+                          {ADMIN_CRM_STATUS_LIST.map((st) => (
+                            <option key={st} value={st}>
+                              {CRM_STATUS_CONFIG[st]?.label || st}
+                            </option>
+                          ))}
                         </BaseSelect>
                         {(inq.assignedStaffName || (inq as any).assigned_staff_name) && (
                           <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium truncate">

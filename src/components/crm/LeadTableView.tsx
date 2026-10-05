@@ -233,7 +233,16 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       const isTripFilter = statusFilter === 'TRIP' || statusFilter === 'Trip';
       const isTripInq = inq.status === 'TRIP' || inq.status === 'Trip';
       if (isTripFilter && !isTripInq) return false;
-      if (!isTripFilter && inq.status !== statusFilter) return false;
+
+      const isFollowUpFilter = statusFilter === 'FOLLOW_UP_REQUIRED' || statusFilter === 'Follow-up Required';
+      const isFollowUpInq = inq.status === 'FOLLOW_UP_REQUIRED' || inq.status === 'Follow-up Required';
+      if (isFollowUpFilter && !isFollowUpInq) return false;
+
+      const isNegFilter = statusFilter === 'NEGOTIATION' || statusFilter === 'Negotiation';
+      const isNegInq = inq.status === 'NEGOTIATION' || inq.status === 'Negotiation';
+      if (isNegFilter && !isNegInq) return false;
+
+      if (!isTripFilter && !isFollowUpFilter && !isNegFilter && inq.status !== statusFilter) return false;
     }
 
     // Staff filter (Applicable only in Admin mode)
@@ -529,9 +538,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
             All Leads ({totalCount})
           </button>
           {statusOptions.map((st) => {
-            const count = baseInquiries.filter((i) => i.status === st).length;
+            const count = baseInquiries.filter((i) => {
+              if (st === 'TRIP') return i.status === 'TRIP' || i.status === 'Trip';
+              if (st === 'FOLLOW_UP_REQUIRED') return i.status === 'FOLLOW_UP_REQUIRED' || i.status === 'Follow-up Required';
+              if (st === 'NEGOTIATION') return i.status === 'NEGOTIATION' || i.status === 'Negotiation';
+              return i.status === st;
+            }).length;
             const cfg = CRM_STATUS_CONFIG[st];
-            const isActive = statusFilter === st;
+            const isActive =
+              statusFilter === st ||
+              (st === 'FOLLOW_UP_REQUIRED' && statusFilter === 'Follow-up Required') ||
+              (st === 'NEGOTIATION' && statusFilter === 'Negotiation') ||
+              (st === 'TRIP' && statusFilter === 'Trip');
             return (
               <button
                 key={st}

@@ -1231,8 +1231,20 @@ class DatabaseStore {
       throw new Error('This inquiry is permanently locked. Only an Administrator can reopen closed leads.');
     }
 
-    if (status !== 'NEW' && status !== 'CONTACTED' && status !== 'CLOSED') {
-      throw new Error('Staff members can only set status to NEW, CONTACTED, or CLOSED.');
+    const validStaffStatuses = [
+      'NEW',
+      'CONTACTED',
+      'FOLLOW_UP_REQUIRED',
+      'Follow-up Required',
+      'NEGOTIATION',
+      'Negotiation',
+      'CONFIRMED',
+      'TRIP',
+      'Trip',
+      'CLOSED',
+    ];
+    if (!validStaffStatuses.includes(status as string)) {
+      throw new Error('Staff members can only set valid CRM status options.');
     }
 
     inq.status = status;
