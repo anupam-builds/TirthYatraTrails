@@ -717,14 +717,16 @@ export const localStore = {
     const validStaffStatuses = [
       'NEW',
       'CONTACTED',
-      'FOLLOW_UP_REQUIRED',
-      'Follow-up Required',
-      'NEGOTIATION',
-      'Negotiation',
+      'CANCELLED',
+      'Cancelled',
+      'POSTPONED',
+      'Postponed',
       'CONFIRMED',
       'TRIP',
       'Trip',
       'CLOSED',
+      'FOLLOW_UP_REQUIRED',
+      'NEGOTIATION',
     ];
     if (!validStaffStatuses.includes(status as string)) {
       throw new Error('Staff members can only set valid CRM status options.');

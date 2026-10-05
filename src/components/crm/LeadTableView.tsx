@@ -234,6 +234,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       const isTripInq = inq.status === 'TRIP' || inq.status === 'Trip';
       if (isTripFilter && !isTripInq) return false;
 
+      const isCancelledFilter = statusFilter === 'CANCELLED' || statusFilter === 'Cancelled';
+      const isCancelledInq = inq.status === 'CANCELLED' || inq.status === 'Cancelled';
+      if (isCancelledFilter && !isCancelledInq) return false;
+
+      const isPostponedFilter = statusFilter === 'POSTPONED' || statusFilter === 'Postponed';
+      const isPostponedInq = inq.status === 'POSTPONED' || inq.status === 'Postponed';
+      if (isPostponedFilter && !isPostponedInq) return false;
+
       const isFollowUpFilter = statusFilter === 'FOLLOW_UP_REQUIRED' || statusFilter === 'Follow-up Required';
       const isFollowUpInq = inq.status === 'FOLLOW_UP_REQUIRED' || inq.status === 'Follow-up Required';
       if (isFollowUpFilter && !isFollowUpInq) return false;
@@ -242,7 +250,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       const isNegInq = inq.status === 'NEGOTIATION' || inq.status === 'Negotiation';
       if (isNegFilter && !isNegInq) return false;
 
-      if (!isTripFilter && !isFollowUpFilter && !isNegFilter && inq.status !== statusFilter) return false;
+      if (!isTripFilter && !isCancelledFilter && !isPostponedFilter && !isFollowUpFilter && !isNegFilter && inq.status !== statusFilter) return false;
     }
 
     // Staff filter (Applicable only in Admin mode)
@@ -540,6 +548,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           {statusOptions.map((st) => {
             const count = baseInquiries.filter((i) => {
               if (st === 'TRIP') return i.status === 'TRIP' || i.status === 'Trip';
+              if (st === 'CANCELLED') return i.status === 'CANCELLED' || i.status === 'Cancelled';
+              if (st === 'POSTPONED') return i.status === 'POSTPONED' || i.status === 'Postponed';
               if (st === 'FOLLOW_UP_REQUIRED') return i.status === 'FOLLOW_UP_REQUIRED' || i.status === 'Follow-up Required';
               if (st === 'NEGOTIATION') return i.status === 'NEGOTIATION' || i.status === 'Negotiation';
               return i.status === st;
@@ -547,6 +557,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
             const cfg = CRM_STATUS_CONFIG[st];
             const isActive =
               statusFilter === st ||
+              (st === 'CANCELLED' && statusFilter === 'Cancelled') ||
+              (st === 'POSTPONED' && statusFilter === 'Postponed') ||
               (st === 'FOLLOW_UP_REQUIRED' && statusFilter === 'Follow-up Required') ||
               (st === 'NEGOTIATION' && statusFilter === 'Negotiation') ||
               (st === 'TRIP' && statusFilter === 'Trip');
@@ -788,15 +800,25 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || 'No phone'}
                               </span>
                               {hasPhone && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenWhatsApp(inq)}
-                                  title={`Chat with ${inq.customerName || inq.fullName} on WhatsApp`}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
-                                >
-                                  <MessageCircle className="w-3 h-3" />
-                                  <span>WhatsApp</span>
-                                </button>
+                                isStaffMode && isLocked ? (
+                                  <span
+                                    title="WhatsApp messaging is locked for staff on closed leads"
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 text-[10px] font-bold opacity-50 cursor-not-allowed select-none shrink-0"
+                                  >
+                                    <Lock className="w-2.5 h-2.5 text-rose-500" />
+                                    <span>WhatsApp</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenWhatsApp(inq)}
+                                    title={`Chat with ${inq.customerName || inq.fullName} on WhatsApp`}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+                                  >
+                                    <MessageCircle className="w-3 h-3" />
+                                    <span>WhatsApp</span>
+                                  </button>
+                                )
                               )}
                             </div>
                             {inq.customerEmail && (
@@ -997,63 +1019,107 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             </button>
 
                             {/* Quick Reminder Action Button */}
-                            <button
-                              type="button"
-                              onClick={() => setSelectedLeadForReminder({ ...inq, leadId: seqLeadId })}
-                              title={
-                                inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
-                                  ? `Reminder Scheduled: ${getLeadReminderStatus(inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at).label} (Click to manage)`
-                                  : 'Schedule Follow-up Reminder'
-                              }
-                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-2xs'
-                                  : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-transparent hover:border-amber-200 dark:hover:border-amber-900'
-                              }`}
-                            >
-                              <Bell className="w-4 h-4" />
-                            </button>
+                            {isStaffMode && isLocked ? (
+                              <button
+                                type="button"
+                                disabled={true}
+                                title="Reminders are locked for staff on closed leads"
+                                className="p-1.5 rounded-lg border border-transparent text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed select-none"
+                              >
+                                <Bell className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedLeadForReminder({ ...inq, leadId: seqLeadId })}
+                                title={
+                                  inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
+                                    ? `Reminder Scheduled: ${getLeadReminderStatus(inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at).label} (Click to manage)`
+                                    : 'Schedule Follow-up Reminder'
+                                }
+                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                  inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-2xs'
+                                    : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-transparent hover:border-amber-200 dark:hover:border-amber-900'
+                                }`}
+                              >
+                                <Bell className="w-4 h-4" />
+                              </button>
+                            )}
 
                             {/* Quick Edit modal */}
-                            <button
-                              onClick={() => {
-                                const editLead = { ...inq, leadId: seqLeadId };
-                                if (onEditInquiry) onEditInquiry(editLead);
-                                else if (onEdit) onEdit(editLead);
-                              }}
-                              title="Edit Lead Details"
-                              className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
+                            {isStaffMode && isLocked ? (
+                              <button
+                                type="button"
+                                disabled={true}
+                                title="Editing is locked for staff on closed leads"
+                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed select-none"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  const editLead = { ...inq, leadId: seqLeadId };
+                                  if (onEditInquiry) onEditInquiry(editLead);
+                                  else if (onEdit) onEdit(editLead);
+                                }}
+                                title="Edit Lead Details"
+                                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            )}
 
                             {/* WhatsApp Direct */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenWhatsApp(inq)}
-                              title={`Direct WhatsApp chat with ${inq.customerName || inq.fullName}`}
-                              className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
-                            >
-                              <MessageCircle className="w-4 h-4" />
-                            </button>
+                            {isStaffMode && isLocked ? (
+                              <button
+                                type="button"
+                                disabled={true}
+                                title="WhatsApp messaging is locked for staff on closed leads"
+                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed select-none"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenWhatsApp(inq)}
+                                title={`Direct WhatsApp chat with ${inq.customerName || inq.fullName}`}
+                                className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                            )}
 
                             {/* Notes Accordion Toggle */}
-                            <button
-                              onClick={() => toggleNotes(inq.id)}
-                              title="Staff Notes & Logs"
-                              className={`p-1.5 rounded-lg transition-colors relative ${
-                                isNotesExpanded
-                                  ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
-                                  : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
-                              }`}
-                            >
-                              <MessageSquare className="w-4 h-4" />
-                              {notesCount > 0 && (
-                                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-600 text-white text-[9px] font-black flex items-center justify-center">
-                                  {notesCount}
-                                </span>
-                              )}
-                            </button>
+                            {isStaffMode && isLocked ? (
+                              <button
+                                type="button"
+                                disabled={true}
+                                title="Notes are locked for staff on closed leads"
+                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed select-none"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => toggleNotes(inq.id)}
+                                title="Staff Notes & Logs"
+                                className={`p-1.5 rounded-lg transition-colors relative ${
+                                  isNotesExpanded
+                                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
+                                    : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                                {notesCount > 0 && (
+                                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-600 text-white text-[9px] font-black flex items-center justify-center">
+                                    {notesCount}
+                                  </span>
+                                )}
+                              </button>
+                            )}
 
                             {/* Admin Unlock if locked */}
                             {isAdmin && inq.isLockedForStaff && onUnlockInquiry && (
@@ -1118,34 +1184,41 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <p className="text-xs text-slate-400 italic">No notes logged yet.</p>
                               )}
 
-                              {onAddNote && (
-                                <div className="flex items-center gap-2">
-                                  <BaseInput
-                                    id={`lead-quick-note-input-${inq.id}`}
-                                    name={`lead-quick-note-input-${inq.id}`}
-                                    type="text"
-                                    placeholder="Add quick follow-up note (e.g. Called devotee; sent customized quotation)..."
-                                    value={noteInputs[inq.id] || ''}
-                                    onChange={(e) =>
-                                      setNoteInputs({ ...noteInputs, [inq.id]: e.target.value })
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        handleSendNote(inq.id);
-                                      }
-                                    }}
-                                    className="flex-1 px-3 py-2 bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-900 dark:text-white"
-                                  />
-                                  <button
-                                    onClick={() => handleSendNote(inq.id)}
-                                    disabled={submittingNote[inq.id] || !noteInputs[inq.id]?.trim()}
-                                    className="px-3.5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0 cursor-pointer"
-                                  >
-                                    <Send className="w-3 h-3" />
-                                    <span>Log Note</span>
-                                  </button>
+                              {isStaffMode && isLocked ? (
+                                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs font-semibold flex items-center gap-2">
+                                  <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                  <span>This lead is closed and locked. Modifying or logging new notes is disabled for staff.</span>
                                 </div>
+                              ) : (
+                                onAddNote && (
+                                  <div className="flex items-center gap-2">
+                                    <BaseInput
+                                      id={`lead-quick-note-input-${inq.id}`}
+                                      name={`lead-quick-note-input-${inq.id}`}
+                                      type="text"
+                                      placeholder="Add quick follow-up note (e.g. Called devotee; sent customized quotation)..."
+                                      value={noteInputs[inq.id] || ''}
+                                      onChange={(e) =>
+                                        setNoteInputs({ ...noteInputs, [inq.id]: e.target.value })
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          handleSendNote(inq.id);
+                                        }
+                                      }}
+                                      className="flex-1 px-3 py-2 bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-900 dark:text-white"
+                                    />
+                                    <button
+                                      onClick={() => handleSendNote(inq.id)}
+                                      disabled={submittingNote[inq.id] || !noteInputs[inq.id]?.trim()}
+                                      className="px-3.5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0 cursor-pointer"
+                                    >
+                                      <Send className="w-3 h-3" />
+                                      <span>Log Note</span>
+                                    </button>
+                                  </div>
+                                )
                               )}
                             </div>
                           </td>

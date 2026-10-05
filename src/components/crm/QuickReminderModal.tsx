@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Inquiry } from '../../types.js';
 import { getLeadId, formatLeadId, getLeadReminderStatus, generateCustomerWhatsAppLink } from '../../utils/crmUtils.js';
-import { Bell, Clock, Calendar, MessageCircle, X, Check, Trash2, Sparkles } from 'lucide-react';
+import { Bell, Clock, Calendar, MessageCircle, X, Check, Trash2, Sparkles, Lock } from 'lucide-react';
 
 function toDatetimeLocal(isoStr?: string): string {
   if (!isoStr) return '';
@@ -57,7 +57,10 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
   const currentReminderTs = lead.reminder_at || lead.reminderAt || (lead as any).metadata?.reminder_at;
   const currentStatus = currentReminderTs ? getLeadReminderStatus(currentReminderTs) : null;
 
+  const isLocked = Boolean(isStaffMode && (lead.status === 'CLOSED' || (lead as any).isLockedForStaff));
+
   const handleApplyPreset = (minutes?: number, isTomorrow10AM?: boolean, inDays?: number) => {
+    if (isLocked) return;
     const d = new Date();
     if (isTomorrow10AM) {
       d.setDate(d.getDate() + 1);
@@ -73,6 +76,10 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLocked) {
+      setErrorMsg('This lead is closed and permanently locked for staff. Contact an administrator.');
+      return;
+    }
     if (!reminderAt) {
       setErrorMsg('Please select a reminder date and time.');
       return;
@@ -100,6 +107,10 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
   };
 
   const handleClear = async () => {
+    if (isLocked) {
+      setErrorMsg('This lead is closed and permanently locked for staff. Contact an administrator.');
+      return;
+    }
     try {
       setSaving(true);
       setErrorMsg(null);
@@ -199,6 +210,13 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
             </div>
           )}
 
+          {isLocked && (
+            <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-2">
+              <Lock className="w-4 h-4 text-rose-500 shrink-0" />
+              <span>This lead is closed and permanently locked for staff. Modifying or scheduling reminders is restricted to Administrators.</span>
+            </div>
+          )}
+
           {currentStatus && (
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#071322] border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400">Current Status:</span>
@@ -224,9 +242,10 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
               <input
                 type="datetime-local"
                 required
+                disabled={saving || isLocked}
                 value={reminderAt}
                 onChange={(e) => setReminderAt(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -239,36 +258,41 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
+                disabled={saving || isLocked}
                 onClick={() => handleApplyPreset(15)}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 +15 Mins
               </button>
               <button
                 type="button"
+                disabled={saving || isLocked}
                 onClick={() => handleApplyPreset(60)}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 +1 Hour
               </button>
               <button
                 type="button"
+                disabled={saving || isLocked}
                 onClick={() => handleApplyPreset(240)}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 +4 Hours
               </button>
               <button
                 type="button"
+                disabled={saving || isLocked}
                 onClick={() => handleApplyPreset(undefined, true)}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Tomorrow 10 AM
               </button>
               <button
                 type="button"
+                disabled={saving || isLocked}
                 onClick={() => handleApplyPreset(undefined, false, 2)}
-                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 In 2 Days
               </button>
@@ -282,10 +306,11 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
             </label>
             <input
               type="text"
+              disabled={saving || isLocked}
               placeholder="e.g. Call regarding VIP Darshan pass, Share payment link"
               value={reminderNote}
               onChange={(e) => setReminderNote(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -295,9 +320,9 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
               {currentReminderTs && (
                 <button
                   type="button"
-                  disabled={saving}
+                  disabled={saving || isLocked}
                   onClick={handleClear}
-                  className="px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Clear Reminder</span>
@@ -315,8 +340,8 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={saving}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                disabled={saving || isLocked}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-4 h-4" />
                 <span>{saving ? 'Saving...' : 'Save Reminder'}</span>

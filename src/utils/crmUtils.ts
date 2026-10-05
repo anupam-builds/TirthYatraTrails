@@ -23,6 +23,30 @@ export const CRM_STATUS_CONFIG: Record<InquiryStatus, StatusConfig> = {
     badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800',
     dotClass: 'bg-blue-500',
   },
+  CANCELLED: {
+    key: 'CANCELLED',
+    label: 'Cancelled',
+    badgeClass: 'bg-red-50 text-red-800 border-red-300 dark:bg-red-950/80 dark:text-red-300 dark:border-red-800',
+    dotClass: 'bg-red-500',
+  },
+  'Cancelled': {
+    key: 'CANCELLED',
+    label: 'Cancelled',
+    badgeClass: 'bg-red-50 text-red-800 border-red-300 dark:bg-red-950/80 dark:text-red-300 dark:border-red-800',
+    dotClass: 'bg-red-500',
+  },
+  POSTPONED: {
+    key: 'POSTPONED',
+    label: 'Postponed',
+    badgeClass: 'bg-orange-50 text-orange-800 border-orange-300 dark:bg-orange-950/80 dark:text-orange-300 dark:border-orange-800',
+    dotClass: 'bg-orange-500',
+  },
+  'Postponed': {
+    key: 'POSTPONED',
+    label: 'Postponed',
+    badgeClass: 'bg-orange-50 text-orange-800 border-orange-300 dark:bg-orange-950/80 dark:text-orange-300 dark:border-orange-800',
+    dotClass: 'bg-orange-500',
+  },
   FOLLOW_UP_REQUIRED: {
     key: 'FOLLOW_UP_REQUIRED',
     label: 'Follow-up Required',
@@ -105,26 +129,26 @@ export const CRM_STATUS_CONFIG: Record<InquiryStatus, StatusConfig> = {
 };
 
 /**
- * Admin status list: NEW, CONTACTED, FOLLOW_UP_REQUIRED, NEGOTIATION, CONFIRMED, TRIP, CLOSED
+ * Admin status list: NEW, CONTACTED, CANCELLED, POSTPONED, CONFIRMED, TRIP, CLOSED
  */
 export const ADMIN_CRM_STATUS_LIST: InquiryStatus[] = [
   'NEW',
   'CONTACTED',
-  'FOLLOW_UP_REQUIRED',
-  'NEGOTIATION',
+  'CANCELLED',
+  'POSTPONED',
   'CONFIRMED',
   'TRIP',
   'CLOSED',
 ];
 
 /**
- * Staff status list: NEW, CONTACTED, FOLLOW_UP_REQUIRED, NEGOTIATION, CONFIRMED, TRIP, CLOSED
+ * Staff status list: NEW, CONTACTED, CANCELLED, POSTPONED, CONFIRMED, TRIP, CLOSED
  */
 export const STAFF_CRM_STATUS_LIST: InquiryStatus[] = [
   'NEW',
   'CONTACTED',
-  'FOLLOW_UP_REQUIRED',
-  'NEGOTIATION',
+  'CANCELLED',
+  'POSTPONED',
   'CONFIRMED',
   'TRIP',
   'CLOSED',
@@ -141,8 +165,10 @@ export function normalizeInquiryStatus(status?: string): InquiryStatus {
   if (s === 'TRIP') return 'TRIP';
   if (s === 'CONFIRMED' || s === 'WON') return 'CONFIRMED';
   if (s === 'CLOSED' || s === 'LOST') return 'CLOSED';
-  if (s === 'FOLLOW_UP_REQUIRED' || s === 'FOLLOW_UP' || s === 'FOLLOWUP_REQUIRED' || s === 'FOLLOWUP') return 'FOLLOW_UP_REQUIRED';
-  if (s === 'NEGOTIATION' || s === 'NEGOTIATING') return 'NEGOTIATION';
+  if (s === 'CANCELLED' || s === 'CANCELED') return 'CANCELLED';
+  if (s === 'POSTPONED' || s === 'POSTPONE') return 'POSTPONED';
+  if (s === 'FOLLOW_UP_REQUIRED' || s === 'FOLLOW_UP') return 'POSTPONED';
+  if (s === 'NEGOTIATION') return 'CONTACTED';
   if (s === 'CONTACTED' || s === 'IN_PROGRESS' || s === 'QUOTATION_SENT') return 'CONTACTED';
   return 'NEW';
 }
