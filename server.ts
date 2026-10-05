@@ -1793,6 +1793,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   next(err);
 });
 
+// Serve public folder assets directly with correct content-types
+app.use(express.static(path.join(process.cwd(), 'public')));
+
 // Vite middleware or static bundle for production
 async function startServer() {
   if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {

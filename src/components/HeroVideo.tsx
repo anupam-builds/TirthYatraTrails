@@ -16,7 +16,8 @@ export interface HeroVideoProps {
   className?: string;
 }
 
-const DEFAULT_POSTER =
+const DEFAULT_POSTER = '/tirthyatratrails.png';
+const FALLBACK_POSTER =
   'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=2070&q=85';
 const DEFAULT_VIDEO = '/videos/lanterns.mp4';
 
@@ -31,6 +32,11 @@ export const HeroVideo: React.FC<HeroVideoProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [activePoster, setActivePoster] = useState(posterUrl || DEFAULT_POSTER);
+
+  useEffect(() => {
+    setActivePoster(posterUrl || DEFAULT_POSTER);
+  }, [posterUrl]);
 
   // Auto-attempt playback with muted loop to respect mobile autoplay policies
   useEffect(() => {
@@ -56,14 +62,19 @@ export const HeroVideo: React.FC<HeroVideoProps> = ({
     <section
       id="hero-video-section"
       className={`w-full relative min-h-[85vh] lg:h-[88vh] lg:min-h-[640px] max-h-[980px] overflow-hidden bg-slate-950 bg-cover bg-center select-none text-white flex items-end pb-12 sm:pb-16 lg:pb-20 ${className}`}
-      style={{ backgroundImage: `url(${posterUrl})`, backgroundPosition: 'center', backgroundSize: 'cover', contentVisibility: 'auto' }}
+      style={{ backgroundImage: `url(${activePoster})`, backgroundPosition: 'center', backgroundSize: 'cover', contentVisibility: 'auto' }}
     >
       {/* LAYER z-0: Video Background & Fallback Poster */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         {/* Static Fallback Poster (Prevents CLS during initial load) */}
         <img
-          src={posterUrl}
-          alt="Sacred Holy Pilgrimage Temple and Himalayan Mountains"
+          src={activePoster}
+          alt="Sacred Holy Pilgrimage Temple and Mountain Landscape"
+          onError={() => {
+            if (activePoster !== FALLBACK_POSTER) {
+              setActivePoster(FALLBACK_POSTER);
+            }
+          }}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
             videoLoaded && !hasError ? 'opacity-0' : 'opacity-100'
           }`}
@@ -80,7 +91,7 @@ export const HeroVideo: React.FC<HeroVideoProps> = ({
             muted
             playsInline
             preload="auto"
-            poster={posterUrl}
+            poster={activePoster}
             onLoadedData={() => setVideoLoaded(true)}
             onError={() => setHasError(true)}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 pointer-events-none ${

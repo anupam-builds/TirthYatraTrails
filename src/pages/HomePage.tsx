@@ -108,7 +108,7 @@ export const HomePage: React.FC = () => {
       {/* A. HERO SECTION - ATMOSPHERIC VIDEO BACKGROUND                   */}
       {/* ================================================================ */}
       <HeroVideo
-        posterUrl="https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=2070&q=85"
+        posterUrl="/tirthyatratrails.png"
         onExploreYatras={() => navigate('/packages')}
         onExploreHotels={() => navigate('/hotels')}
         whatsappPhone={localStorage.getItem('tyt_agency_phone') || '+91 98765 43210'}
