@@ -102,28 +102,74 @@ async function ensureStorageBucket() {
 }
 ensureStorageBucket();
 
-// POST /api/upload: Upload image to Supabase Storage (with fallback to local /uploads/)
-app.post('/api/upload', async (req, res) => {
+// GET /api/upload-signed-url: Generates a signed upload URL for direct client-to-storage uploads
+app.get(['/api/upload-signed-url', '/api/upload-signed-url/'], async (req, res) => {
   try {
-    const { fileData, filename, folder = 'general' } = req.body;
-    if (!fileData || typeof fileData !== 'string') {
+    const filename = (req.query.filename as string) || `img_${Date.now()}.jpg`;
+    const folder = (req.query.folder as string) || 'general';
+    const ext = filename.split('.').pop() || 'jpg';
+    const safeBase = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const storagePath = `${folder}/${safeBase}_${Date.now()}.${ext}`;
+
+    const { data, error } = await supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUploadUrl(storagePath);
+
+    if (error || !data) {
+      return res.status(500).json({ error: error?.message || 'Failed to generate signed upload URL' });
+    }
+
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(storagePath);
+
+    return res.json({
+      success: true,
+      signedUrl: data.signedUrl,
+      token: data.token,
+      path: storagePath,
+      publicUrl: publicUrlData?.publicUrl,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Error generating signed upload URL' });
+  }
+});
+
+// POST /api/upload: Upload image to Supabase Storage (with fallback to local /uploads/)
+app.post(['/api/upload', '/api/upload/'], async (req, res) => {
+  try {
+    const rawData = req.body?.fileData || req.body?.image || req.body?.dataUrl || req.body?.base64;
+    const { filename, folder = 'general' } = req.body || {};
+
+    if (!rawData || typeof rawData !== 'string') {
       return res.status(400).json({ error: 'fileData (Base64 string or Data URL) is required.' });
     }
 
-    // Parse mime type and raw base64
+    // Cleanly parse mime type and base64 body without regex that fails on newlines
     let mimeType = 'image/jpeg';
-    let base64Body = fileData;
-    const match = fileData.match(/^data:([^;]+);base64,(.+)$/);
-    if (match) {
-      mimeType = match[1];
-      base64Body = match[2];
+    let base64Body = rawData.trim();
+
+    if (base64Body.startsWith('data:')) {
+      const commaIndex = base64Body.indexOf(',');
+      if (commaIndex !== -1) {
+        const header = base64Body.substring(0, commaIndex);
+        base64Body = base64Body.substring(commaIndex + 1);
+        const mimeMatch = header.match(/^data:([^;]+)/);
+        if (mimeMatch && mimeMatch[1]) {
+          mimeType = mimeMatch[1].trim();
+        }
+      }
     }
 
-    // Determine extension
+    // Strip any residual whitespace or linebreaks in base64 payload
+    base64Body = base64Body.replace(/\s+/g, '');
+
+    // Determine clean extension
     let ext = 'jpg';
     if (mimeType.includes('png')) ext = 'png';
     else if (mimeType.includes('webp')) ext = 'webp';
     else if (mimeType.includes('gif')) ext = 'gif';
+    else if (mimeType.includes('svg')) ext = 'svg';
 
     const safeBaseName = (filename || `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`)
       .replace(/\.[^/.]+$/, '')
@@ -132,7 +178,11 @@ app.post('/api/upload', async (req, res) => {
     const storagePath = `${folder}/${safeName}`;
     const buffer = Buffer.from(base64Body, 'base64');
 
-    // 1. Attempt upload to Supabase Storage
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: 'Decoded image payload is empty or invalid.' });
+    }
+
+    // 1. Attempt upload to Supabase Storage bucket 'pilgrimage-media'
     try {
       const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
         .from(STORAGE_BUCKET)
@@ -163,17 +213,26 @@ app.post('/api/upload', async (req, res) => {
     }
 
     // 2. Fallback: Save to local public/uploads directory
-    const localFilePath = path.join(uploadsDir, safeName);
-    fs.writeFileSync(localFilePath, buffer);
-    const localUrl = `/uploads/${safeName}`;
+    try {
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const localFilePath = path.join(uploadsDir, safeName);
+      fs.writeFileSync(localFilePath, buffer);
+      const localUrl = `/uploads/${safeName}`;
 
-    return res.json({
-      success: true,
-      url: localUrl,
-      storage: 'local',
-      path: localUrl,
-      size: buffer.length,
-    });
+      return res.json({
+        success: true,
+        url: localUrl,
+        storage: 'local',
+        path: localUrl,
+        size: buffer.length,
+      });
+    } catch (fsErr: any) {
+      console.error('[Upload] Fallback fs write error:', fsErr);
+    }
+
+    return res.status(500).json({ error: 'Failed to upload image to Supabase Storage or local storage.' });
   } catch (err: any) {
     console.error('[Upload] Error processing image upload:', err);
     return res.status(500).json({ error: err.message || 'Failed to process image upload.' });

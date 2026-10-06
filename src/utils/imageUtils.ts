@@ -2,7 +2,7 @@
  * Image processing and optimization utility
  * Converts Files to base64 Data URLs and downscales large images for optimal performance.
  * Integrates directly with Supabase Storage (/api/upload -> pilgrimage-media bucket)
- * to return clean, public CDN URLs and avoid storing large Base64 payloads in PostgreSQL.
+ * and direct signed URL uploads to return clean, public CDN URLs and avoid storing large Base64 payloads in PostgreSQL.
  */
 
 export function fileToDataUrl(file: File): Promise<string> {
@@ -108,15 +108,58 @@ export async function ultraCompressBase64(dataUrl: string): Promise<string> {
 }
 
 /**
+ * Attempts a direct upload to Supabase Storage using a pre-signed upload URL.
+ * Bypasses custom serverless body-size limits completely.
+ */
+export async function uploadDirectToSupabase(file: File, folder: string = 'general'): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/upload-signed-url?filename=${encodeURIComponent(file.name)}&folder=${encodeURIComponent(folder)}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('[DirectUpload] Failed to acquire signed URL:', res.status, errText);
+      return null;
+    }
+    const { signedUrl, publicUrl } = await res.json();
+    if (!signedUrl || !publicUrl) return null;
+
+    const uploadRes = await fetch(signedUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'image/jpeg',
+      },
+      body: file,
+    });
+
+    if (uploadRes.ok) {
+      console.log('[DirectUpload] Successfully uploaded directly to Supabase Storage:', publicUrl);
+      return publicUrl;
+    } else {
+      const uploadErr = await uploadRes.text();
+      console.warn('[DirectUpload] Storage PUT failed:', uploadRes.status, uploadErr);
+    }
+  } catch (err) {
+    console.warn('[DirectUpload] Direct signed upload error:', err);
+  }
+  return null;
+}
+
+/**
  * Uploads an image file to Supabase Storage (with fallback to local /uploads) via /api/upload.
+ * Logs exact server response errors on failure instead of silently falling back.
  * Returns a permanent public URL, avoiding large Base64 payload storage in PostgreSQL.
  */
 export async function uploadImageFile(file: File, folder: string = 'general'): Promise<string> {
+  // 1. First, try direct signed URL upload to Supabase Storage (fastest & bypasses serverless body limits)
+  const directUrl = await uploadDirectToSupabase(file, folder);
+  if (directUrl) {
+    return directUrl;
+  }
+
   try {
-    // 1. Optimize image client-side first so the network upload request is lightweight (< 60KB)
+    // 2. Optimize image client-side first so the network upload request is lean (< 60KB)
     const optimizedBase64 = await processAndOptimizeImage(file, 1200, 0.8);
 
-    // 2. Upload to server endpoint (/api/upload -> Supabase Storage bucket 'pilgrimage-media')
+    // 3. Upload to server endpoint (/api/upload -> Supabase Storage bucket 'pilgrimage-media')
     const response = await fetch('/api/upload', {
       method: 'POST',
       headers: {
@@ -136,10 +179,20 @@ export async function uploadImageFile(file: File, folder: string = 'general'): P
       }
     }
 
-    console.warn('[Upload] /api/upload returned non-OK status, applying ultra-compression fallback');
+    // Capture the exact server response error instead of silently falling back
+    const errText = await response.text();
+    let errorDetail = errText;
+    try {
+      const errObj = JSON.parse(errText);
+      errorDetail = errObj.error || errObj.message || errText;
+    } catch {}
+
+    console.error(`[Upload Error] /api/upload failed with HTTP ${response.status} (${response.statusText}):`, errorDetail);
+    console.warn('[Upload] Applying safe ultra-compression fallback to prevent PostgreSQL timeout.');
     return await ultraCompressBase64(optimizedBase64);
-  } catch (err) {
-    console.warn('[Upload] Failed to upload via /api/upload, applying ultra-compression fallback:', err);
+  } catch (err: any) {
+    console.error('[Upload Error] Network exception during /api/upload request:', err?.message || err);
+    console.warn('[Upload] Applying safe ultra-compression fallback.');
     try {
       const fallbackBase64 = await fileToDataUrl(file);
       return await ultraCompressBase64(fallbackBase64);
@@ -151,7 +204,7 @@ export async function uploadImageFile(file: File, folder: string = 'general'): P
 
 /**
  * Resolves a Data URL to a clean public URL by uploading it to Supabase Storage if it is Base64.
- * If already an HTTP/HTTPS or /uploads/ URL, returns it unchanged.
+ * Logs exact server errors on failure instead of silently falling back.
  * If upload fails, ultra-compresses the data URL to < 20KB so it never triggers PostgreSQL statement timeout (code 57014).
  */
 export async function resolveBase64ToUrl(dataUrlOrUrl: string, folder: string = 'general'): Promise<string> {
@@ -185,8 +238,18 @@ export async function resolveBase64ToUrl(dataUrlOrUrl: string, folder: string = 
         return data.url;
       }
     }
-  } catch (err) {
-    console.warn('[Upload] Could not resolve base64 to public storage URL:', err);
+
+    // Capture the exact server response error
+    const errText = await response.text();
+    let errorDetail = errText;
+    try {
+      const errObj = JSON.parse(errText);
+      errorDetail = errObj.error || errObj.message || errText;
+    } catch {}
+
+    console.error(`[Upload Error] /api/upload rejected resolveBase64ToUrl with HTTP ${response.status} (${response.statusText}):`, errorDetail);
+  } catch (err: any) {
+    console.error('[Upload Error] Exception during resolveBase64ToUrl /api/upload:', err?.message || err);
   }
 
   // Fallback: compress down to an ultra-lean data URL so it never times out PostgreSQL
