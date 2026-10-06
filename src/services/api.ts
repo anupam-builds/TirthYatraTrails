@@ -3204,7 +3204,7 @@ export const api = {
 
     const explicitHeaders = getSupabaseHeaders();
 
-    console.log(`Sending package update payload for ID "${rawId}":`, JSON.stringify(payload, null, 2));
+    console.debug(`Sending package update payload for ID "${rawId}"`);
 
     // 1. Direct PostgREST PATCH with explicit headers
     let patchMatched = false;
@@ -3228,10 +3228,10 @@ export const api = {
           }
           return mapped;
         } else {
-          console.warn(`[Supabase updatePackage] PostgREST PATCH matched 0 rows for "${rawId}". Falling back to upsert.`);
+          console.debug(`[Supabase updatePackage] PostgREST PATCH matched 0 rows for "${rawId}". Falling back to upsert.`);
         }
       } else if (response.status === 404) {
-        console.warn(`[Supabase updatePackage] PostgREST PATCH returned 404 for "${rawId}". Falling back to upsert.`);
+        console.debug(`[Supabase updatePackage] PostgREST PATCH returned 404 for "${rawId}". Falling back to upsert.`);
       } else {
         const errText = await response.text();
         if (isStatementTimeoutError(errText)) {
@@ -3255,7 +3255,7 @@ export const api = {
 
     // 2. Fallback to Upsert/Insert if the package ID does not exist in Supabase yet
     if (!patchMatched) {
-      console.log(`[Supabase updatePackage] Package "${rawId}" not found in database. Performing upsert/insert.`);
+      console.debug(`[Supabase updatePackage] Package "${rawId}" not found in database. Performing upsert/insert.`);
       const upsertPayload = { ...payload, id: rawId };
 
       try {

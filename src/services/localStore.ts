@@ -157,9 +157,21 @@ export const localStore = {
 
   updateCity(id: string, updates: Partial<City>): City {
     const cities = this.getCities();
-    const idx = cities.findIndex((c) => c.id === id || c.name.toLowerCase() === id.toLowerCase());
+    const cleanId = String(id || updates.id || '').trim();
+    const cleanIdLower = cleanId.toLowerCase();
+
+    let idx = cities.findIndex((c) => c.id === cleanId || c.id === id);
     if (idx === -1) {
-      console.warn(`[localStore] City "${id}" not found. Creating new city entry.`);
+      idx = cities.findIndex(
+        (c) =>
+          c.id?.trim().toLowerCase() === cleanIdLower ||
+          c.name?.trim().toLowerCase() === cleanIdLower ||
+          (updates.name && c.name?.trim().toLowerCase() === updates.name.trim().toLowerCase())
+      );
+    }
+
+    if (idx === -1) {
+      console.debug(`[localStore] City "${id}" not found in cache. Creating new city entry.`);
       return this.createCity({ ...updates, id: id || (updates.name ? updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `city-${Date.now()}`) } as City);
     }
     cities[idx] = { ...cities[idx], ...updates };
@@ -409,20 +421,31 @@ export const localStore = {
 
   updatePackage(id: string, updates: Partial<Package>): Package {
     const packages = this.getPackages();
-    let idx = packages.findIndex((p) => p.id === id);
+    const cleanId = String(id || updates.id || '').trim();
+    const cleanIdLower = cleanId.toLowerCase();
 
-    // If not found by ID, attempt lookup by title or updates.id
-    if (idx === -1 && updates.title) {
+    // Refined matching: exact ID, trimmed case-insensitive, updates.id, prefix stripped, or title match
+    let idx = packages.findIndex((p) => p.id === cleanId || p.id === id);
+    if (idx === -1) {
       idx = packages.findIndex(
-        (p) => p.title?.toLowerCase().trim() === updates.title!.toLowerCase().trim()
+        (p) =>
+          p.id?.trim().toLowerCase() === cleanIdLower ||
+          (updates.id && p.id === String(updates.id).trim()) ||
+          p.id?.replace(/^pkg-/, '') === cleanId.replace(/^pkg-/, '')
+      );
+    }
+    if (idx === -1 && updates.title) {
+      const titleLower = updates.title.trim().toLowerCase();
+      idx = packages.findIndex(
+        (p) => p.title?.trim().toLowerCase() === titleLower
       );
     }
 
     if (idx === -1) {
-      console.warn(`[localStore] Package ID "${id}" not found. Upserting package into local inventory.`);
-      const cleanId = String(id && !id.startsWith('temp-') && !id.startsWith('new-') ? id : (updates.id || `pkg-${Date.now()}`));
+      console.debug(`[localStore] Package ID "${id}" not found in cache. Upserting package into local inventory.`);
+      const safeId = String(id && !id.startsWith('temp-') && !id.startsWith('new-') ? id : (updates.id || `pkg-${Date.now()}`));
       const newPkg: Package = {
-        id: cleanId,
+        id: safeId,
         title: updates.title || 'Pilgrimage Package',
         duration: updates.duration || '3 Days / 2 Nights',
         location: updates.location || 'Ayodhya, Uttar Pradesh',
