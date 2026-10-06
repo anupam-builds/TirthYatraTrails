@@ -3,7 +3,7 @@ import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, hand
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
-import { resolveBase64ToUrl, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
+import { resolveBase64ToUrl, uploadImageFile, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
 
 export function isStatementTimeoutError(errOrText: any): boolean {
   if (!errOrText) return false;
@@ -2610,7 +2610,12 @@ export const api = {
     return true;
   },
 
-  async uploadImage(base64OrDataUrl: string) { return base64OrDataUrl; },
+  async uploadImage(fileOrDataUrl: File | string, folder: string = 'packages'): Promise<string> {
+    if (typeof fileOrDataUrl === 'string') {
+      return await resolveBase64ToUrl(fileOrDataUrl, folder);
+    }
+    return await uploadImageFile(fileOrDataUrl, folder);
+  },
 
   // Admin Hotels/Packages/Cities/Reviews with guaranteed snake_case mapping and explicit REST header fallback
   async createHotel(hotel: Partial<Hotel>): Promise<Hotel> {
@@ -3067,9 +3072,22 @@ export const api = {
         }
       } else {
         const errText = await response.text();
-        console.error(`Direct fetch createPackage failed (${response.status}):`, errText);
+        if (isStatementTimeoutError(errText)) {
+          console.warn(`[Supabase createPackage] Statement timeout (code 57014) intercepted on PostgREST POST. Safeguarding local state.`);
+          const fallbackMapped = localStore.createPackage({ ...pkg, ...insertPayload, id: (insertPayload as any).id || `pkg-${Date.now()}` } as Package);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
+          }
+          return fallbackMapped;
+        }
+        console.warn(`Direct fetch createPackage failed (${response.status}):`, errText);
       }
-    } catch (fetchErr) {
+    } catch (fetchErr: any) {
+      if (isStatementTimeoutError(fetchErr)) {
+        console.warn(`[Supabase createPackage] Statement timeout caught in fetch. Preserving local package.`);
+        const fallbackMapped = localStore.createPackage({ ...pkg, ...insertPayload, id: (insertPayload as any).id || `pkg-${Date.now()}` } as Package);
+        return fallbackMapped;
+      }
       console.warn('Direct fetch createPackage network error:', fetchErr);
     }
 
@@ -3309,9 +3327,22 @@ export const api = {
         }
       } else {
         const errText = await response.text();
+        if (isStatementTimeoutError(errText)) {
+          console.warn(`[Supabase createCity] Statement timeout (code 57014) intercepted on PostgREST POST. Safeguarding local state.`);
+          const fallbackMapped = localStore.createCity({ ...city, id: payload.id } as City);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: fallbackMapped }));
+          }
+          return fallbackMapped;
+        }
         console.warn(`Direct fetch createCity failed (${response.status}):`, errText);
       }
-    } catch (fetchErr) {
+    } catch (fetchErr: any) {
+      if (isStatementTimeoutError(fetchErr)) {
+        console.warn(`[Supabase createCity] Statement timeout caught in fetch. Preserving local city.`);
+        const fallbackMapped = localStore.createCity({ ...city, id: payload.id } as City);
+        return fallbackMapped;
+      }
       console.warn('Direct fetch createCity network error:', fetchErr);
     }
 

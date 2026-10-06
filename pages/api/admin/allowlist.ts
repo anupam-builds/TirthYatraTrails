@@ -27,14 +27,14 @@ const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   process.env.SUPABASE_URL ||
   process.env.VITE_SUPABASE_URL ||
-  'https://tbsvmgmhazsiciimpuim.supabase.co';
+  '';
 
 const SUPABASE_SERVICE_ROLE_KEY =
   (process as any).SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   getServiceRoleKey();
 
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+const supabaseAdmin = createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key', {
   auth: {
     persistSession: false,
     autoRefreshToken: false,

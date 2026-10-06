@@ -4,13 +4,14 @@ const SUPABASE_URL = (
   process.env.VITE_SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   process.env.SUPABASE_URL ||
-  'https://tbsvmgmhazsiciimpuim.supabase.co'
+  ''
 ).trim();
 
 const SUPABASE_ANON_KEY = (
   process.env.VITE_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY ||
-  'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea'
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  ''
 ).trim();
 
 const SUPABASE_SERVICE_ROLE_KEY = (
@@ -20,12 +21,12 @@ const SUPABASE_SERVICE_ROLE_KEY = (
 ).trim();
 
 const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  ? createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
 
-const supabaseServer = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabaseServer = createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_ANON_KEY || 'placeholder-anon-key', {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 

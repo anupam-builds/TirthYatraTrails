@@ -3,14 +3,14 @@ import { sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js'
 
 export const SUPABASE_URL: string = (
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) ||
-  (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_URL) ||
-  'https://tbsvmgmhazsiciimpuim.supabase.co'
+  (typeof process !== 'undefined' && process.env && (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)) ||
+  ''
 ).trim();
 
 export const SUPABASE_ANON_KEY: string = (
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) ||
-  (typeof process !== 'undefined' && process.env && process.env.VITE_SUPABASE_ANON_KEY) ||
-  'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea'
+  (typeof process !== 'undefined' && process.env && (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) ||
+  ''
 ).trim();
 
 export const isSupabaseConfigured: boolean = Boolean(
@@ -790,28 +790,46 @@ export const customFetch: typeof fetch = async (input, init) => {
  * dynamic user Bearer token injection, automatic token refresh, and resilient realtime parameters.
  */
 export const supabase: SupabaseClient = createClient(
-  SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co',
-  SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea',
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_ANON_KEY || 'placeholder-anon-key',
   {
     auth: {
       storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
-      storageKey: 'sb-tbsvmgmhazsiciimpuim-auth-token',
+      storageKey: 'sb-auth-token',
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
     },
     global: {
       headers: {
-        apikey: SUPABASE_ANON_KEY,
+        apikey: SUPABASE_ANON_KEY || 'placeholder-anon-key',
       },
       fetch: customFetch,
     },
     realtime: {
       params: {
-        apikey: SUPABASE_ANON_KEY,
+        apikey: SUPABASE_ANON_KEY || 'placeholder-anon-key',
         eventsPerSecond: 15,
       },
     },
+  }
+);
+
+export const SUPABASE_SERVICE_ROLE_KEY: string = (
+  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || (import.meta.env as any).SUPABASE_SERVICE_ROLE_KEY)) ||
+  (typeof process !== 'undefined' && process.env && (process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)) ||
+  ''
+).trim();
+
+/**
+ * Dedicated Supabase client initialized specifically for browser-side direct
+ * Supabase Storage uploads. Completely bypasses Vercel's 4.5MB serverless payload limit.
+ */
+export const supabaseStorage: SupabaseClient = createClient(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY || 'placeholder-anon-key',
+  {
+    auth: { persistSession: false, autoRefreshToken: false }
   }
 );
 

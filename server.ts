@@ -34,13 +34,15 @@ function getServiceRoleKey(): string {
 const SUPABASE_URL = (
   process.env.VITE_SUPABASE_URL ||
   process.env.SUPABASE_URL ||
-  'https://tbsvmgmhazsiciimpuim.supabase.co'
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  ''
 ).trim();
 
 const SUPABASE_ANON_KEY = (
   process.env.VITE_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY ||
-  'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea'
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  ''
 ).trim();
 
 const SUPABASE_SERVICE_ROLE_KEY =
@@ -48,13 +50,21 @@ const SUPABASE_SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   getServiceRoleKey();
 
-export const supabaseServer = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false }
-});
+export const supabaseServer = createClient(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_ANON_KEY || 'placeholder-anon-key',
+  {
+    auth: { persistSession: false, autoRefreshToken: false }
+  }
+);
 
-export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false }
-});
+export const supabaseAdmin = createClient(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY || 'placeholder-service-key',
+  {
+    auth: { persistSession: false, autoRefreshToken: false }
+  }
+);
 
 export const withTimeout = <T>(promise: PromiseLike<T>, ms: number = 2500): Promise<T> => {
   return Promise.race([
@@ -625,8 +635,8 @@ app.post('/api/admin/auth/send-otp', async (req, res) => {
     });
 
     // 3. Trigger Supabase custom SMTP OTP dispatch with verified domain DNS metadata
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://tbsvmgmhazsiciimpuim.supabase.co';
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UVZU3WJhR1sz8EuseHB6Uw_lxb5_-ea';
+    const supabaseUrl = SUPABASE_URL;
+    const supabaseKey = SUPABASE_ANON_KEY;
     try {
       await fetch(`${supabaseUrl}/auth/v1/otp`, {
         method: 'POST',
