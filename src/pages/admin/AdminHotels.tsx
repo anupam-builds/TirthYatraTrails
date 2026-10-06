@@ -696,6 +696,7 @@ export const AdminHotels: React.FC = () => {
                 id="hotel-images-uploader"
                 label="Hotel Photos & Gallery"
                 helpText="Upload hotel images directly from your computer or drag & drop files. The first photo is the main card cover."
+                folder="hotels"
                 images={images}
                 onChange={setImages}
                 multiple={true}

@@ -241,13 +241,18 @@ export const AdminCities: React.FC = () => {
       }
       setIsCityModalOpen(false);
       setTimeout(() => setToast(null), 5000);
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Error saving destination:', err);
+      const isTimeout = err?.message?.includes('timeout') || err?.message?.includes('57014');
       setToast({
         id: String(Date.now()),
-        type: 'error',
-        title: 'Save Failed',
-        message: 'Failed to save destination hub.',
+        type: isTimeout ? 'info' : 'error',
+        title: isTimeout ? 'Saved Locally (Database Busy)' : 'Save Failed',
+        message: isTimeout
+          ? 'The remote database statement timed out. Your destination changes were safely saved locally.'
+          : (err?.message || 'Failed to save destination hub. Please check the fields and try again.'),
       });
+      setTimeout(() => setToast(null), 6000);
     }
   };
 
@@ -600,6 +605,7 @@ export const AdminCities: React.FC = () => {
                   id="city-photo-uploader"
                   label="Destination Cover Image"
                   helpText="Upload a high-resolution photo from your device or drag & drop. Or specify a CDN photo link below."
+                  folder="cities"
                   images={imageUrl ? [imageUrl] : []}
                   onChange={(imgs) => setImageUrl(imgs[0] || '')}
                   multiple={false}

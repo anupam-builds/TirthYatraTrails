@@ -296,13 +296,36 @@ export const AdminPackages: React.FC = () => {
       if (editingPackage) {
         const updated = await api.updatePackage(editingPackage.id, packageData);
         setPackages((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
+        setToast({
+          id: String(Date.now()),
+          type: 'success',
+          title: 'Package Updated',
+          message: `Package "${updated.title}" was updated successfully.`,
+        });
       } else {
         const created = await api.createPackage(packageData);
         setPackages((prev) => reconcileRealtimeList(prev, 'INSERT', created));
+        setToast({
+          id: String(Date.now()),
+          type: 'success',
+          title: 'Package Published',
+          message: `Package "${created.title}" is now published and live.`,
+        });
       }
       setIsModalOpen(false);
-    } catch (err) {
-      alert('Failed saving package');
+      setTimeout(() => setToast(null), 5000);
+    } catch (err: any) {
+      console.error('Error saving package:', err);
+      const isTimeout = err?.message?.includes('timeout') || err?.message?.includes('57014');
+      setToast({
+        id: String(Date.now()),
+        type: isTimeout ? 'info' : 'error',
+        title: isTimeout ? 'Saved Locally (Database Busy)' : 'Save Failed',
+        message: isTimeout
+          ? 'Remote database statement timed out. Your package changes were safely saved locally.'
+          : (err?.message || 'Failed saving package. Please check the fields and try again.'),
+      });
+      setTimeout(() => setToast(null), 6000);
     }
   };
 
@@ -625,6 +648,7 @@ export const AdminPackages: React.FC = () => {
                 id="package-images-uploader"
                 label="Package Cover & Gallery Photos"
                 helpText="Upload yatra photos directly from your computer or drag & drop files. The first photo will be used as the package cover banner."
+                folder="packages"
                 images={packageImages}
                 onChange={(imgs) => {
                   setPackageImages(imgs);

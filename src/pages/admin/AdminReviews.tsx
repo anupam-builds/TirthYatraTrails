@@ -639,7 +639,8 @@ export const AdminReviews: React.FC = () => {
                 <ImageUploadField
                   id="story-destination-photo-uploader"
                   label="Destination Photo"
-                  helpText="Upload a high-resolution photo from your device (JPG, PNG, WEBP). It will be automatically optimized and converted to a local Base64 data URL."
+                  helpText="Upload a high-resolution photo from your device (JPG, PNG, WEBP). It will be automatically optimized and securely hosted."
+                  folder="reviews"
                   images={formData.destinationImage ? [formData.destinationImage] : []}
                   onChange={(imgs) => setFormData({ ...formData, destinationImage: imgs[0] || '' })}
                   multiple={false}

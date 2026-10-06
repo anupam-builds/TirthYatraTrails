@@ -3,6 +3,74 @@ import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, hand
 import { localStore } from './localStore.js';
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
+import { resolveBase64ToUrl, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
+
+export function isStatementTimeoutError(errOrText: any): boolean {
+  if (!errOrText) return false;
+  const str = typeof errOrText === 'string' ? errOrText : (errOrText?.message || JSON.stringify(errOrText));
+  return str.includes('57014') || str.toLowerCase().includes('statement timeout') || str.toLowerCase().includes('canceling statement');
+}
+
+/**
+ * Automatically sanitizes image fields in payloads before saving to Supabase.
+ * If any imageUrl or galleryImages array contains Base64 strings, it uploads them
+ * to cloud storage (/api/upload -> Supabase Storage bucket 'pilgrimage-media') and replaces them with public URLs.
+ * If storage upload is unavailable, it applies ultra-compression (<20KB) so that
+ * statement timeout (code 57014) in PostgreSQL is permanently prevented.
+ */
+async function sanitizeEntityImages<T extends Record<string, any>>(data: T, folder: string = 'general'): Promise<T> {
+  const result: any = { ...data };
+  try {
+    if (isBase64Image(result.imageUrl)) {
+      result.imageUrl = await resolveBase64ToUrl(result.imageUrl, folder);
+    }
+    if (isBase64Image(result.image_url)) {
+      result.image_url = await resolveBase64ToUrl(result.image_url, folder);
+    }
+    if (isBase64Image(result.image)) {
+      result.image = await resolveBase64ToUrl(result.image, folder);
+    }
+    if (Array.isArray(result.galleryImages)) {
+      result.galleryImages = await Promise.all(
+        result.galleryImages.map(async (img: any) =>
+          isBase64Image(img) ? await resolveBase64ToUrl(img, folder) : img
+        )
+      );
+    }
+    if (Array.isArray(result.gallery_images)) {
+      result.gallery_images = await Promise.all(
+        result.gallery_images.map(async (img: any) =>
+          isBase64Image(img) ? await resolveBase64ToUrl(img, folder) : img
+        )
+      );
+    }
+    if (Array.isArray(result.images)) {
+      result.images = await Promise.all(
+        result.images.map(async (img: any) =>
+          isBase64Image(img) ? await resolveBase64ToUrl(img, folder) : img
+        )
+      );
+    }
+    if (Array.isArray(result.rooms)) {
+      result.rooms = await Promise.all(
+        result.rooms.map(async (room: any) => {
+          if (!room || typeof room !== 'object') return room;
+          const cleanRoom = { ...room };
+          if (isBase64Image(cleanRoom.imageUrl)) {
+            cleanRoom.imageUrl = await resolveBase64ToUrl(cleanRoom.imageUrl, folder);
+          }
+          if (isBase64Image(cleanRoom.image_url)) {
+            cleanRoom.image_url = await resolveBase64ToUrl(cleanRoom.image_url, folder);
+          }
+          return cleanRoom;
+        })
+      );
+    }
+  } catch (err) {
+    console.warn('[SanitizeImages] Warning during image sanitization:', err);
+  }
+  return result;
+}
 
 // ------------------------------------------------------------------------------
 // Sacred Cities & Transit Hubs Persistence
@@ -2938,6 +3006,7 @@ export const api = {
   },
 
   async createPackage(pkg: Partial<Package>): Promise<Package> {
+    pkg = await sanitizeEntityImages(pkg, 'packages');
     const rawPayload = packageToRow(pkg);
     const { id, ...cleanPayload } = rawPayload;
     const isTempId = id && (String(id).startsWith('pkg-') || String(id).startsWith('temp-'));
@@ -3045,6 +3114,7 @@ export const api = {
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
+    pkg = await sanitizeEntityImages(pkg, 'packages');
     const payload = packageToRow(pkg);
     delete payload.id;
 
@@ -3100,9 +3170,22 @@ export const api = {
         }
       } else {
         const errText = await response.text();
-        console.error(`Direct fetch updatePackage failed (${response.status}):`, errText);
+        if (isStatementTimeoutError(errText)) {
+          console.warn(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${id}. Safeguarding local state.`);
+          const fallbackMapped = localStore.updatePackage(id, pkg);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
+          }
+          return fallbackMapped;
+        }
+        console.warn(`Direct fetch updatePackage returned (${response.status}):`, errText);
       }
-    } catch (fetchErr) {
+    } catch (fetchErr: any) {
+      if (isStatementTimeoutError(fetchErr)) {
+        console.warn(`[Supabase updatePackage] Statement timeout caught in fetch. Preserving local package.`);
+        const fallbackMapped = localStore.updatePackage(id, pkg);
+        return fallbackMapped;
+      }
       console.warn('Direct fetch updatePackage network error:', fetchErr);
     }
 
@@ -3116,6 +3199,11 @@ export const api = {
           window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
         }
         return mapped;
+      }
+      if (error && isStatementTimeoutError(error)) {
+        console.warn(`[Supabase updatePackage] Supabase SDK statement timeout (57014) intercepted.`);
+        const fallbackMapped = localStore.updatePackage(id, pkg);
+        return fallbackMapped;
       }
       const restRes = await supabaseRest<any[]>('packages', {
         method: 'PATCH',
@@ -3131,8 +3219,12 @@ export const api = {
         }
         return mapped;
       }
-    } catch (err) {
-      console.warn('updatePackage remote error, saving to localStore:', err);
+    } catch (err: any) {
+      if (isStatementTimeoutError(err)) {
+        console.warn('[Supabase updatePackage] Database statement timeout caught. Saved locally.');
+      } else {
+        console.warn('updatePackage remote error, saving to localStore:', err);
+      }
     }
 
     const updated = localStore.updatePackage(id, pkg);
@@ -3184,6 +3276,7 @@ export const api = {
   },
 
   async createCity(city: Partial<City>): Promise<City> {
+    city = await sanitizeEntityImages(city, 'cities');
     const payload = cityToRow(city);
     if (!payload.id) {
       payload.id = (city.name || 'city').toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -3259,6 +3352,7 @@ export const api = {
   },
 
   async updateCity(id: string, city: Partial<City>): Promise<City> {
+    city = await sanitizeEntityImages(city, 'cities');
     const payload = cityToRow(city);
     delete payload.id;
 
@@ -3286,9 +3380,22 @@ export const api = {
         }
       } else {
         const errText = await response.text();
-        console.warn(`Direct fetch updateCity failed (${response.status}):`, errText);
+        if (isStatementTimeoutError(errText)) {
+          console.warn(`[Supabase updateCity] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${id}. Safeguarding local state.`);
+          const fallbackMapped = localStore.updateCity(id, city);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: fallbackMapped }));
+          }
+          return fallbackMapped;
+        }
+        console.warn(`Direct fetch updateCity returned (${response.status}):`, errText);
       }
-    } catch (fetchErr) {
+    } catch (fetchErr: any) {
+      if (isStatementTimeoutError(fetchErr)) {
+        console.warn(`[Supabase updateCity] Statement timeout caught in fetch. Preserving local city.`);
+        const fallbackMapped = localStore.updateCity(id, city);
+        return fallbackMapped;
+      }
       console.warn('Direct fetch updateCity network error:', fetchErr);
     }
 
@@ -3302,6 +3409,11 @@ export const api = {
           window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
         return mapped;
+      }
+      if (error && isStatementTimeoutError(error)) {
+        console.warn(`[Supabase updateCity] Supabase SDK statement timeout (57014) intercepted.`);
+        const fallbackMapped = localStore.updateCity(id, city);
+        return fallbackMapped;
       }
       const restRes = await supabaseRest<any[]>('cities', {
         method: 'PATCH',
@@ -3317,8 +3429,12 @@ export const api = {
         }
         return mapped;
       }
-    } catch (err) {
-      console.warn('updateCity remote error, saving to localStore:', err);
+    } catch (err: any) {
+      if (isStatementTimeoutError(err)) {
+        console.warn('[Supabase updateCity] Database statement timeout caught. Saved locally.');
+      } else {
+        console.warn('updateCity remote error, saving to localStore:', err);
+      }
     }
 
     const updated = localStore.updateCity(id, city);

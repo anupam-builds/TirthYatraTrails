@@ -83,6 +83,103 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir));
 
+// Ensure Supabase Storage bucket 'pilgrimage-media' exists and is public
+const STORAGE_BUCKET = 'pilgrimage-media';
+async function ensureStorageBucket() {
+  try {
+    const { data: buckets } = await supabaseAdmin.storage.listBuckets();
+    if (!buckets?.some((b: any) => b.name === STORAGE_BUCKET)) {
+      await supabaseAdmin.storage.createBucket(STORAGE_BUCKET, {
+        public: true,
+        fileSizeLimit: 10485760, // 10MB
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+      });
+      console.log(`[Storage] Initialized public bucket: ${STORAGE_BUCKET}`);
+    }
+  } catch (err: any) {
+    console.warn('[Storage] Bucket initialization check:', err?.message);
+  }
+}
+ensureStorageBucket();
+
+// POST /api/upload: Upload image to Supabase Storage (with fallback to local /uploads/)
+app.post('/api/upload', async (req, res) => {
+  try {
+    const { fileData, filename, folder = 'general' } = req.body;
+    if (!fileData || typeof fileData !== 'string') {
+      return res.status(400).json({ error: 'fileData (Base64 string or Data URL) is required.' });
+    }
+
+    // Parse mime type and raw base64
+    let mimeType = 'image/jpeg';
+    let base64Body = fileData;
+    const match = fileData.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      mimeType = match[1];
+      base64Body = match[2];
+    }
+
+    // Determine extension
+    let ext = 'jpg';
+    if (mimeType.includes('png')) ext = 'png';
+    else if (mimeType.includes('webp')) ext = 'webp';
+    else if (mimeType.includes('gif')) ext = 'gif';
+
+    const safeBaseName = (filename || `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`)
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeName = `${safeBaseName}.${ext}`;
+    const storagePath = `${folder}/${safeName}`;
+    const buffer = Buffer.from(base64Body, 'base64');
+
+    // 1. Attempt upload to Supabase Storage
+    try {
+      const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, buffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (!uploadErr && uploadData) {
+        const { data: publicUrlData } = supabaseAdmin.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(storagePath);
+
+        if (publicUrlData?.publicUrl) {
+          return res.json({
+            success: true,
+            url: publicUrlData.publicUrl,
+            storage: 'supabase',
+            path: storagePath,
+            size: buffer.length,
+          });
+        }
+      } else if (uploadErr) {
+        console.warn('[Storage] Supabase Storage upload error, falling back to local /uploads:', uploadErr.message);
+      }
+    } catch (sbErr: any) {
+      console.warn('[Storage] Supabase Storage exception:', sbErr?.message);
+    }
+
+    // 2. Fallback: Save to local public/uploads directory
+    const localFilePath = path.join(uploadsDir, safeName);
+    fs.writeFileSync(localFilePath, buffer);
+    const localUrl = `/uploads/${safeName}`;
+
+    return res.json({
+      success: true,
+      url: localUrl,
+      storage: 'local',
+      path: localUrl,
+      size: buffer.length,
+    });
+  } catch (err: any) {
+    console.error('[Upload] Error processing image upload:', err);
+    return res.status(500).json({ error: err.message || 'Failed to process image upload.' });
+  }
+});
+
 // Helper auth check
 const verifyAdminToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;

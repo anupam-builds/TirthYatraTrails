@@ -11,7 +11,12 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
-import { processAndOptimizeImage } from '../../utils/imageUtils.js';
+import {
+  processAndOptimizeImage,
+  uploadImageFile,
+  resolveBase64ToUrl,
+  isBase64Image,
+} from '../../utils/imageUtils.js';
 import { BaseInput } from '../FormField.js';
 
 interface ImageUploadFieldProps {
@@ -22,6 +27,7 @@ interface ImageUploadFieldProps {
   onChange: (images: string[]) => void;
   multiple?: boolean;
   maxImages?: number;
+  folder?: string;
 }
 
 export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
@@ -32,6 +38,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   onChange,
   multiple = true,
   maxImages = 15,
+  folder = 'general',
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -64,8 +71,9 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       }
 
       const filesToProcess = files.slice(0, remainingSlots);
+      // Upload to Supabase Storage returning public URLs (or lightweight local uploads)
       const processedPromises = filesToProcess.map((file) =>
-        processAndOptimizeImage(file, 1600, 0.85)
+        uploadImageFile(file, folder)
       );
       const newImages = await Promise.all(processedPromises);
 
@@ -75,8 +83,8 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         onChange([newImages[0]]);
       }
     } catch (err: any) {
-      console.error('Error processing images:', err);
-      setErrorMessage('Failed to process image files. Please try again.');
+      console.error('Error processing and uploading images:', err);
+      setErrorMessage('Failed to upload image. Please try again or paste an image URL directly.');
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) {
@@ -116,24 +124,39 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
     onChange([target, ...rest]);
   };
 
-  const handleAddManualUrl = (e?: React.FormEvent) => {
+  const handleAddManualUrl = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = manualUrl.trim();
     if (!trimmed) return;
 
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('data:image')) {
-      setErrorMessage('Please enter a valid URL starting with http:// or https://');
+      setErrorMessage('Please enter a valid image URL (http:// or https://)');
       return;
     }
 
     setErrorMessage(null);
-    if (multiple) {
-      onChange([...images, trimmed]);
-    } else {
-      onChange([trimmed]);
+    setIsProcessing(true);
+
+    try {
+      let finalUrl = trimmed;
+      if (isBase64Image(trimmed)) {
+        // Upload pasted base64 data to Supabase Storage before setting state
+        finalUrl = await resolveBase64ToUrl(trimmed, folder);
+      }
+
+      if (multiple) {
+        onChange([...images, finalUrl]);
+      } else {
+        onChange([finalUrl]);
+      }
+      setManualUrl('');
+      setShowUrlInput(false);
+    } catch (err) {
+      console.error('Error resolving manual image URL:', err);
+      setErrorMessage('Could not process this image link. Please try a different URL.');
+    } finally {
+      setIsProcessing(false);
     }
-    setManualUrl('');
-    setShowUrlInput(false);
   };
 
   const activeFileInputId = !multiple && images.length > 0 ? `${id}-file-input` : `${id}-multi-file-input`;
@@ -273,7 +296,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
             {isProcessing && (
               <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 text-white">
                 <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-                <p className="text-xs font-bold">Optimizing and encoding image file...</p>
+                <p className="text-xs font-bold">Optimizing and uploading to cloud storage...</p>
               </div>
             )}
           </div>
@@ -309,7 +332,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                   <Loader2 className="w-6 h-6" />
                 </div>
                 <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Optimizing and loading image file...
+                  Optimizing and uploading to cloud storage...
                 </p>
               </>
             ) : (
