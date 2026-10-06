@@ -12,6 +12,29 @@ export function isStatementTimeoutError(errOrText: any): boolean {
 }
 
 /**
+ * Checks whether a package ID is missing, temporary, or client-generated
+ * and needs insert/upsert instead of a PATCH update.
+ */
+export function isTemporaryOrMissingPackageId(id: string | null | undefined): boolean {
+  if (!id || typeof id !== 'string') return true;
+  const trimmed = id.trim().toLowerCase();
+  return (
+    !trimmed ||
+    trimmed === 'undefined' ||
+    trimmed === 'null' ||
+    trimmed === 'new' ||
+    trimmed === 'temp' ||
+    trimmed.startsWith('temp-') ||
+    trimmed.startsWith('temp_') ||
+    trimmed.startsWith('pkg-temp-') ||
+    trimmed.startsWith('pkg-temp_') ||
+    trimmed.startsWith('new-') ||
+    trimmed.startsWith('draft-') ||
+    trimmed.startsWith('draft_')
+  );
+}
+
+/**
  * Automatically sanitizes image fields in payloads before saving to Supabase.
  * If any imageUrl or galleryImages array contains Base64 strings, it uploads them
  * to cloud storage (/api/upload -> Supabase Storage bucket 'pilgrimage-media') and replaces them with public URLs.
@@ -3014,7 +3037,7 @@ export const api = {
     pkg = await sanitizeEntityImages(pkg, 'packages');
     const rawPayload = packageToRow(pkg);
     const { id, ...cleanPayload } = rawPayload;
-    const isTempId = id && (String(id).startsWith('pkg-') || String(id).startsWith('temp-'));
+    const isTempId = isTemporaryOrMissingPackageId(id);
     const insertPayload: Record<string, any> = id && String(id).trim() !== '' && !isTempId
       ? { id: String(id).trim(), ...cleanPayload }
       : { ...cleanPayload };
@@ -3123,7 +3146,7 @@ export const api = {
       console.warn('createPackage error, saving to localStore:', err);
     }
 
-    const fallbackId = (insertPayload as any).id || (id && !isTempId ? id : `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
+    const fallbackId = String((insertPayload as any).id || (id && !isTempId ? id : `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`));
     const saved = localStore.createPackage({ ...pkg, ...insertPayload, id: fallbackId } as Package);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: saved }));
@@ -3132,6 +3155,23 @@ export const api = {
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
+    const rawId = String(id || pkg.id || '').trim();
+    const isTempId = isTemporaryOrMissingPackageId(rawId);
+
+    // 1. Validation Check: Check whether the package has a valid database ID before sending a PATCH request.
+    // If the package ID is missing or temporary, fallback to an insert/upsert operation so it saves correctly
+    // to Supabase instead of throwing a "not found" error.
+    if (isTempId) {
+      console.log(`[updatePackage] Package ID "${rawId}" is missing or temporary. Falling back to insert/upsert operation.`);
+      const pkgToInsert = { ...pkg };
+      if (rawId && !isTempId) {
+        pkgToInsert.id = rawId;
+      } else {
+        delete pkgToInsert.id;
+      }
+      return await this.createPackage(pkgToInsert);
+    }
+
     pkg = await sanitizeEntityImages(pkg, 'packages');
     const payload = packageToRow(pkg);
     delete payload.id;
@@ -3164,11 +3204,12 @@ export const api = {
 
     const explicitHeaders = getSupabaseHeaders();
 
-    console.log('Sending package update payload:', JSON.stringify(payload, null, 2));
+    console.log(`Sending package update payload for ID "${rawId}":`, JSON.stringify(payload, null, 2));
 
     // 1. Direct PostgREST PATCH with explicit headers
+    let patchMatched = false;
     try {
-      const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(id)}`;
+      const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(rawId)}`;
       const response = await fetch(restUrl, {
         method: 'PATCH',
         headers: explicitHeaders,
@@ -3179,18 +3220,23 @@ export const api = {
         const data = await response.json();
         const row = Array.isArray(data) ? data[0] : data;
         if (row) {
+          patchMatched = true;
           const mapped = mapPackageRow(row);
-          localStore.updatePackage(id, mapped);
+          localStore.updatePackage(rawId, mapped);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
           }
           return mapped;
+        } else {
+          console.warn(`[Supabase updatePackage] PostgREST PATCH matched 0 rows for "${rawId}". Falling back to upsert.`);
         }
+      } else if (response.status === 404) {
+        console.warn(`[Supabase updatePackage] PostgREST PATCH returned 404 for "${rawId}". Falling back to upsert.`);
       } else {
         const errText = await response.text();
         if (isStatementTimeoutError(errText)) {
-          console.warn(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${id}. Safeguarding local state.`);
-          const fallbackMapped = localStore.updatePackage(id, pkg);
+          console.warn(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${rawId}. Safeguarding local state.`);
+          const fallbackMapped = localStore.updatePackage(rawId, pkg);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
           }
@@ -3201,18 +3247,76 @@ export const api = {
     } catch (fetchErr: any) {
       if (isStatementTimeoutError(fetchErr)) {
         console.warn(`[Supabase updatePackage] Statement timeout caught in fetch. Preserving local package.`);
-        const fallbackMapped = localStore.updatePackage(id, pkg);
+        const fallbackMapped = localStore.updatePackage(rawId, pkg);
         return fallbackMapped;
       }
       console.warn('Direct fetch updatePackage network error:', fetchErr);
     }
 
-    // 2. Secondary attempt via Supabase SDK or supabaseRest targeting packages table
+    // 2. Fallback to Upsert/Insert if the package ID does not exist in Supabase yet
+    if (!patchMatched) {
+      console.log(`[Supabase updatePackage] Package "${rawId}" not found in database. Performing upsert/insert.`);
+      const upsertPayload = { ...payload, id: rawId };
+
+      try {
+        // Try Supabase SDK upsert
+        const { data: upsertData, error: upsertErr } = await supabase
+          .from('packages')
+          .upsert([upsertPayload])
+          .select()
+          .maybeSingle();
+
+        if (!upsertErr && upsertData) {
+          const mapped = mapPackageRow(upsertData);
+          localStore.updatePackage(rawId, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+          }
+          return mapped;
+        }
+
+        if (upsertErr) {
+          console.warn('[Supabase updatePackage] Supabase SDK upsert warning:', upsertErr.message);
+        }
+
+        // Try direct PostgREST upsert with resolution=merge-duplicates
+        const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/packages`, {
+          method: 'POST',
+          headers: {
+            ...explicitHeaders,
+            'Prefer': 'resolution=merge-duplicates,return=representation',
+          },
+          body: JSON.stringify(upsertPayload),
+        });
+
+        if (upsertRes.ok) {
+          const upsertJson = await upsertRes.json();
+          const upsertRow = Array.isArray(upsertJson) ? upsertJson[0] : upsertJson;
+          if (upsertRow) {
+            const mapped = mapPackageRow(upsertRow);
+            localStore.updatePackage(rawId, mapped);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+            }
+            return mapped;
+          }
+        }
+      } catch (upsertCatchErr: any) {
+        if (isStatementTimeoutError(upsertCatchErr)) {
+          console.warn('[Supabase updatePackage] Statement timeout caught during upsert fallback. Safeguarding local state.');
+          const fallbackMapped = localStore.updatePackage(rawId, pkg);
+          return fallbackMapped;
+        }
+        console.warn('[Supabase updatePackage] Upsert fallback network warning:', upsertCatchErr);
+      }
+    }
+
+    // 3. Secondary attempt via Supabase SDK or supabaseRest targeting packages table
     try {
-      const { data, error } = await supabase.from('packages').update(payload).eq('id', id).select().maybeSingle();
+      const { data, error } = await supabase.from('packages').update(payload).eq('id', rawId).select().maybeSingle();
       if (!error && data) {
         const mapped = mapPackageRow(data);
-        localStore.updatePackage(id, mapped);
+        localStore.updatePackage(rawId, mapped);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
         }
@@ -3220,18 +3324,18 @@ export const api = {
       }
       if (error && isStatementTimeoutError(error)) {
         console.warn(`[Supabase updatePackage] Supabase SDK statement timeout (57014) intercepted.`);
-        const fallbackMapped = localStore.updatePackage(id, pkg);
+        const fallbackMapped = localStore.updatePackage(rawId, pkg);
         return fallbackMapped;
       }
       const restRes = await supabaseRest<any[]>('packages', {
         method: 'PATCH',
         headers: explicitHeaders,
-        params: { id: `eq.${id}` },
+        params: { id: `eq.${rawId}` },
         body: payload,
       });
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapPackageRow(restRes.data[0]);
-        localStore.updatePackage(id, mapped);
+        localStore.updatePackage(rawId, mapped);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
         }
@@ -3245,7 +3349,7 @@ export const api = {
       }
     }
 
-    const updated = localStore.updatePackage(id, pkg);
+    const updated = localStore.updatePackage(rawId, pkg);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: updated }));
     }

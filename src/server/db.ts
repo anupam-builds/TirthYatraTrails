@@ -957,8 +957,13 @@ class DatabaseStore {
   }
 
   public updatePackage(id: string, updates: Partial<Package>) {
-    const index = this.data.packages.findIndex((p) => p.id === id);
-    if (index === -1) throw new Error('Package not found');
+    let index = this.data.packages.findIndex((p) => p.id === id);
+    if (index === -1 && updates.title) {
+      index = this.data.packages.findIndex((p) => p.title?.toLowerCase().trim() === updates.title!.toLowerCase().trim());
+    }
+    if (index === -1) {
+      return this.createPackage({ ...updates, id: id || updates.id || `pkg-${Date.now()}` });
+    }
     this.data.packages[index] = { ...this.data.packages[index], ...updates };
     this.save();
     return this.data.packages[index];

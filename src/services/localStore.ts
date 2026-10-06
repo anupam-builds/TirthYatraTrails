@@ -158,7 +158,10 @@ export const localStore = {
   updateCity(id: string, updates: Partial<City>): City {
     const cities = this.getCities();
     const idx = cities.findIndex((c) => c.id === id || c.name.toLowerCase() === id.toLowerCase());
-    if (idx === -1) throw new Error('City not found');
+    if (idx === -1) {
+      console.warn(`[localStore] City "${id}" not found. Creating new city entry.`);
+      return this.createCity({ ...updates, id: id || (updates.name ? updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `city-${Date.now()}`) } as City);
+    }
     cities[idx] = { ...cities[idx], ...updates };
     setStored(STORAGE_KEYS.CITIES, cities);
 
@@ -362,8 +365,17 @@ export const localStore = {
   },
 
   getPackageById(id: string): Package | null {
+    if (!id) return null;
+    const clean = String(id).trim().toLowerCase();
     const packages = this.getPackages();
-    return packages.find((p) => p.id === id) || null;
+    return (
+      packages.find(
+        (p) =>
+          p.id === id ||
+          p.id?.toLowerCase() === clean ||
+          p.title?.toLowerCase().trim() === clean
+      ) || null
+    );
   },
 
   createPackage(pkgData: Partial<Package>): Package {
@@ -397,8 +409,46 @@ export const localStore = {
 
   updatePackage(id: string, updates: Partial<Package>): Package {
     const packages = this.getPackages();
-    const idx = packages.findIndex((p) => p.id === id);
-    if (idx === -1) throw new Error('Package not found');
+    let idx = packages.findIndex((p) => p.id === id);
+
+    // If not found by ID, attempt lookup by title or updates.id
+    if (idx === -1 && updates.title) {
+      idx = packages.findIndex(
+        (p) => p.title?.toLowerCase().trim() === updates.title!.toLowerCase().trim()
+      );
+    }
+
+    if (idx === -1) {
+      console.warn(`[localStore] Package ID "${id}" not found. Upserting package into local inventory.`);
+      const cleanId = String(id && !id.startsWith('temp-') && !id.startsWith('new-') ? id : (updates.id || `pkg-${Date.now()}`));
+      const newPkg: Package = {
+        id: cleanId,
+        title: updates.title || 'Pilgrimage Package',
+        duration: updates.duration || '3 Days / 2 Nights',
+        location: updates.location || 'Ayodhya, Uttar Pradesh',
+        startingPrice: Number(updates.startingPrice) || 9999,
+        bookedRank: updates.bookedRank ? String(updates.bookedRank) : '#1 Sacred Choice',
+        imageUrl: updates.imageUrl || 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80',
+        galleryImages: updates.galleryImages || (updates.imageUrl ? [updates.imageUrl] : []),
+        overview: updates.overview || '',
+        highlights: updates.highlights || [],
+        cancellationPolicy: updates.cancellationPolicy || 'Standard cancellation policy applies.',
+        category: updates.category || 'Pilgrimage',
+        packageType: updates.packageType || 'All-Inclusive Guided Yatra',
+        experienceLevel: updates.experienceLevel || 'Comfortable • Senior Friendly',
+        hotelsLevel: updates.hotelsLevel || '3 & 4 Star Deluxe Stays',
+        transfers: updates.transfers || 'Private AC Coach',
+        itinerary: updates.itinerary || [],
+        ...updates,
+      };
+      packages.unshift(newPkg);
+      setStored(STORAGE_KEYS.PACKAGES, packages);
+      if (newPkg.category) {
+        this.addCustomCategory(newPkg.category);
+      }
+      return newPkg;
+    }
+
     packages[idx] = { ...packages[idx], ...updates };
     setStored(STORAGE_KEYS.PACKAGES, packages);
     if (updates.category) {

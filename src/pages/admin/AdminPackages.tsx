@@ -294,7 +294,8 @@ export const AdminPackages: React.FC = () => {
         setCustomCategories((prev) => Array.from(new Set([...prev, norm])));
       }
       if (editingPackage) {
-        const updated = await api.updatePackage(editingPackage.id, packageData);
+        const targetId = editingPackage.id || (editingPackage as any)._id || '';
+        const updated = await api.updatePackage(targetId, { ...packageData, id: targetId });
         setPackages((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
         setToast({
           id: String(Date.now()),
