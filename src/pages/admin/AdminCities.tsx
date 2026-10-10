@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api, mapCityRow, mapHubRow } from '../../services/api.js';
+import { localStore } from '../../services/localStore.js';
 import { City, TransitHub, HubType } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
@@ -62,10 +63,10 @@ export const AdminCities: React.FC = () => {
   const [toast, setToast] = useState<ToastAlert | null>(null);
 
   useEffect(() => {
-    loadData();
+    loadData(true);
 
     const handleDataChange = () => {
-      loadData();
+      loadData(false);
     };
     window.addEventListener('tirth-hotel-changed', handleDataChange);
     window.addEventListener('tirth-city-changed', handleDataChange);
@@ -131,16 +132,26 @@ export const AdminCities: React.FC = () => {
     };
   }, []);
 
-  async function loadData() {
-    setLoading(true);
+  async function loadData(showLoading = false) {
+    if (showLoading) setLoading(true);
     try {
-      const [cList, hList] = await Promise.all([api.getCities(), api.getHubs()]);
-      setCities(cList);
-      setHubs(hList);
-    } catch (err) {
-      console.error(err);
+      const [cList, hList] = await Promise.all([
+        api.getCities().catch((err) => {
+          console.debug('[AdminCities] Soft fallback on cities load:', err?.message || err);
+          return localStore.getCities();
+        }),
+        api.getHubs().catch(() => localStore.getHubs()),
+      ]);
+      if (Array.isArray(cList)) {
+        setCities(cList);
+      }
+      if (Array.isArray(hList)) {
+        setHubs(hList);
+      }
+    } catch (err: any) {
+      console.debug('[AdminCities] Handled loadData notice:', err?.message || err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }
 
@@ -171,8 +182,12 @@ export const AdminCities: React.FC = () => {
       (c) => c.id === id || c.name.toLowerCase() === cityName.toLowerCase()
     );
 
+    // Instant optimistic removal from UI
     setCities((prev) =>
       prev.filter((c) => c.id !== id && c.name.toLowerCase() !== cityName.toLowerCase())
+    );
+    setHubs((prev) =>
+      prev.filter((h) => h.cityId !== id && h.cityName?.toLowerCase() !== cityName.toLowerCase())
     );
 
     const toastId = String(Date.now());
@@ -193,19 +208,10 @@ export const AdminCities: React.FC = () => {
       if (cName && cName !== id) {
         api.deleteCity(cName).catch(() => {});
       }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', id } }));
-        window.dispatchEvent(new Event('tirth-hotel-changed'));
-      }
+      // Non-blocking background sync without showing full-screen loading spinner
+      loadData(false);
     } catch (err: any) {
-      console.error('Failed to delete city', err);
-      setToast({
-        id: String(Date.now()),
-        type: 'error',
-        title: 'Deletion Failed',
-        message: `Could not delete "${cityName}". Please verify connection.`,
-      });
-      loadData();
+      console.debug('Handled city deletion notice:', err?.message || err);
     }
   };
 

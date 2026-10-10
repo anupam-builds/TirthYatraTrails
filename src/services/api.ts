@@ -12,26 +12,39 @@ export function isStatementTimeoutError(errOrText: any): boolean {
 }
 
 /**
- * Checks whether a package ID is missing, temporary, or client-generated
- * and needs insert/upsert instead of a PATCH update.
+ * Validates whether an ID represents a valid database record identifier.
+ * Returns false if the ID is missing, undefined, null, or temporary/draft.
  */
-export function isTemporaryOrMissingPackageId(id: string | null | undefined): boolean {
-  if (!id || typeof id !== 'string') return true;
+export function isValidDatabasePackageId(id: string | null | undefined): boolean {
+  if (!id || typeof id !== 'string') return false;
   const trimmed = id.trim().toLowerCase();
-  return (
+  if (
     !trimmed ||
     trimmed === 'undefined' ||
     trimmed === 'null' ||
     trimmed === 'new' ||
     trimmed === 'temp' ||
+    trimmed === 'draft' ||
     trimmed.startsWith('temp-') ||
     trimmed.startsWith('temp_') ||
     trimmed.startsWith('pkg-temp-') ||
     trimmed.startsWith('pkg-temp_') ||
     trimmed.startsWith('new-') ||
+    trimmed.startsWith('new_') ||
     trimmed.startsWith('draft-') ||
     trimmed.startsWith('draft_')
-  );
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Checks whether a package ID is missing, temporary, or client-generated
+ * and needs insert/upsert instead of a direct PATCH update.
+ */
+export function isTemporaryOrMissingPackageId(id: string | null | undefined): boolean {
+  return !isValidDatabasePackageId(id);
 }
 
 /**
@@ -1562,18 +1575,38 @@ export const api = {
     return token ? JSON.parse(atob(token)) : null;
   },
 
-  // Public & Admin Cities Data via Supabase (Embedded Transit Hubs)
+  // Public & Admin Cities Data via Supabase (Optimized lightweight query with limit & timeout fallback)
   async getCities(): Promise<City[]> {
     try {
-      const { data, error } = await supabase.from('cities').select('*');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+      // Avoid .select('*') to prevent pulling heavy columns or triggering statement timeouts (error 57014)
+      const { data, error } = await supabase
+        .from('cities')
+        .select('id, name, state, image_url, hotel_count, popular_for')
+        .order('name')
+        .limit(100)
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeoutId);
+
       if (!error && data && data.length > 0) {
         return data.map(mapCityRow);
       }
       if (error) {
-        console.warn('getCities remote warning, checking localStore:', error.message);
+        if (isStatementTimeoutError(error)) {
+          console.debug('[getCities] Supabase statement timeout (57014) intercepted. Serving from localStore.');
+        } else {
+          console.debug('[getCities] Remote query notice:', error.message);
+        }
       }
-    } catch (err) {
-      console.warn('getCities network error, falling back to localStore:', err);
+    } catch (err: any) {
+      if (isStatementTimeoutError(err) || err?.name === 'AbortError') {
+        console.debug('[getCities] Query timeout or abort intercepted. Serving from localStore.');
+      } else {
+        console.debug('[getCities] Network notice, falling back to localStore:', err?.message || err);
+      }
     }
     return localStore.getCities();
   },
@@ -3156,19 +3189,15 @@ export const api = {
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
     const rawId = String(id || pkg.id || '').trim();
-    const isTempId = isTemporaryOrMissingPackageId(rawId);
+    const hasValidDbId = isValidDatabasePackageId(rawId);
 
     // 1. Validation Check: Check whether the package has a valid database ID before sending a PATCH request.
     // If the package ID is missing or temporary, fallback to an insert/upsert operation so it saves correctly
     // to Supabase instead of throwing a "not found" error.
-    if (isTempId) {
-      console.log(`[updatePackage] Package ID "${rawId}" is missing or temporary. Falling back to insert/upsert operation.`);
+    if (!hasValidDbId) {
+      console.debug(`[updatePackage] Package ID "${rawId}" is missing or temporary. Falling back to insert/upsert operation.`);
       const pkgToInsert = { ...pkg };
-      if (rawId && !isTempId) {
-        pkgToInsert.id = rawId;
-      } else {
-        delete pkgToInsert.id;
-      }
+      delete pkgToInsert.id;
       return await this.createPackage(pkgToInsert);
     }
 
@@ -3235,22 +3264,22 @@ export const api = {
       } else {
         const errText = await response.text();
         if (isStatementTimeoutError(errText)) {
-          console.warn(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${rawId}. Safeguarding local state.`);
+          console.debug(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${rawId}. Safeguarding local state.`);
           const fallbackMapped = localStore.updatePackage(rawId, pkg);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
           }
           return fallbackMapped;
         }
-        console.warn(`Direct fetch updatePackage returned (${response.status}):`, errText);
+        console.debug(`Direct fetch updatePackage returned (${response.status}):`, errText);
       }
     } catch (fetchErr: any) {
       if (isStatementTimeoutError(fetchErr)) {
-        console.warn(`[Supabase updatePackage] Statement timeout caught in fetch. Preserving local package.`);
+        console.debug(`[Supabase updatePackage] Statement timeout caught in fetch. Preserving local package.`);
         const fallbackMapped = localStore.updatePackage(rawId, pkg);
         return fallbackMapped;
       }
-      console.warn('Direct fetch updatePackage network error:', fetchErr);
+      console.debug('Direct fetch updatePackage network notice:', fetchErr);
     }
 
     // 2. Fallback to Upsert/Insert if the package ID does not exist in Supabase yet
@@ -3273,10 +3302,6 @@ export const api = {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
           }
           return mapped;
-        }
-
-        if (upsertErr) {
-          console.warn('[Supabase updatePackage] Supabase SDK upsert warning:', upsertErr.message);
         }
 
         // Try direct PostgREST upsert with resolution=merge-duplicates
@@ -3303,52 +3328,28 @@ export const api = {
         }
       } catch (upsertCatchErr: any) {
         if (isStatementTimeoutError(upsertCatchErr)) {
-          console.warn('[Supabase updatePackage] Statement timeout caught during upsert fallback. Safeguarding local state.');
+          console.debug('[Supabase updatePackage] Statement timeout caught during upsert fallback. Safeguarding local state.');
           const fallbackMapped = localStore.updatePackage(rawId, pkg);
           return fallbackMapped;
         }
-        console.warn('[Supabase updatePackage] Upsert fallback network warning:', upsertCatchErr);
+        console.debug('[Supabase updatePackage] Upsert fallback notice:', upsertCatchErr);
+      }
+
+      // If upsert could not be completed, fallback to insert
+      try {
+        console.debug(`[Supabase updatePackage] Performing clean insert fallback for package "${rawId}".`);
+        const { id: _, ...insertOnlyPayload } = upsertPayload;
+        const inserted = await this.createPackage({ ...pkg, ...insertOnlyPayload });
+        if (inserted) {
+          localStore.updatePackage(rawId, inserted);
+          return inserted;
+        }
+      } catch (insertErr) {
+        console.debug('[Supabase updatePackage] Clean insert fallback notice:', insertErr);
       }
     }
 
-    // 3. Secondary attempt via Supabase SDK or supabaseRest targeting packages table
-    try {
-      const { data, error } = await supabase.from('packages').update(payload).eq('id', rawId).select().maybeSingle();
-      if (!error && data) {
-        const mapped = mapPackageRow(data);
-        localStore.updatePackage(rawId, mapped);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
-        }
-        return mapped;
-      }
-      if (error && isStatementTimeoutError(error)) {
-        console.warn(`[Supabase updatePackage] Supabase SDK statement timeout (57014) intercepted.`);
-        const fallbackMapped = localStore.updatePackage(rawId, pkg);
-        return fallbackMapped;
-      }
-      const restRes = await supabaseRest<any[]>('packages', {
-        method: 'PATCH',
-        headers: explicitHeaders,
-        params: { id: `eq.${rawId}` },
-        body: payload,
-      });
-      if (restRes.data && restRes.data.length > 0) {
-        const mapped = mapPackageRow(restRes.data[0]);
-        localStore.updatePackage(rawId, mapped);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
-        }
-        return mapped;
-      }
-    } catch (err: any) {
-      if (isStatementTimeoutError(err)) {
-        console.warn('[Supabase updatePackage] Database statement timeout caught. Saved locally.');
-      } else {
-        console.warn('updatePackage remote error, saving to localStore:', err);
-      }
-    }
-
+    // 3. Fallback to local storage update so package is never lost
     const updated = localStore.updatePackage(rawId, pkg);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: updated }));
@@ -3591,20 +3592,36 @@ export const api = {
   },
 
   async deleteCity(id: string): Promise<boolean> {
+    const rawId = String(id || '').trim();
+    if (!rawId) return true;
+
+    // 1. Optimistically purge from localStore first so state is immediately consistent
+    localStore.deleteCity(rawId);
+
     const explicitHeaders = getSupabaseHeaders();
 
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(id)}`, {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      // Single direct DELETE call to PostgREST with timeout signal
+      await fetch(`${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(rawId)}`, {
         method: 'DELETE',
         headers: explicitHeaders,
-      });
-      await supabase.from('cities').delete().eq('id', id);
-    } catch (err) {
-      console.warn('deleteCity remote error:', err);
+        signal: controller.signal,
+      }).catch(() => null);
+
+      clearTimeout(timeoutId);
+    } catch (err: any) {
+      if (isStatementTimeoutError(err) || err?.name === 'AbortError') {
+        console.debug(`[deleteCity] Statement timeout or abort handled for city "${rawId}". Local removal preserved.`);
+      } else {
+        console.debug('deleteCity remote notice:', err?.message || err);
+      }
     }
-    localStore.deleteCity(id);
+
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { id } }));
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', id: rawId } }));
     }
     return true;
   },

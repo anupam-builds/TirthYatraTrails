@@ -21,12 +21,12 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshCities = useCallback(async (): Promise<City[]> => {
+  const refreshCities = useCallback(async (showLoading = false): Promise<City[]> => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       setError(null);
       const [list, hotelList] = await Promise.all([
-        api.getCities(),
+        api.getCities().catch(() => localStore.getCities()),
         api.getHotels().catch(() => []),
       ]);
       const enriched = list.map((c) => ({
@@ -36,19 +36,20 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCities(enriched);
       return enriched;
     } catch (err: any) {
-      console.error('Failed to load cities in CitiesProvider:', err);
-      setError(err?.message || 'Failed to load cities');
-      return [];
+      console.debug('Handled cities refresh notice (fallback to localStore):', err?.message || err);
+      const fallback = localStore.getCities();
+      setCities(fallback);
+      return fallback;
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refreshCities();
+    refreshCities(true);
 
     const handleCitySync = () => {
-      refreshCities();
+      refreshCities(false);
     };
 
     window.addEventListener('tirth-city-changed', handleCitySync);

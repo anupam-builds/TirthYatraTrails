@@ -423,15 +423,21 @@ export const localStore = {
     const packages = this.getPackages();
     const cleanId = String(id || updates.id || '').trim();
     const cleanIdLower = cleanId.toLowerCase();
+    const updatesId = updates.id ? String(updates.id).trim() : '';
 
-    // Refined matching: exact ID, trimmed case-insensitive, updates.id, prefix stripped, or title match
-    let idx = packages.findIndex((p) => p.id === cleanId || p.id === id);
+    // Refined matching:
+    // 1. Exact ID match (id or updates.id)
+    // 2. Case-insensitive ID match
+    // 3. Prefix-stripped ID match (e.g. 'pkg-bali' matches 'bali' or vice-versa)
+    // 4. Exact or case-insensitive title match
+    let idx = packages.findIndex((p) => p.id === cleanId || (updatesId && p.id === updatesId) || p.id === id);
     if (idx === -1) {
       idx = packages.findIndex(
         (p) =>
           p.id?.trim().toLowerCase() === cleanIdLower ||
-          (updates.id && p.id === String(updates.id).trim()) ||
-          p.id?.replace(/^pkg-/, '') === cleanId.replace(/^pkg-/, '')
+          (updatesId && p.id?.trim().toLowerCase() === updatesId.toLowerCase()) ||
+          p.id?.replace(/^(pkg-|package-)/, '') === cleanId.replace(/^(pkg-|package-)/, '') ||
+          cleanId.replace(/^(pkg-|package-)/, '') === p.id?.replace(/^(pkg-|package-)/, '')
       );
     }
     if (idx === -1 && updates.title) {
@@ -472,12 +478,18 @@ export const localStore = {
       return newPkg;
     }
 
-    packages[idx] = { ...packages[idx], ...updates };
+    const existing = packages[idx];
+    const updatedPkg: Package = {
+      ...existing,
+      ...updates,
+      id: updates.id || existing.id || cleanId,
+    };
+    packages[idx] = updatedPkg;
     setStored(STORAGE_KEYS.PACKAGES, packages);
-    if (updates.category) {
-      this.addCustomCategory(updates.category);
+    if (updatedPkg.category) {
+      this.addCustomCategory(updatedPkg.category);
     }
-    return packages[idx];
+    return updatedPkg;
   },
 
   deletePackage(idOrTitle: string): boolean {
