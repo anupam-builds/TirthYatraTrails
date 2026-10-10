@@ -23,6 +23,8 @@ const STORAGE_KEYS = {
   COMPANIONS: 'tyt_local_companions',
   COMPANION_CONNS: 'tyt_local_companion_conns',
   CUSTOM_CATEGORIES: 'tyt_local_package_categories',
+  DELETED_CITIES: 'tyt_deleted_cities',
+  DELETED_HUBS: 'tyt_deleted_hubs',
 };
 
 const INITIAL_HUBS: TransitHub[] = [
@@ -78,30 +80,112 @@ export const localStore = {
     }).length;
   },
 
+  // Deleted Tombstone Cache Tracking
+  getDeletedCityIds(): string[] {
+    return getStored<string[]>(STORAGE_KEYS.DELETED_CITIES, []);
+  },
+  addDeletedCityId(id: string): void {
+    if (!id) return;
+    const current = this.getDeletedCityIds();
+    const clean = id.toLowerCase().trim();
+    if (!current.includes(clean)) {
+      current.push(clean);
+      setStored(STORAGE_KEYS.DELETED_CITIES, current);
+    }
+  },
+  removeDeletedCityId(id: string): void {
+    if (!id) return;
+    const clean = id.toLowerCase().trim();
+    const current = this.getDeletedCityIds().filter((d) => d !== clean && d !== clean.replace(/^city-/, ''));
+    setStored(STORAGE_KEYS.DELETED_CITIES, current);
+  },
+
+  getDeletedHubIds(): string[] {
+    return getStored<string[]>(STORAGE_KEYS.DELETED_HUBS, []);
+  },
+  addDeletedHubId(id: string): void {
+    if (!id) return;
+    const current = this.getDeletedHubIds();
+    const clean = id.toLowerCase().trim();
+    if (!current.includes(clean)) {
+      current.push(clean);
+      setStored(STORAGE_KEYS.DELETED_HUBS, current);
+    }
+  },
+  removeDeletedHubId(id: string): void {
+    if (!id) return;
+    const clean = id.toLowerCase().trim();
+    const current = this.getDeletedHubIds().filter((d) => d !== clean);
+    setStored(STORAGE_KEYS.DELETED_HUBS, current);
+  },
+
+  setCities(freshCities: City[]): void {
+    const deletedCityIds = this.getDeletedCityIds();
+    const deletedHubIds = this.getDeletedHubIds();
+    const cleanList = (freshCities || [])
+      .filter((c) => {
+        const cId = (c.id || '').toLowerCase().trim();
+        const cName = (c.name || '').toLowerCase().trim();
+        return (
+          !deletedCityIds.includes(cId) &&
+          !deletedCityIds.includes(cName) &&
+          !deletedCityIds.includes(cId.replace(/^city-/, ''))
+        );
+      })
+      .map((c) => ({
+        ...c,
+        transitHubs: Array.isArray(c.transitHubs)
+          ? c.transitHubs.filter((h) => !deletedHubIds.includes((h.id || '').toLowerCase().trim()))
+          : [],
+      }));
+    setStored(STORAGE_KEYS.CITIES, cleanList);
+  },
+
   // Cities
   getCities(): City[] {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.CITIES) : null;
+    const deletedCityIds = this.getDeletedCityIds();
+    const deletedHubIds = this.getDeletedHubIds();
     let list: City[];
     if (raw === null) {
-      setStored(STORAGE_KEYS.CITIES, INITIAL_CITIES);
-      list = [...INITIAL_CITIES];
+      list = INITIAL_CITIES.filter((c) => {
+        const cId = (c.id || '').toLowerCase().trim();
+        const cName = (c.name || '').toLowerCase().trim();
+        return (
+          !deletedCityIds.includes(cId) &&
+          !deletedCityIds.includes(cName) &&
+          !deletedCityIds.includes(cId.replace(/^city-/, ''))
+        );
+      });
+      setStored(STORAGE_KEYS.CITIES, list);
     } else {
       try {
         list = JSON.parse(raw);
       } catch {
         list = [...INITIAL_CITIES];
       }
+      // Always filter against deleted tombstones so deleted items NEVER reappear
+      list = list.filter((c) => {
+        const cId = (c.id || '').toLowerCase().trim();
+        const cName = (c.name || '').toLowerCase().trim();
+        return (
+          !deletedCityIds.includes(cId) &&
+          !deletedCityIds.includes(cName) &&
+          !deletedCityIds.includes(cId.replace(/^city-/, ''))
+        );
+      });
     }
     const hotels = this.getHotels();
     const hubs = this.getHubs();
     return list.map((c) => {
-      const cityHubs = c.transitHubs && c.transitHubs.length > 0
+      const rawHubs = Array.isArray(c.transitHubs) && c.transitHubs.length > 0
         ? c.transitHubs
         : hubs.filter((h) => (h.cityId || '').toLowerCase() === (c.id || '').toLowerCase() || (h.cityName || '').toLowerCase() === (c.name || '').toLowerCase());
+      const cleanHubs = rawHubs.filter((h) => !deletedHubIds.includes((h.id || '').toLowerCase().trim()));
       return {
         ...c,
         hotelCount: this.countHotelsForCity(c, hotels),
-        transitHubs: cityHubs,
+        transitHubs: cleanHubs,
       };
     });
   },
@@ -110,6 +194,10 @@ export const localStore = {
     const cities = this.getCities();
     const cleanName = (cityData.name || 'Sacred Destination').trim();
     const id = cityData.id || cleanName.toLowerCase().replace(/\s+/g, '-');
+
+    // Remove from tombstone blacklist if newly created/restored
+    this.removeDeletedCityId(id);
+    this.removeDeletedCityId(cleanName);
 
     // Prevent duplicate city entries
     const existingIndex = cities.findIndex(
@@ -192,25 +280,48 @@ export const localStore = {
     try {
       decoded = decodeURIComponent(raw);
     } catch {}
-    const target = decoded.toLowerCase();
+    const target = decoded.toLowerCase().trim();
 
-    const cities = this.getCities().filter((c) => {
-      const cId = (c.id || '').toLowerCase();
-      const cName = (c.name || '').toLowerCase();
+    // 1. Record in tombstone blacklist so initial mock/seed data NEVER resurrects it
+    this.addDeletedCityId(target);
+    this.addDeletedCityId(target.replace(/^city-/, ''));
+
+    // 2. Filter from stored cities
+    const storedCities = getStored<City[]>(STORAGE_KEYS.CITIES, []);
+    const remainingCities = storedCities.filter((c) => {
+      const cId = (c.id || '').toLowerCase().trim();
+      const cName = (c.name || '').toLowerCase().trim();
       const matches =
         cId === target ||
         cName === target ||
         cId === `city-${target}` ||
         `city-${cId}` === target ||
-        target.includes(cId) ||
-        (target.length > 3 && cName.includes(target)) ||
-        (cName.length > 3 && target.includes(cName));
+        cId.replace(/^city-/, '') === target.replace(/^city-/, '');
       return !matches;
     });
-    setStored(STORAGE_KEYS.CITIES, cities);
+    setStored(STORAGE_KEYS.CITIES, remainingCities);
+
+    // 3. Explicitly purge any transit hubs associated with this deleted city immediately!
+    const storedHubs = getStored<TransitHub[]>(STORAGE_KEYS.HUBS, []);
+    const remainingHubs = storedHubs.filter((h) => {
+      const hCityId = (h.cityId || '').toLowerCase().trim();
+      const hCityName = (h.cityName || '').toLowerCase().trim();
+      const matches =
+        hCityId === target ||
+        hCityName === target ||
+        hCityId === `city-${target}` ||
+        `city-${hCityId}` === target ||
+        hCityId.replace(/^city-/, '') === target.replace(/^city-/, '');
+      if (matches) {
+        this.addDeletedHubId(h.id);
+      }
+      return !matches;
+    });
+    setStored(STORAGE_KEYS.HUBS, remainingHubs);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', target } }));
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { action: 'delete', cityId: target } }));
       window.dispatchEvent(new Event('tirth-hotel-changed'));
     }
 
@@ -1673,19 +1784,41 @@ export const localStore = {
     return conns[idx];
   },
 
-  // Transit Hubs (Local Offline Fallback)
+  // Transit Hubs (Local Offline Fallback & Sync)
+  setHubs(freshHubs: TransitHub[]): void {
+    const deletedHubIds = this.getDeletedHubIds();
+    const deletedCityIds = this.getDeletedCityIds();
+    const cleanList = (freshHubs || []).filter((h) => {
+      const hId = (h.id || '').toLowerCase().trim();
+      const hCityId = (h.cityId || '').toLowerCase().trim();
+      return !deletedHubIds.includes(hId) && !deletedCityIds.includes(hCityId);
+    });
+    setStored(STORAGE_KEYS.HUBS, cleanList);
+  },
+
   getHubs(cityId?: string): TransitHub[] {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.HUBS) : null;
+    const deletedHubIds = this.getDeletedHubIds();
+    const deletedCityIds = this.getDeletedCityIds();
     let list: TransitHub[];
     if (raw === null) {
-      setStored(STORAGE_KEYS.HUBS, INITIAL_HUBS);
-      list = [...INITIAL_HUBS];
+      list = INITIAL_HUBS.filter((h) => {
+        const hId = (h.id || '').toLowerCase().trim();
+        const hCityId = (h.cityId || '').toLowerCase().trim();
+        return !deletedHubIds.includes(hId) && !deletedCityIds.includes(hCityId);
+      });
+      setStored(STORAGE_KEYS.HUBS, list);
     } else {
       try {
         list = JSON.parse(raw);
       } catch {
         list = [...INITIAL_HUBS];
       }
+      list = list.filter((h) => {
+        const hId = (h.id || '').toLowerCase().trim();
+        const hCityId = (h.cityId || '').toLowerCase().trim();
+        return !deletedHubIds.includes(hId) && !deletedCityIds.includes(hCityId);
+      });
     }
     if (cityId) {
       const lower = cityId.toLowerCase().trim();
@@ -1697,6 +1830,10 @@ export const localStore = {
   createHub(hubData: Partial<TransitHub>): TransitHub {
     const list = this.getHubs();
     const id = hubData.id || `hub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+    // Remove from tombstone blacklist if newly created
+    this.removeDeletedHubId(id);
+
     const newHub: TransitHub = {
       id,
       cityId: hubData.cityId || 'ayodhya',
@@ -1711,6 +1848,23 @@ export const localStore = {
     };
     list.unshift(newHub);
     setStored(STORAGE_KEYS.HUBS, list);
+
+    // Also link into the parent city in localStore
+    const storedCities = getStored<City[]>(STORAGE_KEYS.CITIES, []);
+    const cityIdx = storedCities.findIndex((c) => (c.id || '').toLowerCase() === (newHub.cityId || '').toLowerCase());
+    if (cityIdx !== -1) {
+      const currentHubs = Array.isArray(storedCities[cityIdx].transitHubs) ? storedCities[cityIdx].transitHubs : [];
+      storedCities[cityIdx] = {
+        ...storedCities[cityIdx],
+        transitHubs: [newHub, ...currentHubs.filter((h) => h.id !== id)],
+      };
+      setStored(STORAGE_KEYS.CITIES, storedCities);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { action: 'create', hub: newHub } }));
+    }
+
     return newHub;
   },
 
@@ -1723,16 +1877,68 @@ export const localStore = {
     const updated = {
       ...list[idx],
       ...hubData,
+      id,
       updatedAt: new Date().toISOString(),
     };
     list[idx] = updated;
     setStored(STORAGE_KEYS.HUBS, list);
+
+    // Also update inside stored cities
+    const storedCities = getStored<City[]>(STORAGE_KEYS.CITIES, []);
+    let cityModified = false;
+    const nextCities = storedCities.map((c) => {
+      if (Array.isArray(c.transitHubs) && c.transitHubs.some((h) => h.id === id)) {
+        cityModified = true;
+        return {
+          ...c,
+          transitHubs: c.transitHubs.map((h) => (h.id === id ? updated : h)),
+        };
+      }
+      return c;
+    });
+    if (cityModified) {
+      setStored(STORAGE_KEYS.CITIES, nextCities);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { action: 'update', hub: updated } }));
+    }
+
     return updated;
   },
 
   deleteHub(id: string): boolean {
-    const list = this.getHubs().filter((h) => h.id !== id);
+    if (!id) return true;
+    const cleanId = String(id).toLowerCase().trim();
+
+    // 1. Add to tombstone blacklist so it never resurrects from initial/fallback data
+    this.addDeletedHubId(cleanId);
+
+    // 2. Remove from stored hubs
+    const list = this.getHubs().filter((h) => (h.id || '').toLowerCase().trim() !== cleanId);
     setStored(STORAGE_KEYS.HUBS, list);
+
+    // 3. Explicitly purge from all stored cities in local cache!
+    const storedCities = getStored<City[]>(STORAGE_KEYS.CITIES, []);
+    let modified = false;
+    const updatedCities = storedCities.map((c) => {
+      if (Array.isArray(c.transitHubs) && c.transitHubs.some((h) => (h.id || '').toLowerCase().trim() === cleanId)) {
+        modified = true;
+        return {
+          ...c,
+          transitHubs: c.transitHubs.filter((h) => (h.id || '').toLowerCase().trim() !== cleanId),
+        };
+      }
+      return c;
+    });
+    if (modified) {
+      setStored(STORAGE_KEYS.CITIES, updatedCities);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { action: 'delete', id: cleanId } }));
+    }
+
     return true;
   },
 

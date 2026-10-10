@@ -246,6 +246,7 @@ export const AdminCities: React.FC = () => {
         });
       }
       setIsCityModalOpen(false);
+      loadData(false);
       setTimeout(() => setToast(null), 5000);
     } catch (err: any) {
       console.error('Error saving destination:', err);
@@ -286,11 +287,31 @@ export const AdminCities: React.FC = () => {
   };
 
   const handleDeleteHub = async (id: string) => {
+    // 1. Optimistic removal from hubs and parent city transitHubs
     setHubs((prev) => prev.filter((h) => h.id !== id));
+    setCities((prev) =>
+      prev.map((c) => ({
+        ...c,
+        transitHubs: (c.transitHubs || []).filter((h) => h.id !== id),
+      }))
+    );
+
+    const toastId = String(Date.now());
+    setToast({
+      id: toastId,
+      type: 'info',
+      title: 'Transit Hub Removed',
+      message: 'Transit hub was removed from directory listings.',
+    });
+    setTimeout(() => {
+      setToast((curr) => (curr?.id === toastId ? null : curr));
+    }, 4000);
+
     try {
       await api.deleteHub(id);
+      loadData(false);
     } catch (err) {
-      console.error(err);
+      console.debug('Failed to delete hub notice:', err);
     }
   };
 
@@ -314,8 +335,9 @@ export const AdminCities: React.FC = () => {
         setHubs((prev) => reconcileRealtimeList(prev, 'INSERT', created));
       }
       setIsHubModalOpen(false);
+      loadData(false);
     } catch (err) {
-      alert('Failed saving transit hub');
+      console.debug('Failed saving transit hub notice:', err);
     }
   };
 

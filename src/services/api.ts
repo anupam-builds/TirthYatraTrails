@@ -940,7 +940,18 @@ export async function submitCustomerInquiry(formData: any) {
   return result;
 }
 
+// In-memory query cache with TTL & mutation-driven invalidation
+let citiesCache: { data: City[]; timestamp: number } | null = null;
+let hubsCache: { data: TransitHub[]; timestamp: number } | null = null;
+const CITIES_CACHE_TTL_MS = 20000;
+
+export function invalidateCitiesAndHubsCache(): void {
+  citiesCache = null;
+  hubsCache = null;
+}
+
 export const api = {
+  invalidateCitiesAndHubsCache,
   // Authentication
   async login(email: string, password: string, portal: 'customer' | 'admin' = 'customer'): Promise<AuthResponse> {
     const cleanEmail = email.trim().toLowerCase();
@@ -1575,16 +1586,20 @@ export const api = {
     return token ? JSON.parse(atob(token)) : null;
   },
 
-  // Public & Admin Cities Data via Supabase (Optimized lightweight query with limit & timeout fallback)
-  async getCities(): Promise<City[]> {
+  // Public & Admin Cities Data via Supabase (Targeted column selection, pagination & cache sync)
+  async getCities(options?: { forceFresh?: boolean }): Promise<City[]> {
+    if (!options?.forceFresh && citiesCache && Date.now() - citiesCache.timestamp < CITIES_CACHE_TTL_MS) {
+      return citiesCache.data;
+    }
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-      // Avoid .select('*') to prevent pulling heavy columns or triggering statement timeouts (error 57014)
+      // Targeted column selection: pull essential lightweight columns and embedded transit_hubs without heavy descriptions/images
       const { data, error } = await supabase
         .from('cities')
-        .select('id, name, state, image_url, hotel_count, popular_for')
+        .select('id, name, state, image_url, hotel_count, popular_for, transit_hubs')
         .order('name')
         .limit(100)
         .abortSignal(controller.signal);
@@ -1592,7 +1607,30 @@ export const api = {
       clearTimeout(timeoutId);
 
       if (!error && data && data.length > 0) {
-        return data.map(mapCityRow);
+        const mapped = data.map(mapCityRow);
+
+        // Explicitly update localStore so deleted items never linger in cache
+        localStore.setCities(mapped);
+
+        // Sync transit hubs extracted from Supabase into localStore
+        const allHubs: TransitHub[] = [];
+        mapped.forEach((c) => {
+          if (Array.isArray(c.transitHubs)) {
+            c.transitHubs.forEach((h) => {
+              allHubs.push({
+                ...h,
+                cityId: h.cityId || c.id,
+                cityName: h.cityName || c.name,
+              });
+            });
+          }
+        });
+        if (allHubs.length > 0) {
+          localStore.setHubs(allHubs);
+        }
+
+        citiesCache = { data: mapped, timestamp: Date.now() };
+        return mapped;
       }
       if (error) {
         if (isStatementTimeoutError(error)) {
@@ -1608,7 +1646,9 @@ export const api = {
         console.debug('[getCities] Network notice, falling back to localStore:', err?.message || err);
       }
     }
-    return localStore.getCities();
+    const fallback = localStore.getCities();
+    citiesCache = { data: fallback, timestamp: Date.now() };
+    return fallback;
   },
 
   async getHotels(cityId?: string, query?: string): Promise<Hotel[]> {
@@ -3595,8 +3635,9 @@ export const api = {
     const rawId = String(id || '').trim();
     if (!rawId) return true;
 
-    // 1. Optimistically purge from localStore first so state is immediately consistent
+    // 1. Optimistically purge from localStore and invalidate memory cache immediately
     localStore.deleteCity(rawId);
+    invalidateCitiesAndHubsCache();
 
     const explicitHeaders = getSupabaseHeaders();
 
@@ -3605,11 +3646,14 @@ export const api = {
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       // Single direct DELETE call to PostgREST with timeout signal
-      await fetch(`${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(rawId)}`, {
-        method: 'DELETE',
-        headers: explicitHeaders,
-        signal: controller.signal,
-      }).catch(() => null);
+      await Promise.allSettled([
+        fetch(`${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(rawId)}`, {
+          method: 'DELETE',
+          headers: explicitHeaders,
+          signal: controller.signal,
+        }),
+        supabase.from('cities').delete().eq('id', rawId).abortSignal(controller.signal),
+      ]);
 
       clearTimeout(timeoutId);
     } catch (err: any) {
@@ -3622,6 +3666,8 @@ export const api = {
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', id: rawId } }));
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { action: 'delete', cityId: rawId } }));
+      window.dispatchEvent(new Event('tirth-hotel-changed'));
     }
     return true;
   },
@@ -3828,31 +3874,44 @@ export const api = {
   async createCompanionProfile(p: any) { return this.createCompanion(p); },
 
   // Transit Hubs (Extracted directly from embedded cities.transit_hubs - Zero 404 queries)
-  async getHubs(cityId?: string): Promise<TransitHub[]> {
+  async getHubs(cityId?: string, options?: { forceFresh?: boolean }): Promise<TransitHub[]> {
+    if (!options?.forceFresh && hubsCache && Date.now() - hubsCache.timestamp < CITIES_CACHE_TTL_MS) {
+      const cached = hubsCache.data;
+      if (cityId) {
+        const lower = cityId.toLowerCase().trim();
+        return cached.filter((h) => (h.cityId || '').toLowerCase().trim() === lower);
+      }
+      return cached;
+    }
+
     try {
-      const cities = await this.getCities();
+      const cities = await this.getCities({ forceFresh: options?.forceFresh });
+      const deletedHubIds = localStore.getDeletedHubIds();
       const allHubs: TransitHub[] = [];
       cities.forEach((c) => {
         if (Array.isArray(c.transitHubs)) {
           c.transitHubs.forEach((h) => {
-            allHubs.push({
-              ...h,
-              cityId: h.cityId || c.id,
-              cityName: h.cityName || c.name,
-            });
+            if (!deletedHubIds.includes((h.id || '').toLowerCase().trim())) {
+              allHubs.push({
+                ...h,
+                cityId: h.cityId || c.id,
+                cityName: h.cityName || c.name,
+              });
+            }
           });
         }
       });
 
-      if (allHubs.length > 0) {
-        if (cityId) {
-          const lower = cityId.toLowerCase().trim();
-          return allHubs.filter((h) => (h.cityId || '').toLowerCase().trim() === lower);
-        }
-        return allHubs;
+      localStore.setHubs(allHubs);
+      hubsCache = { data: allHubs, timestamp: Date.now() };
+
+      if (cityId) {
+        const lower = cityId.toLowerCase().trim();
+        return allHubs.filter((h) => (h.cityId || '').toLowerCase().trim() === lower);
       }
+      return allHubs;
     } catch (err) {
-      console.warn('getHubs extraction error, using localStore:', err);
+      console.debug('getHubs extraction notice, using localStore:', err);
     }
     return localStore.getHubs(cityId);
   },
@@ -3872,8 +3931,10 @@ export const api = {
       updatedAt: new Date().toISOString(),
     };
 
+    invalidateCitiesAndHubsCache();
+
     try {
-      const cities = await this.getCities();
+      const cities = await this.getCities({ forceFresh: true });
       const targetCity = cities.find(
         (c) => c.id.toLowerCase() === (newHub.cityId || '').toLowerCase()
       );
@@ -3884,10 +3945,12 @@ export const api = {
         await this.updateCity(targetCity.id, { transitHubs: updatedHubs });
       }
     } catch (err) {
-      console.warn('createHub city update error, saving to localStore:', err);
+      console.debug('createHub city update notice, saving to localStore:', err);
     }
 
     localStore.createHub(newHub);
+    invalidateCitiesAndHubsCache();
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: newHub }));
     }
@@ -3896,9 +3959,10 @@ export const api = {
 
   async updateHub(id: string, hub: Partial<TransitHub>): Promise<TransitHub> {
     let updatedHub: TransitHub = { ...hub, id } as TransitHub;
+    invalidateCitiesAndHubsCache();
 
     try {
-      const cities = await this.getCities();
+      const cities = await this.getCities({ forceFresh: true });
       for (const city of cities) {
         const hubs = Array.isArray(city.transitHubs) ? city.transitHubs : [];
         const idx = hubs.findIndex((h) => h.id === id);
@@ -3915,10 +3979,12 @@ export const api = {
         }
       }
     } catch (err) {
-      console.warn('updateHub city update error, saving to localStore:', err);
+      console.debug('updateHub city update notice, saving to localStore:', err);
     }
 
     localStore.updateHub(id, updatedHub);
+    invalidateCitiesAndHubsCache();
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: updatedHub }));
     }
@@ -3936,23 +4002,30 @@ export const api = {
   },
 
   async deleteHub(id: string): Promise<boolean> {
+    const cleanId = String(id || '').trim();
+    if (!cleanId) return true;
+
+    // 1. Immediately clean up local storage cache so deleted items don't reappear via fallback data
+    localStore.deleteHub(cleanId);
+    invalidateCitiesAndHubsCache();
+
+    // 2. Remove the hub from the city's transitHubs list in the database
     try {
-      const cities = await this.getCities();
+      const cities = await this.getCities({ forceFresh: true });
       for (const city of cities) {
         const hubs = Array.isArray(city.transitHubs) ? city.transitHubs : [];
-        if (hubs.some((h) => h.id === id)) {
-          const filtered = hubs.filter((h) => h.id !== id);
+        if (hubs.some((h) => (h.id || '').toLowerCase() === cleanId.toLowerCase())) {
+          const filtered = hubs.filter((h) => (h.id || '').toLowerCase() !== cleanId.toLowerCase());
           await this.updateCity(city.id, { transitHubs: filtered });
           break;
         }
       }
     } catch (err) {
-      console.warn('deleteHub city update error:', err);
+      console.debug('deleteHub city update notice:', err);
     }
 
-    localStore.deleteHub(id);
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { id } }));
+      window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { action: 'delete', id: cleanId } }));
     }
     return true;
   },
