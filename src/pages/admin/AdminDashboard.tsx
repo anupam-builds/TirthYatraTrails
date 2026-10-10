@@ -152,11 +152,11 @@ export const AdminDashboard: React.FC = () => {
           api.getPackages(),
           api.getInquiries(),
         ]);
-        setCities(c);
-        hotelsCountVal = h.length;
-        packagesCountVal = p.length;
-        citiesCountVal = c.length;
-        recalculateStats(inq, hotelsCountVal, packagesCountVal, citiesCountVal);
+        setCities(Array.isArray(c) ? c : []);
+        hotelsCountVal = (h || []).length;
+        packagesCountVal = (p || []).length;
+        citiesCountVal = (c || []).length;
+        recalculateStats(inq || [], hotelsCountVal, packagesCountVal, citiesCountVal);
       } catch (err) {
         console.error('Error loading dashboard:', err);
       } finally {

@@ -20,36 +20,37 @@ export function reconcileRealtimeList<T extends Record<string, any>>(
   idKey: keyof T = 'id' as keyof T,
   order: 'prepend' | 'append' = 'prepend'
 ): T[] {
-  if (!incomingRecord) return prevList;
-  const targetId = String(incomingRecord[idKey]);
+  const safeList = Array.isArray(prevList) ? prevList : [];
+  if (!incomingRecord) return safeList;
+  const targetId = String(incomingRecord[idKey] ?? '');
 
   if (eventType === 'DELETE') {
-    return prevList.filter((item) => String(item[idKey]) !== targetId);
+    return safeList.filter((item) => item && String(item[idKey]) !== targetId);
   }
 
-  const existingIndex = prevList.findIndex((item) => String(item[idKey]) === targetId);
+  const existingIndex = safeList.findIndex((item) => item && String(item[idKey]) === targetId);
 
   if (eventType === 'INSERT') {
     if (existingIndex !== -1) {
       // Record was already inserted optimistically; merge latest authoritative values
-      const updated = [...prevList];
+      const updated = [...safeList];
       updated[existingIndex] = { ...updated[existingIndex], ...incomingRecord };
       return updated;
     }
-    return order === 'prepend' ? [incomingRecord, ...prevList] : [...prevList, incomingRecord];
+    return order === 'prepend' ? [incomingRecord, ...safeList] : [...safeList, incomingRecord];
   }
 
   if (eventType === 'UPDATE') {
     if (existingIndex !== -1) {
-      const updated = [...prevList];
+      const updated = [...safeList];
       updated[existingIndex] = { ...updated[existingIndex], ...incomingRecord };
       return updated;
     }
     // If not found in current window, insert it to keep list fresh
-    return order === 'prepend' ? [incomingRecord, ...prevList] : [...prevList, incomingRecord];
+    return order === 'prepend' ? [incomingRecord, ...safeList] : [...safeList, incomingRecord];
   }
 
-  return prevList;
+  return safeList;
 }
 
 // ==============================================================================

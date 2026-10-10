@@ -111,18 +111,20 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
   }, [isOpen, isAddingNew]);
 
   // Find active city object
-  const activeCity = cities.find(
+  const activeCity = (cities || []).find(
     (c) =>
-      c.id.toLowerCase() === (selectedCityId || '').toLowerCase() ||
-      c.name.toLowerCase() === (selectedCityName || selectedCityId || '').toLowerCase()
+      c &&
+      (c.id?.toLowerCase() === (selectedCityId || '').toLowerCase() ||
+        c.name?.toLowerCase() === (selectedCityName || selectedCityId || '').toLowerCase())
   );
 
   // Filtered cities list
-  const filteredCities = cities.filter((c) => {
+  const filteredCities = (cities || []).filter((c) => {
+    if (!c) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     return (
-      c.name.toLowerCase().includes(q) ||
+      (c.name && c.name.toLowerCase().includes(q)) ||
       (c.state && c.state.toLowerCase().includes(q)) ||
       (c.popularFor && c.popularFor.toLowerCase().includes(q))
     );
@@ -321,7 +323,7 @@ export const SacredCityHybridSelector: React.FC<SacredCityHybridSelectorProps> =
 
               {/* Cities Master List */}
               <div className="max-h-52 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
-                {filteredCities.length === 0 ? (
+                {(filteredCities || []).length === 0 ? (
                   <div className="py-6 text-center text-slate-500 dark:text-slate-400 space-y-2">
                     <p className="text-xs">No sacred city found matching &quot;{searchQuery}&quot;.</p>
                     <button

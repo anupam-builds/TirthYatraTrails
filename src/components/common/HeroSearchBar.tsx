@@ -79,12 +79,16 @@ export const HeroSearchBar: React.FC<HeroSearchBarProps> = ({
     };
   }, [showCityDropdown]);
 
+  // Safe array normalization
+  const safeCities = Array.isArray(cities) ? cities : [];
+
   // Find active city object
-  const activeCityObj = cities.find(
+  const activeCityObj = safeCities.find(
     (c) =>
-      c.id === selectedCityId ||
-      c.name.toLowerCase() === selectedCityId.toLowerCase() ||
-      c.id.toLowerCase() === selectedCityId.toLowerCase()
+      c &&
+      (c.id === selectedCityId ||
+        c.name?.toLowerCase() === selectedCityId.toLowerCase() ||
+        c.id?.toLowerCase() === selectedCityId.toLowerCase())
   );
 
   const selectedCityDisplay = activeCityObj
@@ -92,11 +96,12 @@ export const HeroSearchBar: React.FC<HeroSearchBarProps> = ({
     : initialCityName || (selectedCityId ? selectedCityId : 'Select City or Area');
 
   // Filter cities in dropdown
-  const filteredCities = cities.filter((c) => {
+  const filteredCities = safeCities.filter((c) => {
+    if (!c) return false;
     if (!cityFilterText.trim()) return true;
     const q = cityFilterText.toLowerCase().trim();
     return (
-      c.name.toLowerCase().includes(q) ||
+      (c.name && c.name.toLowerCase().includes(q)) ||
       (c.state && c.state.toLowerCase().includes(q)) ||
       (c.popularFor && c.popularFor.toLowerCase().includes(q))
     );
@@ -113,7 +118,7 @@ export const HeroSearchBar: React.FC<HeroSearchBarProps> = ({
 
   const handleExecuteSearch = (overrideCityId?: string, overrideCityName?: string) => {
     const targetCityId = overrideCityId !== undefined ? overrideCityId : selectedCityId;
-    const targetObj = cities.find((c) => c.id === targetCityId);
+    const targetObj = safeCities.find((c) => c && c.id === targetCityId);
     const targetCityName =
       overrideCityName !== undefined
         ? overrideCityName

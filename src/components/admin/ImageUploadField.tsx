@@ -40,6 +40,11 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   maxImages = 15,
   folder = 'general',
 }) => {
+  // Safe array normalization: guard against undefined/null/non-array values
+  const safeImages: string[] = Array.isArray(images)
+    ? images.filter((img): img is string => typeof img === 'string' && img.trim().length > 0)
+    : [];
+
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -63,7 +68,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         return;
       }
 
-      const remainingSlots = multiple ? maxImages - images.length : 1;
+      const remainingSlots = multiple ? Math.max(0, maxImages - safeImages.length) : 1;
       if (remainingSlots <= 0) {
         setErrorMessage(`Maximum limit of ${maxImages} images reached.`);
         setIsProcessing(false);
@@ -76,11 +81,14 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         uploadImageFile(file, folder)
       );
       const newImages = await Promise.all(processedPromises);
+      const validNewImages = (newImages || []).filter(
+        (img): img is string => typeof img === 'string' && img.trim().length > 0
+      );
 
       if (multiple) {
-        onChange([...images, ...newImages]);
+        onChange([...safeImages, ...validNewImages]);
       } else {
-        onChange([newImages[0]]);
+        onChange(validNewImages.length > 0 ? [validNewImages[0]] : []);
       }
     } catch (err: any) {
       console.error('Error processing and uploading images:', err);
@@ -113,14 +121,14 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   };
 
   const handleRemoveImage = (indexToRemove: number) => {
-    const updated = images.filter((_, idx) => idx !== indexToRemove);
+    const updated = safeImages.filter((_, idx) => idx !== indexToRemove);
     onChange(updated);
   };
 
   const handleSetCover = (index: number) => {
-    if (index === 0) return;
-    const target = images[index];
-    const rest = images.filter((_, idx) => idx !== index);
+    if (index === 0 || !safeImages[index]) return;
+    const target = safeImages[index];
+    const rest = safeImages.filter((_, idx) => idx !== index);
     onChange([target, ...rest]);
   };
 
@@ -145,7 +153,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       }
 
       if (multiple) {
-        onChange([...images, finalUrl]);
+        onChange([...safeImages, finalUrl]);
       } else {
         onChange([finalUrl]);
       }
@@ -159,7 +167,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
     }
   };
 
-  const activeFileInputId = !multiple && images.length > 0 ? `${id}-file-input` : `${id}-multi-file-input`;
+  const activeFileInputId = !multiple && safeImages.length > 0 ? `${id}-file-input` : `${id}-multi-file-input`;
 
   return (
     <div id={id ? `${id}-field-container` : undefined} className="space-y-3">
@@ -169,9 +177,9 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           {label}
         </label>
         <div className="flex items-center gap-2">
-          {images.length > 0 && (
+          {safeImages.length > 0 && (
             <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-orange-100 dark:bg-orange-950/40 text-[#ea580c] dark:text-orange-400">
-              {images.length} {images.length === 1 ? 'image' : 'images'}
+              {safeImages.length} {safeImages.length === 1 ? 'image' : 'images'}
             </span>
           )}
           <button
@@ -216,7 +224,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       )}
 
       {/* If single image mode and an image is selected, render high-clarity live preview with Change and Remove buttons */}
-      {!multiple && images.length > 0 ? (
+      {!multiple && safeImages.length > 0 ? (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -240,7 +248,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
 
           <div className="relative w-full h-56 sm:h-64 bg-slate-950 flex items-center justify-center overflow-hidden">
             <img
-              src={images[0]}
+              src={safeImages[0]}
               alt={label || 'Uploaded preview'}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
               onError={(e) => {
@@ -255,7 +263,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                 <Check className="w-3.5 h-3.5" />
                 <span>Photo Selected</span>
               </span>
-              {images[0].startsWith('data:image') && (
+              {safeImages[0]?.startsWith('data:image') && (
                 <span className="inline-flex items-center gap-1 bg-orange-600/90 backdrop-blur-xs text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
                   <span>Device Upload (Base64)</span>
                 </span>
@@ -265,7 +273,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
             {/* Bottom Actions Bar */}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 flex items-center justify-between gap-2 z-10">
               <p className="text-xs text-slate-300 truncate font-medium">
-                {images[0].startsWith('data:image') ? 'Stored as high-fidelity Base64' : 'Photo ready'}
+                {safeImages[0]?.startsWith('data:image') ? 'Stored as high-fidelity Base64' : 'Photo ready'}
               </p>
 
               <div className="flex items-center gap-2">
@@ -365,7 +373,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       )}
 
       {/* Multiple Thumbnails Preview Grid (Used when multiple={true}) */}
-      {multiple && images.length > 0 && (
+      {multiple && safeImages.length > 0 && (
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             <span>Uploaded Thumbnails (First image is the Main Cover):</span>
@@ -379,7 +387,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {images.map((imgSrc, idx) => (
+            {safeImages.map((imgSrc, idx) => (
               <div
                 key={idx}
                 className={`relative group rounded-xl overflow-hidden border bg-slate-900 aspect-video shadow-xs transition-all ${

@@ -90,10 +90,11 @@ export const AdminCities: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cities' }, (payload: any) => {
         const eventType = payload.eventType || payload.event || 'UPDATE';
         if (eventType === 'DELETE') {
-          const id = String(payload.old?.id || payload.new?.id);
+          const id = String(payload.old?.id || payload.new?.id || '');
           setCities((prev) => {
-            const nextCities = prev.filter((c) => c.id !== id);
-            setHubs((currHubs) => currHubs.filter((h) => h.cityId !== id));
+            const safePrev = Array.isArray(prev) ? prev : [];
+            const nextCities = safePrev.filter((c) => c && c.id !== id);
+            setHubs((currHubs) => (Array.isArray(currHubs) ? currHubs : []).filter((h) => h && h.cityId !== id));
             return nextCities;
           });
           setLastSyncMsg(`City removed live`);
@@ -102,16 +103,17 @@ export const AdminCities: React.FC = () => {
           if (raw) {
             const mapped = mapCityRow(raw);
             setCities((prev) => {
-              const updated = reconcileRealtimeList(prev, eventType, mapped);
+              const safePrev = Array.isArray(prev) ? prev : [];
+              const updated = reconcileRealtimeList(safePrev, eventType, mapped);
               const allHubs: TransitHub[] = [];
-              updated.forEach((c) => {
-                if (Array.isArray(c.transitHubs)) {
+              (updated || []).forEach((c) => {
+                if (c && Array.isArray(c.transitHubs)) {
                   c.transitHubs.forEach((h) => {
                     allHubs.push({ ...h, cityId: h.cityId || c.id, cityName: h.cityName || c.name });
                   });
                 }
               });
-              if (allHubs.length > 0) {
+              if ((allHubs || []).length > 0) {
                 setHubs(allHubs);
               }
               return updated;
@@ -132,22 +134,18 @@ export const AdminCities: React.FC = () => {
     };
   }, []);
 
-  async function loadData(showLoading = false) {
+  async function loadData(showLoading = false, forceFresh = false) {
     if (showLoading) setLoading(true);
     try {
       const [cList, hList] = await Promise.all([
-        api.getCities().catch((err) => {
+        api.getCities({ forceFresh }).catch((err) => {
           console.debug('[AdminCities] Soft fallback on cities load:', err?.message || err);
-          return localStore.getCities();
+          return localStore.getCities() || [];
         }),
-        api.getHubs().catch(() => localStore.getHubs()),
+        api.getHubs(undefined, { forceFresh }).catch(() => localStore.getHubs() || []),
       ]);
-      if (Array.isArray(cList)) {
-        setCities(cList);
-      }
-      if (Array.isArray(hList)) {
-        setHubs(hList);
-      }
+      setCities(Array.isArray(cList) ? cList : []);
+      setHubs(Array.isArray(hList) ? hList : []);
     } catch (err: any) {
       console.debug('[AdminCities] Handled loadData notice:', err?.message || err);
     } finally {
@@ -178,16 +176,21 @@ export const AdminCities: React.FC = () => {
 
   const handleDeleteDestination = async (id: string, cName?: string) => {
     const cityName = cName || id;
-    const deletedRecord = cities.find(
-      (c) => c.id === id || c.name.toLowerCase() === cityName.toLowerCase()
+    const safeCities = Array.isArray(cities) ? cities : [];
+    const deletedRecord = safeCities.find(
+      (c) => c && (c.id === id || c.name.toLowerCase() === cityName.toLowerCase())
     );
 
-    // Instant optimistic removal from UI
+    // Instant optimistic removal from UI with safe array checking
     setCities((prev) =>
-      prev.filter((c) => c.id !== id && c.name.toLowerCase() !== cityName.toLowerCase())
+      (Array.isArray(prev) ? prev : []).filter(
+        (c) => c && c.id !== id && c.name.toLowerCase() !== cityName.toLowerCase()
+      )
     );
     setHubs((prev) =>
-      prev.filter((h) => h.cityId !== id && h.cityName?.toLowerCase() !== cityName.toLowerCase())
+      (Array.isArray(prev) ? prev : []).filter(
+        (h) => h && h.cityId !== id && h.cityName?.toLowerCase() !== cityName.toLowerCase()
+      )
     );
 
     const toastId = String(Date.now());
@@ -204,12 +207,9 @@ export const AdminCities: React.FC = () => {
     }, 6000);
 
     try {
-      await api.deleteCity(id);
-      if (cName && cName !== id) {
-        api.deleteCity(cName).catch(() => {});
-      }
-      // Non-blocking background sync without showing full-screen loading spinner
-      loadData(false);
+      await api.deleteCity(id, cityName);
+      // Non-blocking background sync with forceFresh: true so deleted item doesn't linger
+      await loadData(false, true);
     } catch (err: any) {
       console.debug('Handled city deletion notice:', err?.message || err);
     }
@@ -228,7 +228,7 @@ export const AdminCities: React.FC = () => {
     try {
       if (editingCity) {
         const updated = await api.updateCity(editingCity.id, cityData);
-        setCities((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
+        setCities((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'UPDATE', updated));
         setToast({
           id: String(Date.now()),
           type: 'success',
@@ -237,7 +237,7 @@ export const AdminCities: React.FC = () => {
         });
       } else {
         const created = await api.createCity(cityData);
-        setCities((prev) => reconcileRealtimeList(prev, 'INSERT', created));
+        setCities((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'INSERT', created));
         setToast({
           id: String(Date.now()),
           type: 'success',
@@ -246,7 +246,7 @@ export const AdminCities: React.FC = () => {
         });
       }
       setIsCityModalOpen(false);
-      loadData(false);
+      await loadData(false, true);
       setTimeout(() => setToast(null), 5000);
     } catch (err: any) {
       console.error('Error saving destination:', err);
@@ -267,7 +267,7 @@ export const AdminCities: React.FC = () => {
   const handleOpenAddHub = () => {
     setEditingHub(null);
     setHubName('');
-    setHubCityId(cities[0]?.id || 'ayodhya');
+    setHubCityId(cities?.[0]?.id || 'ayodhya');
     setHubType('AIRPORT');
     setHubCode('');
     setHubDistance(12);
@@ -288,11 +288,11 @@ export const AdminCities: React.FC = () => {
 
   const handleDeleteHub = async (id: string) => {
     // 1. Optimistic removal from hubs and parent city transitHubs
-    setHubs((prev) => prev.filter((h) => h.id !== id));
+    setHubs((prev) => (Array.isArray(prev) ? prev : []).filter((h) => h && h.id !== id));
     setCities((prev) =>
-      prev.map((c) => ({
+      (Array.isArray(prev) ? prev : []).map((c) => ({
         ...c,
-        transitHubs: (c.transitHubs || []).filter((h) => h.id !== id),
+        transitHubs: (Array.isArray(c?.transitHubs) ? c.transitHubs : []).filter((h) => h && h.id !== id),
       }))
     );
 
@@ -309,7 +309,7 @@ export const AdminCities: React.FC = () => {
 
     try {
       await api.deleteHub(id);
-      loadData(false);
+      await loadData(false, true);
     } catch (err) {
       console.debug('Failed to delete hub notice:', err);
     }
@@ -329,13 +329,13 @@ export const AdminCities: React.FC = () => {
     try {
       if (editingHub) {
         const updated = await api.updateHub(editingHub.id, payload);
-        setHubs((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
+        setHubs((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'UPDATE', updated));
       } else {
         const created = await api.createHub(payload);
-        setHubs((prev) => reconcileRealtimeList(prev, 'INSERT', created));
+        setHubs((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'INSERT', created));
       }
       setIsHubModalOpen(false);
-      loadData(false);
+      await loadData(false, true);
     } catch (err) {
       console.debug('Failed saving transit hub notice:', err);
     }
@@ -394,7 +394,7 @@ export const AdminCities: React.FC = () => {
                     : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                Destinations ({cities.length})
+                Destinations ({(cities || []).length})
               </button>
               <button
                 onClick={() => setActiveSubTab('hubs')}
@@ -404,7 +404,7 @@ export const AdminCities: React.FC = () => {
                     : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                Transit Hubs ({hubs.length})
+                Transit Hubs ({(hubs || []).length})
               </button>
             </div>
 
@@ -440,7 +440,7 @@ export const AdminCities: React.FC = () => {
         {/* CITIES TAB */}
         {!loading && activeSubTab === 'cities' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {cities.map((city) => (
+            {(cities || []).map((city) => (
               <div
                 key={city.id}
                 className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800/80 rounded-3xl overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col group shadow-xs"
@@ -512,8 +512,8 @@ export const AdminCities: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {hubs.map((hub) => {
-                    const linkedCity = cities.find((c) => c.id.toLowerCase() === hub.cityId.toLowerCase());
+                  {(hubs || []).map((hub) => {
+                    const linkedCity = (cities || []).find((c) => c && c.id && hub.cityId && c.id.toLowerCase() === hub.cityId.toLowerCase());
                     return (
                       <tr key={hub.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -744,7 +744,7 @@ export const AdminCities: React.FC = () => {
                       onChange={(e) => setHubCityId(e.target.value)}
                       className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     >
-                      {cities.map((c) => (
+                      {(cities || []).map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
                         </option>

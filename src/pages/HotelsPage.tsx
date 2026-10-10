@@ -70,12 +70,13 @@ export const HotelsPage: React.FC = () => {
         setSelectedCityId('');
       } else {
         const cLower = cityParam.toLowerCase().trim();
-        const matched = cities.find(
+        const matched = (cities || []).find(
           (c) =>
-            c.id.toLowerCase() === cLower ||
-            c.name.toLowerCase() === cLower ||
-            c.name.toLowerCase().includes(cLower) ||
-            cLower.includes(c.name.toLowerCase())
+            c &&
+            (c.id?.toLowerCase() === cLower ||
+              c.name?.toLowerCase() === cLower ||
+              c.name?.toLowerCase().includes(cLower) ||
+              cLower.includes(c.name?.toLowerCase() || ''))
         );
         if (matched) {
           setSelectedCityId(matched.id);
@@ -137,11 +138,12 @@ export const HotelsPage: React.FC = () => {
     };
   }, [selectedCityId, searchQuery]);
 
-  const currentCityObj = cities.find(
+  const currentCityObj = (cities || []).find(
     (c) =>
-      c.id === selectedCityId ||
-      c.name.toLowerCase() === selectedCityId.toLowerCase() ||
-      c.id.toLowerCase() === selectedCityId.toLowerCase()
+      c &&
+      (c.id === selectedCityId ||
+        c.name?.toLowerCase() === selectedCityId.toLowerCase() ||
+        c.id?.toLowerCase() === selectedCityId.toLowerCase())
   );
   const selectedCityName = currentCityObj ? currentCityObj.name : (selectedCityId || 'Select City or Temple');
 
@@ -325,7 +327,7 @@ export const HotelsPage: React.FC = () => {
         </div>
 
         <div className="flex gap-4 overflow-x-auto pb-4 snap-x scrollbar-thin scrollbar-thumb-orange-200">
-          {cities.map((city) => (
+          {(cities || []).map((city) => (
             <div
               key={city.id}
               onClick={() => {

@@ -1589,14 +1589,14 @@ export const api = {
   // Public & Admin Cities Data via Supabase (Targeted column selection, pagination & cache sync)
   async getCities(options?: { forceFresh?: boolean }): Promise<City[]> {
     if (!options?.forceFresh && citiesCache && Date.now() - citiesCache.timestamp < CITIES_CACHE_TTL_MS) {
-      return citiesCache.data;
+      return citiesCache.data || [];
     }
 
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-      // Targeted column selection: pull essential lightweight columns and embedded transit_hubs without heavy descriptions/images
+      // Targeted column selection: pull essential lightweight columns and embedded transit_hubs without heavy descriptions/blobs
       const { data, error } = await supabase
         .from('cities')
         .select('id, name, state, image_url, hotel_count, popular_for, transit_hubs')
@@ -1606,8 +1606,19 @@ export const api = {
 
       clearTimeout(timeoutId);
 
-      if (!error && data && data.length > 0) {
-        const mapped = data.map(mapCityRow);
+      if (!error && Array.isArray(data)) {
+        const deletedCityIds = localStore.getDeletedCityIds();
+        const mapped = data
+          .map(mapCityRow)
+          .filter((c) => {
+            const cId = (c.id || '').toLowerCase().trim();
+            const cName = (c.name || '').toLowerCase().trim();
+            return (
+              !deletedCityIds.includes(cId) &&
+              !deletedCityIds.includes(cName) &&
+              !deletedCityIds.includes(cId.replace(/^city-/, ''))
+            );
+          });
 
         // Explicitly update localStore so deleted items never linger in cache
         localStore.setCities(mapped);
@@ -1646,9 +1657,10 @@ export const api = {
         console.debug('[getCities] Network notice, falling back to localStore:', err?.message || err);
       }
     }
-    const fallback = localStore.getCities();
-    citiesCache = { data: fallback, timestamp: Date.now() };
-    return fallback;
+    const fallback = localStore.getCities() || [];
+    const safeFallback = Array.isArray(fallback) ? fallback : [];
+    citiesCache = { data: safeFallback, timestamp: Date.now() };
+    return safeFallback;
   },
 
   async getHotels(cityId?: string, query?: string): Promise<Hotel[]> {
@@ -3465,6 +3477,7 @@ export const api = {
         if (row) {
           const mapped = mapCityRow(row);
           localStore.createCity(mapped);
+          invalidateCitiesAndHubsCache();
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
           }
@@ -3475,6 +3488,7 @@ export const api = {
         if (isStatementTimeoutError(errText)) {
           console.warn(`[Supabase createCity] Statement timeout (code 57014) intercepted on PostgREST POST. Safeguarding local state.`);
           const fallbackMapped = localStore.createCity({ ...city, id: payload.id } as City);
+          invalidateCitiesAndHubsCache();
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: fallbackMapped }));
           }
@@ -3486,6 +3500,7 @@ export const api = {
       if (isStatementTimeoutError(fetchErr)) {
         console.warn(`[Supabase createCity] Statement timeout caught in fetch. Preserving local city.`);
         const fallbackMapped = localStore.createCity({ ...city, id: payload.id } as City);
+        invalidateCitiesAndHubsCache();
         return fallbackMapped;
       }
       console.warn('Direct fetch createCity network error:', fetchErr);
@@ -3497,6 +3512,7 @@ export const api = {
       if (!error && data) {
         const mapped = mapCityRow(data);
         localStore.createCity(mapped);
+        invalidateCitiesAndHubsCache();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
@@ -3511,6 +3527,7 @@ export const api = {
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapCityRow(restRes.data[0]);
         localStore.createCity(mapped);
+        invalidateCitiesAndHubsCache();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
@@ -3521,6 +3538,7 @@ export const api = {
     }
 
     const saved = localStore.createCity({ ...city, id: payload.id } as City);
+    invalidateCitiesAndHubsCache();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: saved }));
     }
@@ -3549,6 +3567,7 @@ export const api = {
         if (row) {
           const mapped = mapCityRow(row);
           localStore.updateCity(id, mapped);
+          invalidateCitiesAndHubsCache();
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
           }
@@ -3559,6 +3578,7 @@ export const api = {
         if (isStatementTimeoutError(errText)) {
           console.warn(`[Supabase updateCity] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${id}. Safeguarding local state.`);
           const fallbackMapped = localStore.updateCity(id, city);
+          invalidateCitiesAndHubsCache();
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: fallbackMapped }));
           }
@@ -3570,6 +3590,7 @@ export const api = {
       if (isStatementTimeoutError(fetchErr)) {
         console.warn(`[Supabase updateCity] Statement timeout caught in fetch. Preserving local city.`);
         const fallbackMapped = localStore.updateCity(id, city);
+        invalidateCitiesAndHubsCache();
         return fallbackMapped;
       }
       console.warn('Direct fetch updateCity network error:', fetchErr);
@@ -3581,6 +3602,7 @@ export const api = {
       if (!error && data) {
         const mapped = mapCityRow(data);
         localStore.updateCity(id, mapped);
+        invalidateCitiesAndHubsCache();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
@@ -3589,6 +3611,7 @@ export const api = {
       if (error && isStatementTimeoutError(error)) {
         console.warn(`[Supabase updateCity] Supabase SDK statement timeout (57014) intercepted.`);
         const fallbackMapped = localStore.updateCity(id, city);
+        invalidateCitiesAndHubsCache();
         return fallbackMapped;
       }
       const restRes = await supabaseRest<any[]>('cities', {
@@ -3600,6 +3623,7 @@ export const api = {
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapCityRow(restRes.data[0]);
         localStore.updateCity(id, mapped);
+        invalidateCitiesAndHubsCache();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: mapped }));
         }
@@ -3614,6 +3638,7 @@ export const api = {
     }
 
     const updated = localStore.updateCity(id, city);
+    invalidateCitiesAndHubsCache();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: updated }));
     }
@@ -3631,12 +3656,15 @@ export const api = {
     return this.createCity(city);
   },
 
-  async deleteCity(id: string): Promise<boolean> {
+  async deleteCity(id: string, name?: string): Promise<boolean> {
     const rawId = String(id || '').trim();
     if (!rawId) return true;
 
-    // 1. Optimistically purge from localStore and invalidate memory cache immediately
+    // 1. Explicitly purge from localStore and tombstone blacklist immediately
     localStore.deleteCity(rawId);
+    if (name && name.trim() !== rawId) {
+      localStore.deleteCity(name.trim());
+    }
     invalidateCitiesAndHubsCache();
 
     const explicitHeaders = getSupabaseHeaders();
@@ -3645,16 +3673,27 @@ export const api = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      // Single direct DELETE call to PostgREST with timeout signal
-      await Promise.allSettled([
+      const deletePromises: Promise<any>[] = [
         fetch(`${SUPABASE_URL}/rest/v1/cities?id=eq.${encodeURIComponent(rawId)}`, {
           method: 'DELETE',
           headers: explicitHeaders,
           signal: controller.signal,
         }),
-        supabase.from('cities').delete().eq('id', rawId).abortSignal(controller.signal),
-      ]);
+        Promise.resolve(supabase.from('cities').delete().eq('id', rawId).abortSignal(controller.signal)),
+      ];
 
+      if (name && name.trim() !== rawId) {
+        deletePromises.push(
+          fetch(`${SUPABASE_URL}/rest/v1/cities?name=eq.${encodeURIComponent(name.trim())}`, {
+            method: 'DELETE',
+            headers: explicitHeaders,
+            signal: controller.signal,
+          }),
+          Promise.resolve(supabase.from('cities').delete().eq('name', name.trim()).abortSignal(controller.signal))
+        );
+      }
+
+      await Promise.allSettled(deletePromises);
       clearTimeout(timeoutId);
     } catch (err: any) {
       if (isStatementTimeoutError(err) || err?.name === 'AbortError') {
@@ -3665,7 +3704,7 @@ export const api = {
     }
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', id: rawId } }));
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', id: rawId, name } }));
       window.dispatchEvent(new CustomEvent('tirth-hub-changed', { detail: { action: 'delete', cityId: rawId } }));
       window.dispatchEvent(new Event('tirth-hotel-changed'));
     }

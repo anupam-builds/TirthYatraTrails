@@ -120,10 +120,10 @@ export const AdminHotels: React.FC = () => {
         refreshCities(),
         api.getHotels(selectedCityId, searchQuery),
       ]);
-      setHotels(hList);
-      if (cList.length > 0 && !cityId) {
-        setCityId(cList[0].id);
-        setCityName(cList[0].name);
+      setHotels(hList || []);
+      if ((cList || []).length > 0 && !cityId) {
+        setCityId(cList[0]?.id || '');
+        setCityName(cList[0]?.name || '');
       }
     } catch (err) {
       console.error(err);
@@ -135,7 +135,7 @@ export const AdminHotels: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingHotel(null);
     setName('');
-    const defaultCity = cities[0] || { id: 'varanasi', name: 'Varanasi' };
+    const defaultCity = cities?.[0] || { id: 'varanasi', name: 'Varanasi' };
     setCityId(defaultCity.id);
     setCityName(defaultCity.name);
     setAddress('Near Main Temple Gate');
@@ -260,7 +260,7 @@ export const AdminHotels: React.FC = () => {
     const validImages = images.length > 0 ? images : [
       'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'
     ];
-    const selectedCity = cities.find((c) => c.id === cityId);
+    const selectedCity = (cities || []).find((c) => c && c.id === cityId);
 
     const hotelData: Partial<Hotel> = {
       name: name.trim(),
@@ -379,9 +379,9 @@ export const AdminHotels: React.FC = () => {
               className="bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
             >
               <option value="">All Sacred Cities</option>
-              {cities.map((c) => (
+              {(cities || []).map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.hotelCount})
+                  {c.name} ({c.hotelCount ?? 0})
                 </option>
               ))}
             </BaseSelect>

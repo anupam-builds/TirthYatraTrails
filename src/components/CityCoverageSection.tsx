@@ -8,7 +8,7 @@ export interface CityCoverageSectionProps {
 }
 
 export const CityCoverageSection: React.FC<CityCoverageSectionProps> = ({
-  cities,
+  cities = [],
   allHotels = [],
   onSelectCity,
 }) => {
@@ -83,13 +83,14 @@ export const CityCoverageSection: React.FC<CityCoverageSectionProps> = ({
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-y-4 gap-x-6 text-xs">
-        {cities.map((city) => {
+        {(cities || []).map((city) => {
+          if (!city) return null;
           const count = getCityHotelCount(city);
           return (
             <div
-              key={city.id}
+              key={city.id || city.name}
               onClick={() => {
-                if (onSelectCity) {
+                if (onSelectCity && city.id) {
                   onSelectCity(city.id);
                 }
                 window.scrollTo({ top: 0, behavior: 'smooth' });

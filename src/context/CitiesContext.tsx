@@ -21,25 +21,28 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshCities = useCallback(async (showLoading = false): Promise<City[]> => {
+  const refreshCities = useCallback(async (showLoading = false, forceFresh = false): Promise<City[]> => {
     try {
       if (showLoading) setLoading(true);
       setError(null);
       const [list, hotelList] = await Promise.all([
-        api.getCities().catch(() => localStore.getCities()),
+        api.getCities({ forceFresh }).catch(() => localStore.getCities() || []),
         api.getHotels().catch(() => []),
       ]);
-      const enriched = list.map((c) => ({
+      const safeList = Array.isArray(list) ? list : [];
+      const enriched = safeList.map((c) => ({
         ...c,
         hotelCount: localStore.countHotelsForCity(c, hotelList),
+        transitHubs: Array.isArray(c?.transitHubs) ? c.transitHubs : [],
       }));
       setCities(enriched);
       return enriched;
     } catch (err: any) {
       console.debug('Handled cities refresh notice (fallback to localStore):', err?.message || err);
-      const fallback = localStore.getCities();
-      setCities(fallback);
-      return fallback;
+      const fallback = localStore.getCities() || [];
+      const safeFallback = Array.isArray(fallback) ? fallback : [];
+      setCities(safeFallback);
+      return safeFallback;
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -49,7 +52,7 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     refreshCities(true);
 
     const handleCitySync = () => {
-      refreshCities(false);
+      refreshCities(false, true);
     };
 
     window.addEventListener('tirth-city-changed', handleCitySync);
@@ -70,10 +73,12 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     // Check if already in master list
-    const existing = cities.find(
+    const currentCities = Array.isArray(cities) ? cities : [];
+    const existing = currentCities.find(
       (c) =>
-        c.name.toLowerCase().trim() === cityName.toLowerCase() ||
-        (cityData.id && c.id.toLowerCase() === cityData.id.toLowerCase())
+        c &&
+        (c.name?.toLowerCase().trim() === cityName.toLowerCase() ||
+          (cityData.id && c.id?.toLowerCase() === cityData.id.toLowerCase()))
     );
     if (existing) {
       return existing;
@@ -87,48 +92,61 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
       popularFor: (cityData.popularFor || 'Sacred Temple & Spiritual Yatra').trim(),
       hotelCount: Number(cityData.hotelCount) || 0,
+      transitHubs: Array.isArray(cityData.transitHubs) ? cityData.transitHubs : [],
     };
 
     const created = await api.createCity(payload);
+    const safeCreated: City = {
+      ...created,
+      transitHubs: Array.isArray(created.transitHubs) ? created.transitHubs : [],
+    };
 
     setCities((prev) => {
-      const idx = prev.findIndex((c) => c.id === created.id || c.name.toLowerCase() === created.name.toLowerCase());
+      const safePrev = Array.isArray(prev) ? prev : [];
+      const idx = safePrev.findIndex(
+        (c) => c && (c.id === safeCreated.id || c.name?.toLowerCase() === safeCreated.name?.toLowerCase())
+      );
       if (idx !== -1) {
-        const next = [...prev];
-        next[idx] = created;
+        const next = [...safePrev];
+        next[idx] = safeCreated;
         return next;
       }
-      return [...prev, created];
+      return [...safePrev, safeCreated];
     });
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'create', city: created } }));
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'create', city: safeCreated } }));
       window.dispatchEvent(new Event('tirth-hotel-changed'));
     }
 
-    return created;
+    return safeCreated;
   }, [cities]);
 
   const updateCity = useCallback(async (id: string, updates: Partial<City>): Promise<City> => {
     const updated = await api.updateCity(id, updates);
-    setCities((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    const safeUpdated: City = {
+      ...updated,
+      transitHubs: Array.isArray(updated.transitHubs) ? updated.transitHubs : [],
+    };
+    setCities((prev) => (Array.isArray(prev) ? prev : []).map((c) => (c?.id === safeUpdated.id ? safeUpdated : c)));
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'update', city: updated } }));
+      window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'update', city: safeUpdated } }));
       window.dispatchEvent(new Event('tirth-hotel-changed'));
     }
 
-    return updated;
+    return safeUpdated;
   }, []);
 
   const deleteCity = useCallback(async (id: string, name?: string): Promise<boolean> => {
     const targetName = (name || id).toLowerCase();
-    setCities((prev) => prev.filter((c) => c.id !== id && c.name.toLowerCase() !== targetName));
+    setCities((prev) =>
+      (Array.isArray(prev) ? prev : []).filter(
+        (c) => c && c.id !== id && c.name?.toLowerCase() !== targetName
+      )
+    );
 
-    const ok = await api.deleteCity(id);
-    if (name && name !== id) {
-      api.deleteCity(name).catch(() => {});
-    }
+    const ok = await api.deleteCity(id, name);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-city-changed', { detail: { action: 'delete', id, name } }));
@@ -141,11 +159,12 @@ export const CitiesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const getCityById = useCallback((idOrName: string): City | undefined => {
     if (!idOrName) return undefined;
     const target = idOrName.toLowerCase().trim();
-    return cities.find(
+    return (Array.isArray(cities) ? cities : []).find(
       (c) =>
-        c.id.toLowerCase() === target ||
-        c.name.toLowerCase() === target ||
-        c.id.toLowerCase().replace(/-/g, ' ') === target.replace(/-/g, ' ')
+        c &&
+        (c.id?.toLowerCase() === target ||
+          c.name?.toLowerCase() === target ||
+          c.id?.toLowerCase().replace(/-/g, ' ') === target.replace(/-/g, ' '))
     );
   }, [cities]);
 
