@@ -101,7 +101,7 @@ export const CustomerFooter: React.FC = () => {
 
   const rawDigits = helplinePhone.replace(/[^0-9]/g, '');
   const telHref = `tel:${rawDigits ? (helplinePhone.trim().startsWith('+') ? `+${rawDigits}` : `+${rawDigits}`) : '+919235703798'}`;
-  const whatsappDigits = rawDigits || '919235703798';
+  const whatsappDigits = '919235703798';
 
   return (
     <>
@@ -351,22 +351,6 @@ export const CustomerFooter: React.FC = () => {
           </div>
         </div>
       </footer>
-
-      {/* Floating WhatsApp Circle Icon Button Fixed at Bottom Right */}
-      <a
-        id="global-floating-whatsapp-btn"
-        href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent('Namaste TirthYatraTrails Desk, I am exploring sacred pilgrimage options')}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-[#25D366] text-white rounded-full shadow-2xl hover:scale-110 hover:shadow-green-500/40 transition-all duration-300 group"
-        aria-label="Chat on WhatsApp with Travel Desk"
-      >
-        <span className="absolute -top-9 right-0 bg-[#071526] text-white text-[11px] font-bold px-2.5 py-1 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-white/10">
-          Need Help? Chat on WhatsApp
-        </span>
-        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-25" />
-        <MessageCircle className="w-7 h-7 relative z-10 fill-current" />
-      </a>
     </>
   );
 };

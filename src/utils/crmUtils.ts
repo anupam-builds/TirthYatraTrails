@@ -418,9 +418,6 @@ export function cleanPhoneNumberForWhatsApp(phone?: string): string {
   return digits;
 }
 
-/**
- * Generates a pre-filled direct WhatsApp link for reaching out to a customer from Admin/Staff
- */
 export function generateCustomerWhatsAppLink(
   inquiry: Partial<Inquiry>,
   staffName?: string
@@ -433,21 +430,43 @@ export function generateCustomerWhatsAppLink(
     lead.mobile ||
     lead.contact ||
     lead.customer_phone ||
+    lead.customerPhone ||
+    lead.phone_number ||
+    lead.phoneNumber ||
     lead.metadata?.whatsapp_number ||
     lead.metadata?.phone ||
+    lead.metadata?.customer_phone ||
+    lead.metadata?.mobile ||
     inquiry.customerPhone ||
     inquiry.whatsappNumber ||
     '';
   const cleanedPhone = cleanPhoneNumberForWhatsApp(rawPhone);
-  if (!cleanedPhone) return null;
+  if (!cleanedPhone || cleanedPhone.length < 7) return null;
 
-  const pilgrimName = inquiry.customerName || inquiry.fullName || lead.name || 'Pilgrim';
+  const rawCustomerName =
+    inquiry.customerName ||
+    inquiry.fullName ||
+    lead.customer_name ||
+    lead.name ||
+    lead.full_name ||
+    lead.metadata?.customer_name ||
+    lead.metadata?.name ||
+    'Customer';
+  const customerName = rawCustomerName.trim();
+
   const leadId = getLeadId(inquiry);
-  const title = inquiry.title || (inquiry.type === 'HOTEL' ? 'Hotel & Stay Booking' : 'Holy Yatra Pilgrimage Package');
+  const inquiryTopic =
+    inquiry.title ||
+    (inquiry.type === 'HOTEL'
+      ? 'hotel booking'
+      : (inquiry.type as string) === 'CAB'
+      ? 'cab booking'
+      : 'pilgrimage package');
   const dateStr = inquiry.checkInDate ? ` for travel on ${formatCrmDate(inquiry.checkInDate)}` : '';
-  const sender = staffName ? ` (${staffName})` : '';
+  const refSuffix = leadId ? ` [Lead ID: ${leadId}]` : '';
 
-  const message = `Hello ${pilgrimName}, reaching out from Tirth Yatra Trails${sender} regarding your inquiry for ${title}${dateStr} [Lead ID: ${leadId}]. How may we assist you with your sacred journey?`;
+  // Outbound message to customer from Tirth Yatra Trails staff
+  const message = `Hello ${customerName}, reaching out from Tirth Yatra Trails regarding your inquiry for ${inquiryTopic}${dateStr}${refSuffix}. How may we assist you with your sacred journey?`;
 
   const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(message)}`;
   return { url, phone: cleanedPhone, message };

@@ -104,11 +104,9 @@ export const CustomerNavbar: React.FC = () => {
     };
   }, []);
 
-  const cleanPhone = helplinePhone.replace(/[^0-9]/g, '');
   const telHref = helplinePhone ? `tel:${helplinePhone.replace(/[^0-9+]/g, '')}` : 'tel:+919235703798';
-  const helplineWhatsappUrl = `https://wa.me/${cleanPhone || '919235703798'}?text=${encodeURIComponent(
-    'Hello! I want to know more about Tirth Yatra Trails packages.'
-  )}`;
+  const helplineWhatsappUrl =
+    'https://wa.me/919235703798?text=Hello!%20I%20want%20to%20know%20more%20about%20Tirth%20Yatra%20Trails%20packages.';
 
   const isActive = (route: string) => {
     if (route === '/' && path === '/') return true;
@@ -317,15 +315,13 @@ export const CustomerNavbar: React.FC = () => {
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
             <a
               id="mobile-nav-whatsapp-btn"
-              href={`https://wa.me/${cleanPhone || '919235703798'}?text=${encodeURIComponent(
-                'Hello! I want to know more about Tirth Yatra Trails packages.'
-              )}`}
+              href="https://wa.me/919235703798?text=Hello!%20I%20want%20to%20know%20more%20about%20Tirth%20Yatra%20Trails%20packages."
               target="_blank"
               rel="noopener noreferrer"
               className="w-full py-2.5 text-center font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-center gap-2 text-xs"
             >
               <MessageCircle className="w-4 h-4 text-emerald-600 fill-emerald-600" />
-              <span>WhatsApp Travel Desk ({helplinePhone})</span>
+              <span>WhatsApp Desk</span>
             </a>
             <button
               id="mobile-nav-plan-btn"

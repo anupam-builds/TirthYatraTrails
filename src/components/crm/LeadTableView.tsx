@@ -191,37 +191,23 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     }
   };
 
-  // Direct WhatsApp chat handler with prompt to mark as CONTACTED if currently NEW
-  const handleOpenWhatsApp = async (inq: Inquiry) => {
+  // Direct WhatsApp chat handler targeting the customer's specific phone number
+  const handleOpenWhatsApp = (inq: Inquiry) => {
     const waData = generateCustomerWhatsAppLink(inq, currentStaffName);
     if (!waData) {
-      alert(`No valid phone or WhatsApp number found for ${inq.customerName || inq.fullName || 'this pilgrim'}.`);
+      alert(`No valid phone or WhatsApp number found for ${inq.customerName || inq.fullName || 'this customer'}.`);
       return;
     }
 
-    // If status is NEW, prompt to optionally mark as CONTACTED
+    // Automatically advance NEW leads to CONTACTED in background
     if (!inq.status || inq.status === 'NEW') {
-      const shouldUpdate = window.confirm(
-        `Open WhatsApp chat with ${inq.customerName || inq.fullName} (${waData.phone})?\n\n` +
-        `• Click "OK" to update this lead's status to CONTACTED and launch WhatsApp.\n` +
-        `• Click "Cancel" to open WhatsApp without changing the lead status.`
-      );
-      if (shouldUpdate) {
-        try {
-          const exactId = (inq as any).id || inq.id;
-          if (onUpdateStatus) {
-            await onUpdateStatus(exactId, 'CONTACTED');
-          } else {
-            await updateLeadOrInquiryStatus({ id: exactId, status: 'CONTACTED' });
-          }
-        } catch (err: any) {
-          console.error('Failed to update status to CONTACTED:', err);
-        }
+      const exactId = (inq as any).id || inq.id;
+      if (onUpdateStatus) {
+        onUpdateStatus(exactId, 'CONTACTED').catch(() => {});
+      } else {
+        updateLeadOrInquiryStatus({ id: exactId, status: 'CONTACTED' }).catch(() => {});
       }
     }
-
-    // Open pre-filled WhatsApp chat in a new tab
-    window.open(waData.url, '_blank', 'noopener,noreferrer');
   };
 
   // Compute chronological sequential IDs (oldest -> TTT00000001, TTT00000002, ...)
@@ -696,12 +682,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     lead.mobile ||
                     lead.contact ||
                     lead.customer_phone ||
+                    lead.customerPhone ||
+                    lead.phone_number ||
+                    lead.phoneNumber ||
                     lead.metadata?.whatsapp_number ||
                     lead.metadata?.phone ||
+                    lead.metadata?.customer_phone ||
+                    lead.metadata?.mobile ||
                     inq.customerPhone ||
                     inq.whatsappNumber ||
                     '';
                   const hasPhone = Boolean(phoneCandidate && phoneCandidate !== 'No phone');
+                  const waData = generateCustomerWhatsAppLink(inq, currentStaffName);
                   const leadEndDate = inq.endDate || lead.end_date || lead.endDate || inq.end_date || lead.metadata?.end_date;
                   const leadDurationDays = inq.durationDays ?? lead.duration_days ?? lead.durationDays ?? inq.duration_days ?? lead.metadata?.duration_days;
                   const leadBudget = inq.budget || lead.budget || lead.metadata?.budget;
@@ -853,17 +845,22 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <span>
                                 📞 {phoneCandidate || 'No phone'}
                               </span>
-                              {hasPhone && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenWhatsApp(inq)}
-                                  title={`Direct WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'}`}
+                              {waData ? (
+                                <a
+                                  href={waData.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenWhatsApp(inq);
+                                  }}
+                                  title={`Outbound WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
                                 >
                                   <MessageCircle className="w-3 h-3 fill-current" />
                                   <span>WhatsApp</span>
-                                </button>
-                              )}
+                                </a>
+                              ) : null}
                             </div>
                             {inq.customerEmail && (
                               <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px]">
@@ -1062,6 +1059,24 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <span>Detailed</span>
                             </button>
 
+                            {/* Outbound WhatsApp Direct to Customer */}
+                            {waData ? (
+                              <a
+                                href={waData.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenWhatsApp(inq);
+                                }}
+                                title={`Outbound WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-950/60 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600 dark:hover:text-white border border-emerald-300 dark:border-emerald-800 transition-all cursor-pointer shadow-2xs shrink-0"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                                <span>WhatsApp</span>
+                              </a>
+                            ) : null}
+
                             {/* Quick Reminder Action Button */}
                             {isStaffMode && isLocked ? (
                               <button
@@ -1119,15 +1134,31 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               </button>
                             )}
 
-                            {/* WhatsApp Direct */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenWhatsApp(inq)}
-                              title={hasPhone ? `Direct WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'}` : `No phone number on record for ${inq.customerName || inq.fullName || 'Customer'}`}
-                              className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
-                            >
-                              <MessageCircle className="w-4 h-4 fill-current" />
-                            </button>
+                            {/* WhatsApp Direct Outbound to Customer */}
+                            {waData ? (
+                              <a
+                                href={waData.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenWhatsApp(inq);
+                                }}
+                                title={`Direct WhatsApp chat with customer ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
+                                className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
+                              >
+                                <MessageCircle className="w-4 h-4 fill-current" />
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                title={`No phone number on record for ${inq.customerName || inq.fullName || 'Customer'}`}
+                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed select-none"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                            )}
 
                             {/* Notes Accordion Toggle */}
                             {isStaffMode && isLocked ? (

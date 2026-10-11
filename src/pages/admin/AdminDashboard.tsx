@@ -233,14 +233,7 @@ export const AdminDashboard: React.FC = () => {
     }
 
     if (inq.status === 'NEW') {
-      const shouldUpdate = window.confirm(
-        `Open WhatsApp chat with ${inq.fullName || inq.customerName} (${waData.phone})?\n\n` +
-        `• Click "OK" to update status to CONTACTED and launch WhatsApp.\n` +
-        `• Click "Cancel" to open WhatsApp without changing status.`
-      );
-      if (shouldUpdate) {
-        handleUpdateStatus(inq.id, 'CONTACTED');
-      }
+      handleUpdateStatus(inq.id, 'CONTACTED');
     }
 
     window.open(waData.url, '_blank', 'noopener,noreferrer');
@@ -431,9 +424,22 @@ export const AdminDashboard: React.FC = () => {
                 {recentInquiries.map((inq) => {
                   const lead = inq as any;
                   const custName = inq.fullName || inq.customerName || 'Devotee';
-                  const custPhone = lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || '';
+                  const custPhone =
+                    lead.whatsapp_number ||
+                    lead.phone ||
+                    lead.whatsapp ||
+                    lead.mobile ||
+                    lead.contact ||
+                    lead.customer_phone ||
+                    lead.customerPhone ||
+                    lead.metadata?.whatsapp_number ||
+                    lead.metadata?.phone ||
+                    inq.customerPhone ||
+                    inq.whatsappNumber ||
+                    '';
                   const custEmail = inq.email || inq.customerEmail || '';
                   const selPlan = inq.plan || inq.selectedPlan || 'Standard';
+                  const waData = generateCustomerWhatsAppLink(inq, 'Travel Desk Admin');
 
                   return (
                     <tr key={inq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
@@ -446,17 +452,21 @@ export const AdminDashboard: React.FC = () => {
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
                           <span>
-                            📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || 'No phone'}
+                            📞 {custPhone || 'No phone'}
                           </span>
-                          {Boolean(custPhone && custPhone !== 'No phone') && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenWhatsApp(inq)}
-                              title={`WhatsApp ${custName}`}
+                          {waData && (
+                            <a
+                              href={waData.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => {
+                                if (inq.status === 'NEW') handleUpdateStatus(inq.id, 'CONTACTED');
+                              }}
+                              title={`WhatsApp ${custName} (+${waData.phone})`}
                               className="p-1 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-colors"
                             >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                            </button>
+                              <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                            </a>
                           )}
                         </div>
                         <div className="text-slate-400 dark:text-slate-500 text-[10px] truncate max-w-[140px]">{custEmail}</div>
@@ -509,14 +519,30 @@ export const AdminDashboard: React.FC = () => {
                             <Eye className="w-3.5 h-3.5" />
                             <span>Detailed</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenWhatsApp(inq)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs cursor-pointer"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                            <span>WhatsApp</span>
-                          </button>
+                          {waData ? (
+                            <a
+                              href={waData.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => {
+                                if (inq.status === 'NEW') handleUpdateStatus(inq.id, 'CONTACTED');
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs cursor-pointer"
+                              title={`WhatsApp ${custName} (+${waData.phone})`}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                              <span>WhatsApp</span>
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWhatsApp(inq)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs cursor-pointer"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>WhatsApp</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
