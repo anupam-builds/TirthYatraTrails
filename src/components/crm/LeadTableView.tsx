@@ -692,6 +692,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                   const phoneCandidate =
                     lead.whatsapp_number ||
                     lead.phone ||
+                    lead.whatsapp ||
+                    lead.mobile ||
+                    lead.contact ||
+                    lead.customer_phone ||
                     lead.metadata?.whatsapp_number ||
                     lead.metadata?.phone ||
                     inq.customerPhone ||
@@ -847,28 +851,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             </div>
                             <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
                               <span>
-                                📞 {lead.whatsapp_number || lead.phone || lead.metadata?.whatsapp_number || lead.metadata?.phone || inq.customerPhone || inq.whatsappNumber || 'No phone'}
+                                📞 {phoneCandidate || 'No phone'}
                               </span>
                               {hasPhone && (
-                                isStaffMode && isLocked ? (
-                                  <span
-                                    title="WhatsApp messaging is locked for staff on closed leads"
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 text-[10px] font-bold opacity-50 cursor-not-allowed select-none shrink-0"
-                                  >
-                                    <Lock className="w-2.5 h-2.5 text-rose-500" />
-                                    <span>WhatsApp</span>
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenWhatsApp(inq)}
-                                    title={`Chat with ${inq.customerName || inq.fullName} on WhatsApp`}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
-                                  >
-                                    <MessageCircle className="w-3 h-3" />
-                                    <span>WhatsApp</span>
-                                  </button>
-                                )
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWhatsApp(inq)}
+                                  title={`Direct WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+                                >
+                                  <MessageCircle className="w-3 h-3 fill-current" />
+                                  <span>WhatsApp</span>
+                                </button>
                               )}
                             </div>
                             {inq.customerEmail && (
@@ -1126,25 +1120,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             )}
 
                             {/* WhatsApp Direct */}
-                            {isStaffMode && isLocked ? (
-                              <button
-                                type="button"
-                                disabled={true}
-                                title="WhatsApp messaging is locked for staff on closed leads"
-                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed select-none"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenWhatsApp(inq)}
-                                title={`Direct WhatsApp chat with ${inq.customerName || inq.fullName}`}
-                                className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWhatsApp(inq)}
+                              title={hasPhone ? `Direct WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'}` : `No phone number on record for ${inq.customerName || inq.fullName || 'Customer'}`}
+                              className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
+                            >
+                              <MessageCircle className="w-4 h-4 fill-current" />
+                            </button>
 
                             {/* Notes Accordion Toggle */}
                             {isStaffMode && isLocked ? (

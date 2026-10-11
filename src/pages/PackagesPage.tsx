@@ -313,8 +313,8 @@ export const PackagesPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Card Footer: Starting Price & Orange View Button */}
-                <div className="p-6 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2">
+                {/* Card Footer: Starting Price & Actions */}
+                <div className="p-5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       Starting Price

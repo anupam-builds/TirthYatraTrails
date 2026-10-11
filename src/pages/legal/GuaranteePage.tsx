@@ -169,13 +169,13 @@ export const GuaranteePage: React.FC = () => {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
               <a
-                href="https://wa.me/919068126203?text=Namaste%2C%20I%20would%20like%20to%20know%20more%20about%20your%20Spiritual%20Hospitality%20Guarantee"
+                href="https://wa.me/919235703798?text=Hello!%20I%20want%20to%20know%20more%20about%20Tirth%20Yatra%20Trails%20packages."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:text-orange-600 hover:border-orange-300 transition-colors"
               >
                 <Phone className="w-4 h-4 text-orange-600" />
-                <span className="font-medium">+91 9068126203 (WhatsApp / Call)</span>
+                <span className="font-medium">+91 9235703798 (WhatsApp / Call)</span>
               </a>
               <a
                 href="mailto:tirthyatratrails@gmail.com"

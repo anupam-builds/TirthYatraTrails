@@ -100,8 +100,8 @@ export const CustomerFooter: React.FC = () => {
   }, []);
 
   const rawDigits = helplinePhone.replace(/[^0-9]/g, '');
-  const telHref = `tel:${rawDigits ? (helplinePhone.trim().startsWith('+') ? `+${rawDigits}` : `+${rawDigits}`) : '+919876543210'}`;
-  const whatsappDigits = rawDigits || '919876543210';
+  const telHref = `tel:${rawDigits ? (helplinePhone.trim().startsWith('+') ? `+${rawDigits}` : `+${rawDigits}`) : '+919235703798'}`;
+  const whatsappDigits = rawDigits || '919235703798';
 
   return (
     <>

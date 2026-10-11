@@ -18,15 +18,17 @@ export function useSacredCities() {
 
   // Normalize cities to SacredCity structure
   const sacredCities: SacredCity[] = useMemo(() => {
-    return (cities || []).map((c: City) => ({
-      id: c.id,
-      name: c.name,
-      state: c.state || 'India',
-      temple_significance: c.popularFor || 'Sacred Temple & Spiritual Yatra',
-      is_active: true,
-      imageUrl: c.imageUrl,
-      hotelCount: c.hotelCount,
-    }));
+    return (cities || [])
+      .filter((c): c is City => Boolean(c && (c.id || c.name)))
+      .map((c: City) => ({
+        id: c.id || c.name?.toLowerCase().replace(/\s+/g, '-') || 'city',
+        name: c.name || 'Sacred Destination',
+        state: c.state || 'India',
+        temple_significance: c.popularFor || 'Sacred Temple & Spiritual Yatra',
+        is_active: true,
+        imageUrl: c.imageUrl,
+        hotelCount: c.hotelCount,
+      }));
   }, [cities]);
 
   return {

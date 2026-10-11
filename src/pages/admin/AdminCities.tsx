@@ -228,21 +228,29 @@ export const AdminCities: React.FC = () => {
     try {
       if (editingCity) {
         const updated = await api.updateCity(editingCity.id, cityData);
-        setCities((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'UPDATE', updated));
+        const safeUpdated: City = {
+          ...updated,
+          transitHubs: Array.isArray(updated?.transitHubs) ? updated.transitHubs : [],
+        };
+        setCities((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'UPDATE', safeUpdated));
         setToast({
           id: String(Date.now()),
           type: 'success',
           title: 'Destination Updated',
-          message: `Changes to "${updated.name}" have been saved successfully.`,
+          message: `Changes to "${safeUpdated.name || 'Destination'}" have been saved successfully.`,
         });
       } else {
         const created = await api.createCity(cityData);
-        setCities((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'INSERT', created));
+        const safeCreated: City = {
+          ...created,
+          transitHubs: Array.isArray(created?.transitHubs) ? created.transitHubs : [],
+        };
+        setCities((prev) => reconcileRealtimeList(Array.isArray(prev) ? prev : [], 'INSERT', safeCreated));
         setToast({
           id: String(Date.now()),
           type: 'success',
           title: 'Destination Created',
-          message: `"${created.name}" is now published and live in the directory.`,
+          message: `"${safeCreated.name || 'Destination'}" is now published and live in the directory.`,
         });
       }
       setIsCityModalOpen(false);
@@ -635,7 +643,7 @@ export const AdminCities: React.FC = () => {
                   helpText="Upload a high-resolution photo from your device or drag & drop. Or specify a CDN photo link below."
                   folder="cities"
                   images={imageUrl ? [imageUrl] : []}
-                  onChange={(imgs) => setImageUrl(imgs[0] || '')}
+                  onChange={(imgs) => setImageUrl((imgs || [])[0] || '')}
                   multiple={false}
                 />
 

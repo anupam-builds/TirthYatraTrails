@@ -105,9 +105,9 @@ export const CustomerNavbar: React.FC = () => {
   }, []);
 
   const cleanPhone = helplinePhone.replace(/[^0-9]/g, '');
-  const telHref = helplinePhone ? `tel:${helplinePhone.replace(/[^0-9+]/g, '')}` : 'tel:+919876543210';
-  const helplineWhatsappUrl = `https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(
-    'Namaste TirthYatraTrails Team, I need assistance with pilgrimage booking'
+  const telHref = helplinePhone ? `tel:${helplinePhone.replace(/[^0-9+]/g, '')}` : 'tel:+919235703798';
+  const helplineWhatsappUrl = `https://wa.me/${cleanPhone || '919235703798'}?text=${encodeURIComponent(
+    'Hello! I want to know more about Tirth Yatra Trails packages.'
   )}`;
 
   const isActive = (route: string) => {
@@ -227,7 +227,7 @@ export const CustomerNavbar: React.FC = () => {
           <div className="hidden md:flex items-center gap-3">
             <a
               id="nav-whatsapp-direct-btn"
-              href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%20Team%2C%20I%20would%20like%20to%20plan%20a%20pilgrimage%20yatra"
+              href="https://wa.me/919235703798?text=Hello!%20I%20want%20to%20know%20more%20about%20Tirth%20Yatra%20Trails%20packages."
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs"
@@ -317,8 +317,8 @@ export const CustomerNavbar: React.FC = () => {
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
             <a
               id="mobile-nav-whatsapp-btn"
-              href={`https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(
-                'Namaste TirthYatraTrails Team, I would like to plan a pilgrimage yatra'
+              href={`https://wa.me/${cleanPhone || '919235703798'}?text=${encodeURIComponent(
+                'Hello! I want to know more about Tirth Yatra Trails packages.'
               )}`}
               target="_blank"
               rel="noopener noreferrer"

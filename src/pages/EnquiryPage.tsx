@@ -1407,13 +1407,13 @@ export const EnquiryPage: React.FC = () => {
 
                 <a
                   id="sidebar-whatsapp-direct-btn"
-                  href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%20Team%2C%20I%20would%20like%20to%20get%20a%20pilgrimage%20quote%20for%20our%20family"
+                  href="https://wa.me/919235703798?text=Hello!%20I%20want%20to%20know%20more%20about%20Tirth%20Yatra%20Trails%20packages."
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 transition-all active:scale-95"
                 >
                   <MessageCircle className="w-4 h-4 fill-white" />
-                  <span>WhatsApp Us Directly (+91 98765 43210)</span>
+                  <span>WhatsApp Us Directly (+91 9235703798)</span>
                 </a>
               </div>
 

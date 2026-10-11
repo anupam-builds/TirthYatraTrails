@@ -400,7 +400,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                   <label htmlFor="edit-modal-customer-phone" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                     WhatsApp / Phone Number
                   </label>
-                  {Boolean(formData.customerPhone) && (
+                  {Boolean(formData.customerPhone || (formData as any).phone || (formData as any).whatsapp_number || (formData as any).whatsapp) && (
                     <button
                       type="button"
                       onClick={handleOpenWhatsApp}

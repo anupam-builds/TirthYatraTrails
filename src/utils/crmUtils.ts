@@ -429,6 +429,10 @@ export function generateCustomerWhatsAppLink(
   const rawPhone =
     lead.whatsapp_number ||
     lead.phone ||
+    lead.whatsapp ||
+    lead.mobile ||
+    lead.contact ||
+    lead.customer_phone ||
     lead.metadata?.whatsapp_number ||
     lead.metadata?.phone ||
     inquiry.customerPhone ||
@@ -437,13 +441,13 @@ export function generateCustomerWhatsAppLink(
   const cleanedPhone = cleanPhoneNumberForWhatsApp(rawPhone);
   if (!cleanedPhone) return null;
 
-  const pilgrimName = inquiry.customerName || inquiry.fullName || 'Pilgrim';
+  const pilgrimName = inquiry.customerName || inquiry.fullName || lead.name || 'Pilgrim';
   const leadId = getLeadId(inquiry);
   const title = inquiry.title || (inquiry.type === 'HOTEL' ? 'Hotel & Stay Booking' : 'Holy Yatra Pilgrimage Package');
   const dateStr = inquiry.checkInDate ? ` for travel on ${formatCrmDate(inquiry.checkInDate)}` : '';
   const sender = staffName ? ` (${staffName})` : '';
 
-  const message = `Namaste ${pilgrimName}, reaching out from TirthYatraTrails${sender} regarding your inquiry for ${title}${dateStr} [Lead ID: ${leadId}]. How may we assist you with your sacred journey?`;
+  const message = `Hello ${pilgrimName}, reaching out from Tirth Yatra Trails${sender} regarding your inquiry for ${title}${dateStr} [Lead ID: ${leadId}]. How may we assist you with your sacred journey?`;
 
   const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(message)}`;
   return { url, phone: cleanedPhone, message };

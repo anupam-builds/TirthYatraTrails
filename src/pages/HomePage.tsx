@@ -6,6 +6,10 @@ import { AudioPlayer } from '../components/reviews/AudioPlayer.js';
 import { HeroVideo } from '../components/HeroVideo.js';
 import { SunriseWisdomSection } from '../components/SunriseWisdomSection.js';
 import {
+  getWhatsAppUrl,
+  WHATSAPP_BUSINESS_PHONE,
+} from '../utils/whatsapp.js';
+import {
   MapPin,
   Calendar,
   Search,
@@ -111,7 +115,7 @@ export const HomePage: React.FC = () => {
         posterUrl="/tirthyatratrails.png"
         onExploreYatras={() => navigate('/packages')}
         onExploreHotels={() => navigate('/hotels')}
-        whatsappPhone={localStorage.getItem('tyt_agency_phone') || '+91 98765 43210'}
+        whatsappPhone={localStorage.getItem('tyt_agency_phone') || WHATSAPP_BUSINESS_PHONE}
       />
 
       {/* ================================================================ */}
@@ -190,7 +194,7 @@ export const HomePage: React.FC = () => {
                       e.stopPropagation();
                       navigate(`/package/${pkg.id}`);
                     }}
-                    className="bg-[#ea580c] hover:bg-[#d44e0a] text-white px-5 py-2 rounded-xl text-xs font-bold shadow-md transition-all active:scale-95"
+                    className="bg-[#ea580c] hover:bg-[#d44e0a] text-white px-5 py-2 rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
                   >
                     View
                   </button>
@@ -529,12 +533,12 @@ export const HomePage: React.FC = () => {
 
               <a
                 id="cta-whatsapp-message-btn"
-                href="https://wa.me/919876543210?text=Namaste%20TirthYatraTrails%2C%20I%20am%20ready%20to%20plan%20our%20sacred%20pilgrimage"
+                href={getWhatsAppUrl('Hello! I want to know more about Tirth Yatra Trails packages.')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 px-6 py-4 rounded-2xl font-extrabold text-sm transition-all flex items-center justify-center gap-2.5 active:scale-95"
               >
-                <MessageCircle className="w-5 h-5 fill-emerald-400 text-emerald-400" />
+                <MessageCircle className="w-5 h-5 fill-[#25D366] text-[#25D366]" />
                 <span>WhatsApp Desk</span>
               </a>
             </div>

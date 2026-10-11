@@ -282,18 +282,22 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
     }
   };
 
+  // Safe array normalization
+  const safeCities = Array.isArray(cities) ? cities : [];
+
   // Find currently active city for selector mode
-  const activeCity = cities.find(
-    (c) => c.id === value || c.name.toLowerCase() === value.toLowerCase()
+  const activeCity = safeCities.find(
+    (c) => c && (c.id === value || (c.name && c.name.toLowerCase() === (value || '').toLowerCase()))
   );
 
   // Filtered cities list
-  const filteredCities = cities.filter((c) => {
+  const filteredCities = safeCities.filter((c) => {
+    if (!c) return false;
     const q = (selectorOnly ? dropdownSearch : searchQuery).toLowerCase().trim();
     if (!q) return true;
     return (
-      c.name.toLowerCase().includes(q) ||
-      c.state.toLowerCase().includes(q) ||
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.state && c.state.toLowerCase().includes(q)) ||
       (c.temple_significance && c.temple_significance.toLowerCase().includes(q))
     );
   });
@@ -411,7 +415,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
               <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
                 {loading ? (
                   <div className="py-6 text-center text-slate-400">Loading cities...</div>
-                ) : filteredCities.length === 0 ? (
+                ) : (filteredCities || []).length === 0 ? (
                   <div className="py-6 text-center text-slate-500">No matching sacred city found.</div>
                 ) : (
                   filteredCities.map((c) => {
@@ -532,7 +536,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
         </div>
 
         <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-          Total Registered Destinations: <span className="font-bold text-orange-600">{cities.length}</span>
+          Total Registered Destinations: <span className="font-bold text-orange-600">{(cities || []).length}</span>
         </div>
       </div>
 
@@ -559,7 +563,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
                     </div>
                   </td>
                 </tr>
-              ) : filteredCities.length === 0 ? (
+              ) : (filteredCities || []).length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center py-16 text-slate-400">
                     No sacred destinations found. Click &quot;Add Sacred City&quot; to create one.

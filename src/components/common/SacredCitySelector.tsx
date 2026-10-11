@@ -81,19 +81,24 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
     }
   }, [isOpen, isAdding]);
 
+  // Safe array normalization
+  const safeCities = Array.isArray(cities) ? cities : [];
+
   // Find matched city
-  const selectedCity = cities.find(
+  const selectedCity = safeCities.find(
     (c) =>
-      c.id.toLowerCase() === value.toLowerCase() ||
-      c.name.toLowerCase() === value.toLowerCase()
+      c &&
+      ((c.id && c.id.toLowerCase() === (value || '').toLowerCase()) ||
+        (c.name && c.name.toLowerCase() === (value || '').toLowerCase()))
   );
 
-  const filteredCities = cities.filter((c) => {
+  const filteredCities = safeCities.filter((c) => {
+    if (!c) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
-      c.name.toLowerCase().includes(q) ||
-      c.state.toLowerCase().includes(q) ||
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.state && c.state.toLowerCase().includes(q)) ||
       (c.temple_significance && c.temple_significance.toLowerCase().includes(q))
     );
   });
@@ -288,7 +293,7 @@ export const SacredCitySelector: React.FC<SacredCitySelectorProps> = ({
               <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
                 {loading ? (
                   <div className="py-6 text-center text-slate-400">Loading cities...</div>
-                ) : filteredCities.length === 0 ? (
+                ) : (filteredCities || []).length === 0 ? (
                   <div className="py-6 text-center text-slate-500 space-y-2">
                     <p>No sacred city matches &quot;{search}&quot;.</p>
                   </div>

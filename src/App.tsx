@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext.js';
 import { CitiesProvider } from './context/CitiesContext.js';
 import { CustomerNavbar } from './components/layout/Navbar.js';
 import { CustomerFooter } from './components/layout/Footer.js';
+import { WhatsAppFloatingButton } from './components/common/WhatsAppFloatingButton.js';
 
 // Customer Pages
 import { HomePage } from './pages/HomePage.js';
@@ -178,6 +179,7 @@ export default function App() {
         <CitiesProvider>
           <RouterProvider>
             <AppContent />
+            <WhatsAppFloatingButton />
           </RouterProvider>
         </CitiesProvider>
       </AuthProvider>

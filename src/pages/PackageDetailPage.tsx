@@ -3,6 +3,7 @@ import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { Package } from '../types.js';
 import { InquiryModal } from '../components/common/InquiryModal.js';
+import { getPackageWhatsAppUrl } from '../utils/whatsapp.js';
 import {
   ChevronRight,
   MapPin,
@@ -342,13 +343,26 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
                 </div>
               </div>
 
+              {/* Enquire on WhatsApp Dynamic Button */}
+              <a
+                id="whatsapp-package-enquire-btn"
+                href={getPackageWhatsAppUrl(pkg.title)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3.5 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                title={`Enquire on WhatsApp about ${pkg.title}`}
+              >
+                <MessageCircle className="w-4.5 h-4.5 fill-current" />
+                <span>Enquire on WhatsApp</span>
+              </a>
+
               {/* Prominent Orange "Get Instant Quote" Button */}
               <button
                 id="get-instant-quote-btn"
                 onClick={() => setInquiryModalOpen(true)}
-                className="w-full py-4 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-sm shadow-xl shadow-orange-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3.5 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-xs shadow-xl shadow-orange-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <MessageCircle className="w-5 h-5" />
+                <MessageCircle className="w-4 h-4" />
                 <span>Get Instant Quote &amp; Custom Plan</span>
               </button>
 

@@ -5188,7 +5188,7 @@ function getFallbackStories(): TravelStory[] {
 }
 
 export function generateWhatsAppLink(details: any) {
-  const travelDeskNumber = '919876543210';
+  const travelDeskNumber = '919235703798';
   const lines = [
     `Namaste TirthYatraTrails!`,
     `Inquiry: ${details.title || 'Sacred Pilgrimage Yatra'}`,

@@ -54,8 +54,8 @@ export const HeroVideo: React.FC<HeroVideoProps> = ({
 
   // Clean formatted phone for WhatsApp direct URI
   const cleanPhone = whatsappPhone.replace(/[^0-9]/g, '');
-  const whatsappUrl = `https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(
-    'Namaste TirthYatraTrails, I would like to enquire about upcoming holy yatra packages and temple darshan.'
+  const whatsappUrl = `https://wa.me/${cleanPhone || '919235703798'}?text=${encodeURIComponent(
+    'Hello! I want to know more about Tirth Yatra Trails packages.'
   )}`;
 
   return (

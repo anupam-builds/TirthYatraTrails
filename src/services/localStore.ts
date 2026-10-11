@@ -213,6 +213,9 @@ export const localStore = {
         ...cityData,
         name: cleanName,
         id: existing.id,
+        transitHubs: Array.isArray(cityData.transitHubs)
+          ? cityData.transitHubs
+          : (Array.isArray(existing.transitHubs) ? existing.transitHubs : []),
       };
       cities[existingIndex] = merged;
       setStored(STORAGE_KEYS.CITIES, cities);
@@ -230,7 +233,7 @@ export const localStore = {
       hotelCount: Number(cityData.hotelCount) || 0,
       imageUrl: cityData.imageUrl || 'https://images.unsplash.com/photo-1561359313-0639aad49ca6?auto=format&fit=crop&w=600&q=80',
       popularFor: (cityData.popularFor || 'Sacred Pilgrimage & Aarti').trim(),
-      transitHubs: cityData.transitHubs || [],
+      transitHubs: Array.isArray(cityData.transitHubs) ? cityData.transitHubs : [],
     };
     cities.push(newCity);
     setStored(STORAGE_KEYS.CITIES, cities);
@@ -262,7 +265,13 @@ export const localStore = {
       console.debug(`[localStore] City "${id}" not found in cache. Creating new city entry.`);
       return this.createCity({ ...updates, id: id || (updates.name ? updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `city-${Date.now()}`) } as City);
     }
-    cities[idx] = { ...cities[idx], ...updates };
+    cities[idx] = {
+      ...cities[idx],
+      ...updates,
+      transitHubs: Array.isArray(updates.transitHubs)
+        ? updates.transitHubs
+        : (Array.isArray(cities[idx].transitHubs) ? cities[idx].transitHubs : []),
+    };
     setStored(STORAGE_KEYS.CITIES, cities);
 
     if (typeof window !== 'undefined') {

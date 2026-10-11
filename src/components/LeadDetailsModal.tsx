@@ -80,7 +80,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
     const rawPhone = whatsappNum.replace(/\D/g, '');
     if (!rawPhone) return;
     const formattedPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
-    const msg = `Namaste ${fullName}, regarding your sacred pilgrimage inquiry (${leadDisplayId}) with Tirth Yatra. How may our pilgrimage desk assist you today?`;
+    const msg = `Hello ${fullName}, reaching out from Tirth Yatra Trails regarding your inquiry (${leadDisplayId}). How may our pilgrimage desk assist you today?`;
     window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
