@@ -38,6 +38,12 @@ export interface FormItineraryDay {
   description: string;
 }
 
+export interface FormQuickSummaryItem {
+  id: string;
+  label: string;
+  value: string;
+}
+
 const DEFAULT_CATEGORIES = ['Pilgrimage', 'Char Dham', 'Varanasi Ayodhya', 'South India', 'Jyotirlinga'];
 
 export const AdminPackages: React.FC = () => {
@@ -81,6 +87,7 @@ export const AdminPackages: React.FC = () => {
   const [exclusions, setExclusions] = useState<string[]>([]);
   const [newInclusionText, setNewInclusionText] = useState('');
   const [newExclusionText, setNewExclusionText] = useState('');
+  const [quickSummaryItems, setQuickSummaryItems] = useState<FormQuickSummaryItem[]>([]);
 
   useEffect(() => {
     loadData();
@@ -208,6 +215,14 @@ export const AdminPackages: React.FC = () => {
       'Travel insurance and medical emergency expenses',
     ]);
 
+    // Initialize Default Quick Summary Key-Value Rows
+    setQuickSummaryItems([
+      { id: 'qs-1', label: 'Duration', value: '6 Days / 5 Nights' },
+      { id: 'qs-2', label: 'Category', value: 'Pilgrimage' },
+      { id: 'qs-3', label: 'Meals', value: '100% Pure Vegetarian' },
+      { id: 'qs-4', label: 'Medical', value: 'Oxygen & Doctor on Call' },
+    ]);
+
     setNewInclusionText('');
     setNewExclusionText('');
     setIsModalOpen(true);
@@ -278,6 +293,25 @@ export const AdminPackages: React.FC = () => {
             'Any camera/video permits at monuments or shrines',
           ]
     );
+
+    // Quick Summary rows from package
+    const rawQs = p.quickSummary || [];
+    if (rawQs.length > 0) {
+      setQuickSummaryItems(
+        rawQs.map((item, idx) => ({
+          id: `qs-${idx + 1}-${Math.random().toString(36).substring(2, 6)}`,
+          label: item.label,
+          value: item.value,
+        }))
+      );
+    } else {
+      setQuickSummaryItems([
+        { id: 'qs-1', label: 'Duration', value: p.duration || '6 Days / 5 Nights' },
+        { id: 'qs-2', label: 'Category', value: p.category || 'Pilgrimage' },
+        { id: 'qs-3', label: 'Meals', value: '100% Pure Vegetarian' },
+        { id: 'qs-4', label: 'Medical', value: 'Oxygen & Doctor on Call' },
+      ]);
+    }
 
     setNewInclusionText('');
     setNewExclusionText('');
@@ -428,6 +462,28 @@ export const AdminPackages: React.FC = () => {
     setExclusions((prev) => prev.filter((_, idx) => idx !== index));
   };
 
+  // Yatra Quick Summary Handlers
+  const handleAddQuickSummaryItem = (defaultLabel = '', defaultValue = '') => {
+    setQuickSummaryItems((prev) => [
+      ...prev,
+      {
+        id: `qs-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        label: defaultLabel,
+        value: defaultValue,
+      },
+    ]);
+  };
+
+  const handleRemoveQuickSummaryItem = (index: number) => {
+    setQuickSummaryItems((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleUpdateQuickSummaryItem = (index: number, field: 'label' | 'value', value: string) => {
+    setQuickSummaryItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, [field]: value } : item))
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const highlights = highlightsString.split(',').map((s) => s.trim()).filter(Boolean);
@@ -448,6 +504,12 @@ export const AdminPackages: React.FC = () => {
 
     const cleanedInclusions = inclusions.map((s) => s.trim()).filter(Boolean);
     const cleanedExclusions = exclusions.map((s) => s.trim()).filter(Boolean);
+    const cleanedQuickSummary = quickSummaryItems
+      .map((item) => ({
+        label: item.label.trim(),
+        value: item.value.trim(),
+      }))
+      .filter((item) => item.label || item.value);
 
     const packageData: Partial<Package> = {
       title,
@@ -467,6 +529,7 @@ export const AdminPackages: React.FC = () => {
       itinerary: cleanedItinerary,
       inclusions: cleanedInclusions,
       exclusions: cleanedExclusions,
+      quickSummary: cleanedQuickSummary,
     };
 
     try {
@@ -867,6 +930,115 @@ export const AdminPackages: React.FC = () => {
                   onChange={(e) => setHighlightsString(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
+              </div>
+
+              {/* YATRA QUICK SUMMARY BUILDER */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+                      <ListPlus className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h3 className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-2">
+                        <span>Yatra Quick Summary</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-extrabold">
+                          {quickSummaryItems.length} {quickSummaryItems.length === 1 ? 'Row' : 'Rows'}
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Custom key-value summary points displayed in the booking card (e.g. Meals, Medical, Stay Category, Guide).
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAddQuickSummaryItem('', '')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Summary Row</span>
+                  </button>
+                </div>
+
+                {/* Preset Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] pt-0.5">
+                  <span className="text-slate-400">Quick Presets:</span>
+                  {[
+                    { label: 'Meals', value: '100% Pure Vegetarian' },
+                    { label: 'Medical', value: 'Oxygen & Doctor on Call' },
+                    { label: 'Stay Category', value: '3 & 4 Star Deluxe Stays' },
+                    { label: 'Guide', value: 'Dedicated Temple Priest' },
+                    { label: 'Darshan', value: 'VIP Escorted Priority Pass' },
+                    { label: 'Transport', value: 'Private Sanitized AC Coach' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => handleAddQuickSummaryItem(preset.label, preset.value)}
+                      className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 transition-colors cursor-pointer"
+                    >
+                      + {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {quickSummaryItems.length === 0 ? (
+                  <div className="p-5 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
+                    <p className="text-slate-500 dark:text-slate-400 text-xs">No quick summary rows added yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => handleAddQuickSummaryItem('Meals', '100% Pure Vegetarian')}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Default Row</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {quickSummaryItems.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-2 p-2 rounded-xl bg-slate-50/80 dark:bg-[#081220] border border-slate-200 dark:border-slate-800"
+                      >
+                        <span className="text-[11px] font-bold text-slate-400 w-5 text-center shrink-0">
+                          #{idx + 1}
+                        </span>
+                        <div className="w-1/3 min-w-[110px]">
+                          <BaseInput
+                            id={`quick-summary-label-${idx}`}
+                            name={`quick-summary-label-${idx}`}
+                            type="text"
+                            value={item.label}
+                            onChange={(e) => handleUpdateQuickSummaryItem(idx, 'label', e.target.value)}
+                            placeholder="Label (e.g. Meals)"
+                            className="w-full bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <BaseInput
+                            id={`quick-summary-value-${idx}`}
+                            name={`quick-summary-value-${idx}`}
+                            type="text"
+                            value={item.value}
+                            onChange={(e) => handleUpdateQuickSummaryItem(idx, 'value', e.target.value)}
+                            placeholder="Value (e.g. 100% Pure Vegetarian)"
+                            className="w-full bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveQuickSummaryItem(idx)}
+                          title="Delete row"
+                          className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* ITINERARY BUILDER */}

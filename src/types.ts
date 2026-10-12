@@ -160,6 +160,11 @@ export interface PackageItineraryItem {
   desc?: string;
 }
 
+export interface QuickSummaryItem {
+  label: string;
+  value: string;
+}
+
 export interface Package {
   id: string;
   title: string;
@@ -180,6 +185,7 @@ export interface Package {
   itinerary?: PackageItineraryItem[];
   inclusions?: string[];
   exclusions?: string[];
+  quickSummary?: QuickSummaryItem[];
   isPublished?: boolean;
   createdAt?: string;
   updatedAt?: string;

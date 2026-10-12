@@ -3163,6 +3163,13 @@ export const api = {
       insertPayload.exclusions = [insertPayload.exclusions];
     }
 
+    if (typeof insertPayload.quick_summary === 'string') {
+      try { insertPayload.quick_summary = JSON.parse(insertPayload.quick_summary); } catch { insertPayload.quick_summary = []; }
+    }
+    if (insertPayload.quick_summary !== undefined && !Array.isArray(insertPayload.quick_summary)) {
+      insertPayload.quick_summary = [insertPayload.quick_summary];
+    }
+
     const explicitHeaders = getSupabaseHeaders();
 
     // Debug Logging
@@ -3301,6 +3308,13 @@ export const api = {
     }
     if (payload.exclusions !== undefined && !Array.isArray(payload.exclusions)) {
       payload.exclusions = [payload.exclusions];
+    }
+
+    if (typeof payload.quick_summary === 'string') {
+      try { payload.quick_summary = JSON.parse(payload.quick_summary); } catch { payload.quick_summary = []; }
+    }
+    if (payload.quick_summary !== undefined && !Array.isArray(payload.quick_summary)) {
+      payload.quick_summary = [payload.quick_summary];
     }
 
     const explicitHeaders = getSupabaseHeaders();
@@ -4883,6 +4897,30 @@ export function mapPackageRow(row: any): Package {
               }
             })()
           : []),
+    quickSummary: Array.isArray(row.quick_summary ?? row.quickSummary)
+      ? (row.quick_summary ?? row.quickSummary)
+          .map((item: any) => ({
+            label: String(item?.label ?? '').trim(),
+            value: String(item?.value ?? '').trim(),
+          }))
+          .filter((item: any) => item.label || item.value)
+      : (typeof (row.quick_summary ?? row.quickSummary) === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(row.quick_summary ?? row.quickSummary);
+                return Array.isArray(parsed)
+                  ? parsed
+                      .map((item: any) => ({
+                        label: String(item?.label ?? '').trim(),
+                        value: String(item?.value ?? '').trim(),
+                      }))
+                      .filter((item: any) => item.label || item.value)
+                  : [];
+              } catch {
+                return [];
+              }
+            })()
+          : undefined),
     isPublished: Boolean(row.is_published ?? row.isPublished ?? true),
     createdAt: row.created_at || row.createdAt,
     updatedAt: row.updated_at || row.updatedAt,
@@ -5014,6 +5052,20 @@ export function packageToRow(pkg: Partial<Package>): Record<string, any> {
       try { rawExc = JSON.parse(rawExc); } catch { rawExc = rawExc.split('\n').filter(Boolean); }
     }
     row.exclusions = Array.isArray(rawExc) ? rawExc.map(String) : [];
+  }
+  if (pkg.quickSummary !== undefined || (pkg as any).quick_summary !== undefined) {
+    let rawQs = pkg.quickSummary ?? (pkg as any).quick_summary;
+    if (typeof rawQs === 'string') {
+      try { rawQs = JSON.parse(rawQs); } catch { rawQs = []; }
+    }
+    row.quick_summary = Array.isArray(rawQs)
+      ? rawQs
+          .map((item: any) => ({
+            label: String(item?.label ?? '').trim(),
+            value: String(item?.value ?? '').trim(),
+          }))
+          .filter((item: any) => item.label || item.value)
+      : [];
   }
   if (pkg.isPublished !== undefined || (pkg as any).is_published !== undefined) {
     row.is_published = Boolean(pkg.isPublished ?? (pkg as any).is_published ?? true);

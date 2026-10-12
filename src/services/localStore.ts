@@ -532,6 +532,7 @@ export const localStore = {
       itinerary: pkgData.itinerary || [],
       inclusions: pkgData.inclusions || [],
       exclusions: pkgData.exclusions || [],
+      quickSummary: pkgData.quickSummary || [],
     };
     packages.unshift(newPkg);
     setStored(STORAGE_KEYS.PACKAGES, packages);
@@ -592,6 +593,7 @@ export const localStore = {
         itinerary: updates.itinerary || [],
         inclusions: updates.inclusions || [],
         exclusions: updates.exclusions || [],
+        quickSummary: updates.quickSummary || [],
         ...updates,
       };
       packages.unshift(newPkg);

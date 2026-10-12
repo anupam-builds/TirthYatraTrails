@@ -400,28 +400,36 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
                 </p>
               </div>
 
-              {/* Brief Summary of Itinerary */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-2 text-xs">
-                <h4 className="font-bold text-[#0f294a]">Yatra Quick Summary</h4>
-                <div className="space-y-1.5 text-slate-600">
-                  <div className="flex items-center justify-between">
-                    <span>Duration:</span>
-                    <span className="font-bold text-slate-800">{pkg.duration}</span>
+              {/* Dynamic Yatra Quick Summary */}
+              {(() => {
+                const summaryList = (pkg.quickSummary && pkg.quickSummary.length > 0)
+                  ? pkg.quickSummary
+                  : [
+                      { label: 'Duration', value: pkg.duration },
+                      { label: 'Category', value: pkg.category },
+                      { label: 'Meals', value: '100% Pure Vegetarian' },
+                      { label: 'Medical', value: 'Oxygen & Doctor on Call' },
+                    ];
+
+                if (summaryList.length === 0) return null;
+
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-2 text-xs">
+                    <h4 className="font-bold text-[#0f294a] flex items-center justify-between">
+                      <span>Yatra Quick Summary</span>
+                      <span className="text-[10px] text-slate-400 font-normal">Package Overview</span>
+                    </h4>
+                    <div className="space-y-1.5 text-slate-600">
+                      {summaryList.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-3">
+                          <span className="text-slate-600 truncate">{item.label.replace(/:$/, '')}:</span>
+                          <span className="font-bold text-slate-800 text-right">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span>Category:</span>
-                    <span className="font-bold text-slate-800">{pkg.category}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Meals:</span>
-                    <span className="font-bold text-slate-800">100% Pure Vegetarian</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Medical:</span>
-                    <span className="font-bold text-slate-800">Oxygen &amp; Doctor on Call</span>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Enquire on WhatsApp Dynamic Button */}
               <a
