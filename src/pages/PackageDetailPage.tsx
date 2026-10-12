@@ -22,6 +22,10 @@ import {
   MessageCircle,
   FileText,
   HelpCircle,
+  Check,
+  X,
+  XCircle,
+  ListChecks,
 } from 'lucide-react';
 
 export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }) => {
@@ -212,64 +216,167 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
               </p>
             </div>
 
-            {/* WHAT TO EXPECT -> Highlights (Bullet points) */}
+            {/* WHAT TO EXPECT -> Trip Highlights */}
+            {pkg.highlights && pkg.highlights.length > 0 && (
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-orange-100 text-[#ea580c]">
+                    <Sparkles className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#ea580c] block">
+                      WHAT TO EXPECT
+                    </span>
+                    <h2 className="text-xl font-extrabold text-[#0f294a]">Trip Highlights</h2>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {pkg.highlights.map((highlight, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60"
+                    >
+                      <div className="p-1 rounded-full bg-orange-100 text-[#ea580c] shrink-0 mt-0.5">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-800 leading-snug">
+                        {highlight}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* WHAT'S INCLUDED & WHAT'S EXCLUDED */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
               <div className="flex items-center gap-2">
                 <span className="p-2 rounded-xl bg-orange-100 text-[#ea580c]">
-                  <Sparkles className="w-5 h-5" />
+                  <ListChecks className="w-5 h-5" />
                 </span>
                 <div>
                   <span className="text-xs font-bold uppercase tracking-wider text-[#ea580c] block">
-                    WHAT TO EXPECT
+                    TRANSPARENT VALUE
                   </span>
-                  <h2 className="text-xl font-extrabold text-[#0f294a]">Trip Highlights &amp; Inclusions</h2>
+                  <h2 className="text-xl font-extrabold text-[#0f294a]">What's Included &amp; Excluded</h2>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3.5">
-                {pkg.highlights.map((highlight, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-start gap-3.5 p-4 rounded-2xl bg-slate-50 border border-slate-200/60"
-                  >
-                    <div className="p-1 rounded-full bg-emerald-100 text-emerald-700 shrink-0 mt-0.5">
-                      <CheckCircle2 className="w-4 h-4" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* INCLUSIONS BOX */}
+                <div className="p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black shadow-xs">
+                        ✓
+                      </span>
+                      <h3 className="font-extrabold text-sm text-emerald-950">What's Included</h3>
                     </div>
-                    <span className="text-xs sm:text-sm font-semibold text-slate-800 leading-snug">
-                      {highlight}
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 text-emerald-900">
+                      {((pkg.inclusions && pkg.inclusions.length > 0) ? pkg.inclusions : (pkg.highlights || [])).length} Items
                     </span>
                   </div>
-                ))}
+
+                  <ul className="space-y-2.5">
+                    {((pkg.inclusions && pkg.inclusions.length > 0)
+                      ? pkg.inclusions
+                      : (pkg.highlights && pkg.highlights.length > 0
+                          ? pkg.highlights
+                          : [
+                              'VIP Darshan entry and queue assistance where permissible',
+                              '3 & 4 Star verified pilgrimage hotel accommodations',
+                              'Daily wholesome pure vegetarian breakfast and dinner buffet',
+                              'All transfers & sightseeing by dedicated private AC vehicle',
+                              'Experienced local pilgrimage coordinator & temple priest guide',
+                              'All parking, toll taxes, driver allowance and fuel charges',
+                            ])
+                    ).map((incItem, idx) => (
+                      <li key={idx} className="flex items-start gap-2.5 text-xs text-slate-800 leading-snug">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5 stroke-[2.5]" />
+                        <span>{incItem}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* EXCLUSIONS BOX */}
+                <div className="p-5 rounded-2xl bg-rose-50/50 border border-rose-200/70 space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-rose-200/60">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-black shadow-xs">
+                        ✗
+                      </span>
+                      <h3 className="font-extrabold text-sm text-rose-950">What's Excluded</h3>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-200 text-rose-900">
+                      {((pkg.exclusions && pkg.exclusions.length > 0) ? pkg.exclusions : [1, 2, 3, 4, 5]).length} Items
+                    </span>
+                  </div>
+
+                  <ul className="space-y-2.5">
+                    {((pkg.exclusions && pkg.exclusions.length > 0)
+                      ? pkg.exclusions
+                      : [
+                          'Personal expenses, laundry, telephone calls and tips',
+                          'Airfare / Train tickets to arrival city unless specifically booked',
+                          'Special personal puja ceremonies or individual priest Dakshina',
+                          'Any camera/video permits at monuments or shrines',
+                          'Travel insurance and medical emergency expenses',
+                        ]
+                    ).map((excItem, idx) => (
+                      <li key={idx} className="flex items-start gap-2.5 text-xs text-slate-700 leading-snug">
+                        <X className="w-4 h-4 text-rose-500 shrink-0 mt-0.5 stroke-[2.5]" />
+                        <span>{excItem}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </div>
 
             {/* DAY-BY-DAY SACRED ITINERARY */}
             {pkg.itinerary && pkg.itinerary.length > 0 && (
               <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
-                <div className="flex items-center gap-2">
-                  <span className="p-2 rounded-xl bg-orange-100 text-[#ea580c]">
-                    <Calendar className="w-5 h-5" />
-                  </span>
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#ea580c] block">
-                      SACRED SCHEDULE
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-xl bg-orange-100 text-[#ea580c]">
+                      <Calendar className="w-5 h-5" />
                     </span>
-                    <h2 className="text-xl font-extrabold text-[#0f294a]">Day-by-Day Detailed Itinerary</h2>
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#ea580c] block">
+                        SACRED SCHEDULE
+                      </span>
+                      <h2 className="text-xl font-extrabold text-[#0f294a]">Day-by-Day Detailed Itinerary</h2>
+                    </div>
                   </div>
+                  <span className="hidden sm:inline-flex px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800">
+                    {pkg.itinerary.length} {pkg.itinerary.length === 1 ? 'Day' : 'Days'} Planned
+                  </span>
                 </div>
 
                 <div className="space-y-4 relative before:absolute before:inset-0 before:left-4 before:w-0.5 before:bg-orange-200">
-                  {pkg.itinerary.map((item) => (
-                    <div key={item.day} className="relative pl-10">
-                      <div className="absolute left-1.5 top-1 w-6 h-6 rounded-full bg-[#0f294a] text-white flex items-center justify-center text-xs font-bold ring-4 ring-white">
-                        {item.day}
+                  {pkg.itinerary.map((item, idx) => {
+                    const dayNum = item.dayNumber ?? item.day ?? (idx + 1);
+                    const desc = item.description || item.desc || '';
+                    return (
+                      <div key={item.day || item.dayNumber || idx} className="relative pl-10">
+                        <div className="absolute left-1.5 top-1 w-6 h-6 rounded-full bg-[#0f294a] text-white flex items-center justify-center text-xs font-bold ring-4 ring-white shadow-xs">
+                          {dayNum}
+                        </div>
+                        <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200/60 space-y-1.5 hover:border-orange-200 transition-colors">
+                          <h4 className="font-bold text-sm text-[#0f294a]">
+                            Day {dayNum}: {item.title}
+                          </h4>
+                          {desc && (
+                            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                              {desc}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-1">
-                        <h4 className="font-bold text-sm text-[#0f294a]">Day {item.day}: {item.title}</h4>
-                        <p className="text-xs text-slate-600 leading-relaxed">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

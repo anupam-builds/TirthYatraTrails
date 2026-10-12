@@ -153,9 +153,11 @@ export interface Hotel {
 }
 
 export interface PackageItineraryItem {
-  day: number;
+  dayNumber?: number;
+  day?: number;
   title: string;
-  desc: string;
+  description?: string;
+  desc?: string;
 }
 
 export interface Package {
@@ -176,6 +178,8 @@ export interface Package {
   hotelsLevel?: string; // "3 & 4 Star Deluxe"
   transfers?: string; // "AC Private Vehicle & Flights Included"
   itinerary?: PackageItineraryItem[];
+  inclusions?: string[];
+  exclusions?: string[];
   isPublished?: boolean;
   createdAt?: string;
   updatedAt?: string;

@@ -530,6 +530,8 @@ export const localStore = {
       hotelsLevel: pkgData.hotelsLevel || '3 & 4 Star Deluxe Stays',
       transfers: pkgData.transfers || 'Private AC Coach',
       itinerary: pkgData.itinerary || [],
+      inclusions: pkgData.inclusions || [],
+      exclusions: pkgData.exclusions || [],
     };
     packages.unshift(newPkg);
     setStored(STORAGE_KEYS.PACKAGES, packages);
@@ -588,6 +590,8 @@ export const localStore = {
         hotelsLevel: updates.hotelsLevel || '3 & 4 Star Deluxe Stays',
         transfers: updates.transfers || 'Private AC Coach',
         itinerary: updates.itinerary || [],
+        inclusions: updates.inclusions || [],
+        exclusions: updates.exclusions || [],
         ...updates,
       };
       packages.unshift(newPkg);

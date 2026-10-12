@@ -21,7 +21,22 @@ import {
   AlertCircle,
   RotateCcw,
   Radio,
+  ArrowUp,
+  ArrowDown,
+  Check,
+  XCircle,
+  Calendar,
+  ListPlus,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
+
+export interface FormItineraryDay {
+  id: string;
+  dayNumber: number;
+  title: string;
+  description: string;
+}
 
 const DEFAULT_CATEGORIES = ['Pilgrimage', 'Char Dham', 'Varanasi Ayodhya', 'South India', 'Jyotirlinga'];
 
@@ -62,6 +77,11 @@ export const AdminPackages: React.FC = () => {
   const [overview, setOverview] = useState('Embark on the sacred Himalayan journey covering the four revered shrines with helicopter coordination, VIP darshan assistance, and deluxe stays.');
   const [highlightsString, setHighlightsString] = useState('VIP Darshan passes included, Dedicated Pilgrim Officer, Wholesome Vegetarian Meals Buffet, Oxygen Cylinder and Doctor Support');
   const [cancellationPolicy, setCancellationPolicy] = useState('Full refund up to 15 days before yatra commencement. 50% refund between 7-14 days.');
+  const [itineraryDays, setItineraryDays] = useState<FormItineraryDay[]>([]);
+  const [inclusions, setInclusions] = useState<string[]>([]);
+  const [exclusions, setExclusions] = useState<string[]>([]);
+  const [newInclusionText, setNewInclusionText] = useState('');
+  const [newExclusionText, setNewExclusionText] = useState('');
 
   useEffect(() => {
     loadData();
@@ -163,6 +183,35 @@ export const AdminPackages: React.FC = () => {
     setOverview('All-inclusive pilgrimage package with VIP darshan passes, private AC coach, and wholesome culinary arrangements.');
     setHighlightsString('VIP Darshan Pass included, Dedicated Guide, Wholesome Buffet Meals, Deluxe Verified Accommodations');
     setCancellationPolicy('100% refund up to 14 days before departure.');
+
+    // Initialize Default Itinerary Days template
+    setItineraryDays([
+      { id: 'day-1', dayNumber: 1, title: 'Arrival & Welcome Puja', description: 'Arrival at holy base, check-in to deluxe hotel, evening Ganga Aarti blessing.' },
+      { id: 'day-2', dayNumber: 2, title: 'Sacred Temple Darshan & Rituals', description: 'Early morning VIP Abhishek and Darshan with temple priest facilitation.' },
+      { id: 'day-3', dayNumber: 3, title: 'Return & Farewell Blessings', description: 'Wholesome breakfast and airport/station drop with sacred Prasad box.' },
+    ]);
+
+    // Initialize Default Inclusions
+    setInclusions([
+      'VIP Darshan entry and queue assistance where permissible',
+      '3 & 4 Star verified pilgrimage hotel accommodations',
+      'Daily wholesome pure vegetarian breakfast and dinner buffet',
+      'All transfers & sightseeing by dedicated private AC vehicle',
+      'Experienced local pilgrimage coordinator & temple priest guide',
+      'All parking, toll taxes, driver allowance and fuel charges',
+    ]);
+
+    // Initialize Default Exclusions
+    setExclusions([
+      'Personal expenses, laundry, telephone calls and tips',
+      'Flight / Train tickets unless explicitly requested',
+      'Special personal puja ceremonies or individual priest Dakshina',
+      'Any camera/video permits at monuments or shrines',
+      'Travel insurance and medical emergency expenses',
+    ]);
+
+    setNewInclusionText('');
+    setNewExclusionText('');
     setIsModalOpen(true);
   };
 
@@ -186,6 +235,55 @@ export const AdminPackages: React.FC = () => {
     setOverview(p.overview);
     setHighlightsString(p.highlights.join(', '));
     setCancellationPolicy(p.cancellationPolicy);
+
+    // Itinerary days from package
+    const rawItin = p.itinerary || [];
+    if (rawItin.length > 0) {
+      setItineraryDays(
+        rawItin.map((item, idx) => ({
+          id: `day-${idx + 1}-${Math.random().toString(36).substring(2, 6)}`,
+          dayNumber: Number(item.dayNumber ?? item.day ?? (idx + 1)),
+          title: item.title || '',
+          description: item.description || item.desc || '',
+        }))
+      );
+    } else {
+      setItineraryDays([
+        { id: 'day-1', dayNumber: 1, title: 'Arrival & Welcome Puja', description: 'Arrival at holy base, check-in to deluxe hotel, evening Ganga Aarti blessing.' },
+        { id: 'day-2', dayNumber: 2, title: 'Sacred Temple Darshan', description: 'Early morning VIP Abhishek and Darshan with temple priest facilitation.' },
+        { id: 'day-3', dayNumber: 3, title: 'Return & Farewell Blessings', description: 'Wholesome breakfast and departure transfers.' },
+      ]);
+    }
+
+    // Inclusions
+    const rawInc = p.inclusions || [];
+    setInclusions(
+      rawInc.length > 0
+        ? rawInc
+        : [
+            'VIP Darshan entry and queue assistance where permissible',
+            '3 & 4 Star verified pilgrimage hotel accommodations',
+            'Daily wholesome pure vegetarian breakfast and dinner buffet',
+            'All transfers & sightseeing by dedicated private AC vehicle',
+            'Experienced local pilgrimage coordinator & temple priest guide',
+          ]
+    );
+
+    // Exclusions
+    const rawExc = p.exclusions || [];
+    setExclusions(
+      rawExc.length > 0
+        ? rawExc
+        : [
+            'Personal expenses, laundry, telephone calls and tips',
+            'Flight / Train tickets unless explicitly requested',
+            'Special personal puja ceremonies or priest Dakshina',
+            'Any camera/video permits at monuments or shrines',
+          ]
+    );
+
+    setNewInclusionText('');
+    setNewExclusionText('');
     setIsModalOpen(true);
   };
 
@@ -256,6 +354,83 @@ export const AdminPackages: React.FC = () => {
 
   const handleDelete = handleDeletePackage;
 
+  // Itinerary Handlers
+  const handleAddItineraryDay = () => {
+    setItineraryDays((prev) => [
+      ...prev,
+      {
+        id: `day-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        dayNumber: prev.length + 1,
+        title: '',
+        description: '',
+      },
+    ]);
+  };
+
+  const handleRemoveItineraryDay = (index: number) => {
+    setItineraryDays((prev) => {
+      const filtered = prev.filter((_, idx) => idx !== index);
+      return filtered.map((d, i) => ({ ...d, dayNumber: i + 1 }));
+    });
+  };
+
+  const handleMoveDayUp = (index: number) => {
+    if (index <= 0) return;
+    setItineraryDays((prev) => {
+      const copy = [...prev];
+      const temp = copy[index - 1];
+      copy[index - 1] = copy[index];
+      copy[index] = temp;
+      return copy.map((d, i) => ({ ...d, dayNumber: i + 1 }));
+    });
+  };
+
+  const handleMoveDayDown = (index: number) => {
+    setItineraryDays((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const copy = [...prev];
+      const temp = copy[index + 1];
+      copy[index + 1] = copy[index];
+      copy[index] = temp;
+      return copy.map((d, i) => ({ ...d, dayNumber: i + 1 }));
+    });
+  };
+
+  const handleUpdateDay = (index: number, field: 'title' | 'description', val: string) => {
+    setItineraryDays((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
+    });
+  };
+
+  // Inclusions & Exclusions Handlers
+  const handleAddInclusion = (text?: string) => {
+    const val = (text !== undefined ? text : newInclusionText).trim();
+    if (!val) return;
+    if (!inclusions.includes(val)) {
+      setInclusions((prev) => [...prev, val]);
+    }
+    setNewInclusionText('');
+  };
+
+  const handleRemoveInclusion = (index: number) => {
+    setInclusions((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddExclusion = (text?: string) => {
+    const val = (text !== undefined ? text : newExclusionText).trim();
+    if (!val) return;
+    if (!exclusions.includes(val)) {
+      setExclusions((prev) => [...prev, val]);
+    }
+    setNewExclusionText('');
+  };
+
+  const handleRemoveExclusion = (index: number) => {
+    setExclusions((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const highlights = highlightsString.split(',').map((s) => s.trim()).filter(Boolean);
@@ -263,6 +438,19 @@ export const AdminPackages: React.FC = () => {
       'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80'
     ]);
     const primaryCover = validImages[0];
+
+    const cleanedItinerary = itineraryDays
+      .map((item, idx) => ({
+        dayNumber: idx + 1,
+        day: idx + 1,
+        title: item.title.trim(),
+        description: item.description.trim(),
+        desc: item.description.trim(),
+      }))
+      .filter((item) => item.title || item.description);
+
+    const cleanedInclusions = inclusions.map((s) => s.trim()).filter(Boolean);
+    const cleanedExclusions = exclusions.map((s) => s.trim()).filter(Boolean);
 
     const packageData: Partial<Package> = {
       title,
@@ -280,11 +468,9 @@ export const AdminPackages: React.FC = () => {
       experienceLevel: 'Comfortable • Senior Friendly',
       hotelsLevel: '3 & 4 Star Deluxe Stays',
       transfers: 'Private AC Coach / Helicopter Support',
-      itinerary: editingPackage?.itinerary || [
-        { day: 1, title: 'Arrival & Welcome Puja', desc: 'Arrival at holy base, check-in to deluxe hotel, evening Ganga Aarti blessing.' },
-        { day: 2, title: 'Sacred Temple Darshan', desc: 'Early morning VIP Abhishek and Darshan with temple priest facilitation.' },
-        { day: 3, title: 'Return & Farewell Blessings', desc: 'Wholesome breakfast and airport drop with sacred Prasad box.' },
-      ],
+      itinerary: cleanedItinerary,
+      inclusions: cleanedInclusions,
+      exclusions: cleanedExclusions,
     };
 
     try {
@@ -472,7 +658,7 @@ export const AdminPackages: React.FC = () => {
       {/* ADD / EDIT PACKAGE MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 rounded-3xl p-6 max-w-2xl w-full my-8 text-slate-800 dark:text-slate-200 space-y-5 shadow-2xl">
+          <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-8 max-w-4xl w-full my-8 text-slate-800 dark:text-slate-200 space-y-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {editingPackage ? 'Edit Pilgrimage Package' : 'Create New Yatra Package'}
@@ -485,7 +671,7 @@ export const AdminPackages: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-2 text-xs">
+            <form onSubmit={handleSubmit} className="space-y-5 max-h-[82vh] overflow-y-auto pr-2 text-xs">
               <div>
                 <label htmlFor="package-title-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Package Title</label>
                 <BaseInput
@@ -697,6 +883,309 @@ export const AdminPackages: React.FC = () => {
                   onChange={(e) => setCancellationPolicy(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
+              </div>
+
+              {/* ITINERARY BUILDER */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-950/60 dark:text-orange-400">
+                      <Calendar className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h3 className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-2">
+                        <span>Day-by-Day Sacred Itinerary</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-orange-100 dark:bg-orange-950/80 text-orange-700 dark:text-orange-300 font-extrabold">
+                          {itineraryDays.length} {itineraryDays.length === 1 ? 'Day' : 'Days'}
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Add, remove, and reorder each day's schedule, darshan milestones, and stays.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddItineraryDay}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-600 dark:bg-orange-950/50 dark:hover:bg-orange-900/60 dark:text-orange-400 border border-orange-200 dark:border-orange-800 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Itinerary Day</span>
+                  </button>
+                </div>
+
+                {itineraryDays.length === 0 ? (
+                  <div className="p-6 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
+                    <p className="text-slate-500 dark:text-slate-400 text-xs">No itinerary days added yet.</p>
+                    <button
+                      type="button"
+                      onClick={handleAddItineraryDay}
+                      className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Day 1</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {itineraryDays.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-[#081220] border border-slate-200 dark:border-slate-800 space-y-2.5 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-lg bg-[#0f294a] text-white dark:bg-orange-600 text-xs font-extrabold shrink-0">
+                            Day {idx + 1}
+                          </span>
+                          <div className="flex-1">
+                            <BaseInput
+                              id={`itinerary-day-title-${idx}`}
+                              name={`itinerary-day-title-${idx}`}
+                              type="text"
+                              required
+                              value={item.title}
+                              onChange={(e) => handleUpdateDay(idx, 'title', e.target.value)}
+                              placeholder={`Day ${idx + 1} Title (e.g. Arrival in Ayodhya & Evening Saryu Aarti)`}
+                              className="w-full bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveDayUp(idx)}
+                              disabled={idx === 0}
+                              title="Move day up"
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0c1a2e] text-slate-500 hover:text-orange-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveDayDown(idx)}
+                              disabled={idx === itineraryDays.length - 1}
+                              title="Move day down"
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0c1a2e] text-slate-500 hover:text-orange-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItineraryDay(idx)}
+                              title="Delete day"
+                              className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/80 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <BaseTextarea
+                            id={`itinerary-day-desc-${idx}`}
+                            name={`itinerary-day-desc-${idx}`}
+                            rows={2}
+                            value={item.description}
+                            onChange={(e) => handleUpdateDay(idx, 'description', e.target.value)}
+                            placeholder={`Describe activities for Day ${idx + 1}: morning temple darshans, holy snan, special puja, stays, buffet meals...`}
+                            className="w-full bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* INCLUSIONS & EXCLUSIONS BUILDER */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-xs">
+                      Inclusions &amp; Exclusions
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Specify transparent inclusions (✓) and exclusions (✗) displayed to pilgrims.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  {/* INCLUSIONS BOX */}
+                  <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                        <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>Included in Package ({inclusions.length})</span>
+                      </span>
+                    </div>
+
+                    {/* Quick input */}
+                    <div className="flex gap-2 items-center">
+                      <BaseInput
+                        id="package-new-inclusion-input"
+                        name="package-new-inclusion-input"
+                        type="text"
+                        value={newInclusionText}
+                        onChange={(e) => setNewInclusionText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddInclusion();
+                          }
+                        }}
+                        placeholder="Add an inclusion (e.g. VIP Darshan passes)..."
+                        className="flex-1 bg-white dark:bg-[#081220] border border-emerald-300 dark:border-emerald-700/80 rounded-xl p-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddInclusion()}
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {/* Quick Suggestions Pills */}
+                    <div className="flex flex-wrap gap-1.5 text-[10px]">
+                      <span className="text-slate-400 self-center text-[10px]">Suggestions:</span>
+                      {[
+                        'VIP Darshan Entry',
+                        'Deluxe Stays',
+                        'Pure Veg Buffet',
+                        'AC Coach Transfers',
+                        'Temple Priest Guide',
+                        'Emergency Oxygen Kit',
+                      ].map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => handleAddInclusion(item)}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer"
+                        >
+                          + {item}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Inclusions List */}
+                    {inclusions.length === 0 ? (
+                      <p className="text-[11px] text-slate-400 italic">No inclusions listed yet.</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {inclusions.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-start justify-between gap-2 p-2 rounded-xl bg-white dark:bg-[#0c1a2e] border border-emerald-100 dark:border-emerald-900/60 text-slate-800 dark:text-slate-200 text-xs"
+                          >
+                            <div className="flex items-start gap-2 flex-1">
+                              <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-black">
+                                ✓
+                              </span>
+                              <span className="leading-snug">{item}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveInclusion(idx)}
+                              title="Remove inclusion"
+                              className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-0.5 shrink-0 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* EXCLUSIONS BOX */}
+                  <div className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+                        <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                        <span>Not Included / Exclusions ({exclusions.length})</span>
+                      </span>
+                    </div>
+
+                    {/* Quick input */}
+                    <div className="flex gap-2 items-center">
+                      <BaseInput
+                        id="package-new-exclusion-input"
+                        name="package-new-exclusion-input"
+                        type="text"
+                        value={newExclusionText}
+                        onChange={(e) => setNewExclusionText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddExclusion();
+                          }
+                        }}
+                        placeholder="Add an exclusion (e.g. Flight / Train tickets)..."
+                        className="flex-1 bg-white dark:bg-[#081220] border border-rose-300 dark:border-rose-700/80 rounded-xl p-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddExclusion()}
+                        className="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {/* Quick Suggestions Pills */}
+                    <div className="flex flex-wrap gap-1.5 text-[10px]">
+                      <span className="text-slate-400 self-center text-[10px]">Suggestions:</span>
+                      {[
+                        'Flight / Train Tickets',
+                        'Personal Expenses',
+                        'Priest Dakshina',
+                        'Camera / Video Permits',
+                        'Travel Insurance',
+                      ].map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => handleAddExclusion(item)}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 transition-colors cursor-pointer"
+                        >
+                          + {item}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Exclusions List */}
+                    {exclusions.length === 0 ? (
+                      <p className="text-[11px] text-slate-400 italic">No exclusions listed yet.</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {exclusions.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-start justify-between gap-2 p-2 rounded-xl bg-white dark:bg-[#0c1a2e] border border-rose-100 dark:border-rose-900/60 text-slate-800 dark:text-slate-200 text-xs"
+                          >
+                            <div className="flex items-start gap-2 flex-1">
+                              <span className="w-4 h-4 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-black">
+                                ✗
+                              </span>
+                              <span className="leading-snug">{item}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveExclusion(idx)}
+                              title="Remove exclusion"
+                              className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-0.5 shrink-0 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">

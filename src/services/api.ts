@@ -3149,8 +3149,18 @@ export const api = {
       insertPayload.gallery_images = insertPayload.gallery_images ? [insertPayload.gallery_images] : [];
     }
 
-    if (typeof insertPayload.transfers === 'string' && (insertPayload.transfers.trim().startsWith('{') || insertPayload.transfers.trim().startsWith('['))) {
-      try { insertPayload.transfers = JSON.parse(insertPayload.transfers); } catch {}
+    if (typeof insertPayload.inclusions === 'string') {
+      try { insertPayload.inclusions = JSON.parse(insertPayload.inclusions); } catch { insertPayload.inclusions = []; }
+    }
+    if (insertPayload.inclusions !== undefined && !Array.isArray(insertPayload.inclusions)) {
+      insertPayload.inclusions = [insertPayload.inclusions];
+    }
+
+    if (typeof insertPayload.exclusions === 'string') {
+      try { insertPayload.exclusions = JSON.parse(insertPayload.exclusions); } catch { insertPayload.exclusions = []; }
+    }
+    if (insertPayload.exclusions !== undefined && !Array.isArray(insertPayload.exclusions)) {
+      insertPayload.exclusions = [insertPayload.exclusions];
     }
 
     const explicitHeaders = getSupabaseHeaders();
@@ -3279,8 +3289,18 @@ export const api = {
       payload.gallery_images = [payload.gallery_images];
     }
 
-    if (typeof payload.transfers === 'string' && (payload.transfers.trim().startsWith('{') || payload.transfers.trim().startsWith('['))) {
-      try { payload.transfers = JSON.parse(payload.transfers); } catch {}
+    if (typeof payload.inclusions === 'string') {
+      try { payload.inclusions = JSON.parse(payload.inclusions); } catch { payload.inclusions = []; }
+    }
+    if (payload.inclusions !== undefined && !Array.isArray(payload.inclusions)) {
+      payload.inclusions = [payload.inclusions];
+    }
+
+    if (typeof payload.exclusions === 'string') {
+      try { payload.exclusions = JSON.parse(payload.exclusions); } catch { payload.exclusions = []; }
+    }
+    if (payload.exclusions !== undefined && !Array.isArray(payload.exclusions)) {
+      payload.exclusions = [payload.exclusions];
     }
 
     const explicitHeaders = getSupabaseHeaders();
@@ -4813,7 +4833,56 @@ export function mapPackageRow(row: any): Package {
     experienceLevel: row.experience_level || row.experienceLevel || 'Comfortable • Senior Friendly',
     hotelsLevel: row.hotels_level || row.hotelsLevel || '3 & 4 Star Deluxe Stays',
     transfers: row.transfers || 'Private AC Coach',
-    itinerary: Array.isArray(row.itinerary) ? row.itinerary : [],
+    itinerary: Array.isArray(row.itinerary)
+      ? row.itinerary.map((item: any, idx: number) => ({
+          dayNumber: Number(item.dayNumber ?? item.day ?? (idx + 1)),
+          day: Number(item.day ?? item.dayNumber ?? (idx + 1)),
+          title: String(item.title || `Day ${idx + 1}`),
+          description: String(item.description ?? item.desc ?? ''),
+          desc: String(item.desc ?? item.description ?? ''),
+        }))
+      : (typeof row.itinerary === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(row.itinerary);
+                return Array.isArray(parsed)
+                  ? parsed.map((item: any, idx: number) => ({
+                      dayNumber: Number(item.dayNumber ?? item.day ?? (idx + 1)),
+                      day: Number(item.day ?? item.dayNumber ?? (idx + 1)),
+                      title: String(item.title || `Day ${idx + 1}`),
+                      description: String(item.description ?? item.desc ?? ''),
+                      desc: String(item.desc ?? item.description ?? ''),
+                    }))
+                  : [];
+              } catch {
+                return [];
+              }
+            })()
+          : []),
+    inclusions: Array.isArray(row.inclusions)
+      ? row.inclusions
+      : (typeof row.inclusions === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(row.inclusions);
+                return Array.isArray(parsed) ? parsed : [];
+              } catch {
+                return row.inclusions.split('\n').map((s: string) => s.trim()).filter(Boolean);
+              }
+            })()
+          : []),
+    exclusions: Array.isArray(row.exclusions)
+      ? row.exclusions
+      : (typeof row.exclusions === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(row.exclusions);
+                return Array.isArray(parsed) ? parsed : [];
+              } catch {
+                return row.exclusions.split('\n').map((s: string) => s.trim()).filter(Boolean);
+              }
+            })()
+          : []),
     isPublished: Boolean(row.is_published ?? row.isPublished ?? true),
     createdAt: row.created_at || row.createdAt,
     updatedAt: row.updated_at || row.updatedAt,
@@ -4922,7 +4991,29 @@ export function packageToRow(pkg: Partial<Package>): Record<string, any> {
     if (typeof rawItin === 'string') {
       try { rawItin = JSON.parse(rawItin); } catch { rawItin = []; }
     }
-    row.itinerary = Array.isArray(rawItin) ? rawItin : [];
+    row.itinerary = Array.isArray(rawItin)
+      ? rawItin.map((item: any, idx: number) => ({
+          dayNumber: Number(item.dayNumber ?? item.day ?? (idx + 1)),
+          day: Number(item.day ?? item.dayNumber ?? (idx + 1)),
+          title: String(item.title || ''),
+          description: String(item.description ?? item.desc ?? ''),
+          desc: String(item.desc ?? item.description ?? ''),
+        }))
+      : [];
+  }
+  if (pkg.inclusions !== undefined || (pkg as any).inclusions !== undefined) {
+    let rawInc = pkg.inclusions ?? (pkg as any).inclusions;
+    if (typeof rawInc === 'string') {
+      try { rawInc = JSON.parse(rawInc); } catch { rawInc = rawInc.split('\n').filter(Boolean); }
+    }
+    row.inclusions = Array.isArray(rawInc) ? rawInc.map(String) : [];
+  }
+  if (pkg.exclusions !== undefined || (pkg as any).exclusions !== undefined) {
+    let rawExc = pkg.exclusions ?? (pkg as any).exclusions;
+    if (typeof rawExc === 'string') {
+      try { rawExc = JSON.parse(rawExc); } catch { rawExc = rawExc.split('\n').filter(Boolean); }
+    }
+    row.exclusions = Array.isArray(rawExc) ? rawExc.map(String) : [];
   }
   if (pkg.isPublished !== undefined || (pkg as any).is_published !== undefined) {
     row.is_published = Boolean(pkg.isPublished ?? (pkg as any).is_published ?? true);
