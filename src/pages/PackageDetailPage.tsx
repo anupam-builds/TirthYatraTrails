@@ -15,7 +15,6 @@ import {
   Users,
   Compass,
   CheckCircle2,
-  AlertCircle,
   Car,
   Building,
   HeartHandshake,
@@ -190,7 +189,7 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
         </div>
       </section>
 
-      {/* 3. MAIN CONTENT: LEFT (ABOUT, HIGHLIGHTS, CANCELLATION, ITINERARY) & RIGHT (STICKY SIDEBAR) */}
+      {/* 3. MAIN CONTENT: LEFT (ABOUT, HIGHLIGHTS, INCLUSIONS/EXCLUSIONS, ITINERARY) & RIGHT (STICKY SIDEBAR) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
           
@@ -380,32 +379,6 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
                 </div>
               </div>
             )}
-
-            {/* CANCELLATION AND REFUND POLICY */}
-            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-orange-100 text-[#ea580c]">
-                  <FileText className="w-5 h-5" />
-                </span>
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#ea580c] block">
-                    TRANSPARENT TERMS
-                  </span>
-                  <h2 className="text-xl font-extrabold text-[#0f294a]">Cancellation &amp; Refund Policy</h2>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/60 text-xs text-amber-900 space-y-2 leading-relaxed">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                  <p className="font-medium">{pkg.cancellationPolicy}</p>
-                </div>
-                <p className="text-[11px] text-amber-800/80 pl-6">
-                  * Helicopter and VIP darshan slots are non-transferable per shrine board guidelines. Free date amendment is permissible up to 14 days prior to departure.
-                </p>
-              </div>
-            </div>
-
           </div>
 
           {/* RIGHT STICKY SIDEBAR */}

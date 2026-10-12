@@ -171,7 +171,7 @@ export interface Package {
   startingPrice: number;
   overview: string;
   highlights: string[];
-  cancellationPolicy: string;
+  cancellationPolicy?: string;
   category: string; // "Char Dham" | "Varanasi Ayodhya" | "Jyotirlinga" | "South India" | "Pilgrimage" | "Himalayan"
   packageType?: string; // "Spiritual & Cultural"
   experienceLevel?: string; // "Comfort & Guided"

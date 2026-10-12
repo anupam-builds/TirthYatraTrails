@@ -76,7 +76,6 @@ export const AdminPackages: React.FC = () => {
   ]);
   const [overview, setOverview] = useState('Embark on the sacred Himalayan journey covering the four revered shrines with helicopter coordination, VIP darshan assistance, and deluxe stays.');
   const [highlightsString, setHighlightsString] = useState('VIP Darshan passes included, Dedicated Pilgrim Officer, Wholesome Vegetarian Meals Buffet, Oxygen Cylinder and Doctor Support');
-  const [cancellationPolicy, setCancellationPolicy] = useState('Full refund up to 15 days before yatra commencement. 50% refund between 7-14 days.');
   const [itineraryDays, setItineraryDays] = useState<FormItineraryDay[]>([]);
   const [inclusions, setInclusions] = useState<string[]>([]);
   const [exclusions, setExclusions] = useState<string[]>([]);
@@ -182,7 +181,6 @@ export const AdminPackages: React.FC = () => {
     setPackageImages([defaultImg]);
     setOverview('All-inclusive pilgrimage package with VIP darshan passes, private AC coach, and wholesome culinary arrangements.');
     setHighlightsString('VIP Darshan Pass included, Dedicated Guide, Wholesome Buffet Meals, Deluxe Verified Accommodations');
-    setCancellationPolicy('100% refund up to 14 days before departure.');
 
     // Initialize Default Itinerary Days template
     setItineraryDays([
@@ -234,7 +232,6 @@ export const AdminPackages: React.FC = () => {
     ]);
     setOverview(p.overview);
     setHighlightsString(p.highlights.join(', '));
-    setCancellationPolicy(p.cancellationPolicy);
 
     // Itinerary days from package
     const rawItin = p.itinerary || [];
@@ -463,7 +460,6 @@ export const AdminPackages: React.FC = () => {
       galleryImages: validImages,
       overview,
       highlights,
-      cancellationPolicy,
       packageType: 'All-Inclusive Guided Yatra',
       experienceLevel: 'Comfortable • Senior Friendly',
       hotelsLevel: '3 & 4 Star Deluxe Stays',
@@ -869,18 +865,6 @@ export const AdminPackages: React.FC = () => {
                   type="text"
                   value={highlightsString}
                   onChange={(e) => setHighlightsString(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="package-cancellation-policy-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Cancellation Policy</label>
-                <BaseInput
-                  id="package-cancellation-policy-input"
-                  name="package-cancellation-policy-input"
-                  type="text"
-                  value={cancellationPolicy}
-                  onChange={(e) => setCancellationPolicy(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
