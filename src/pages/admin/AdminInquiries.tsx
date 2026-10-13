@@ -534,24 +534,23 @@ export const AdminInquiries: React.FC = () => {
         });
 
         // 2. Perform soft-delete directly on Supabase on inquiries & leads tables:
-        // Strictly marks record as deleted without changing status (no fallback to TRIP/CANCELLED)
+        // Only send fields that exist in the database schema ('is_deleted', 'deleted_at', 'deleted_by')
         const recordId = cleanId;
+        const deletePayload = { 
+          is_deleted: true, 
+          deleted_at: nowIso,
+          deleted_by: who,
+        };
         const { error: inqError } = await supabase
           .from('inquiries')
-          .update({ 
-            is_deleted: true, 
-            deleted_at: new Date().toISOString() 
-          })
+          .update(deletePayload)
           .eq('id', recordId);
 
         if (inqError) console.error("Soft delete error on inquiries:", inqError);
 
         const { error: leadsError } = await supabase
           .from('leads')
-          .update({ 
-            is_deleted: true, 
-            deleted_at: new Date().toISOString() 
-          })
+          .update(deletePayload)
           .eq('id', recordId);
 
         if (leadsError) console.error("Soft delete error on leads:", leadsError);

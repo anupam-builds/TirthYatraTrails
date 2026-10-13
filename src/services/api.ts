@@ -187,10 +187,10 @@ export async function resilientPatchRecord(
   // Dynamic Table Resolver
   const targetTable = getTargetTable(cleanId);
 
-  // Sanitize payload: strip keys with undefined values or empty names
+  // Sanitize payload: strip keys with undefined values, empty names, or non-schema columns like 'metadata'
   const cleanPayload: Record<string, any> = {};
   for (const [k, v] of Object.entries(payload || {})) {
-    if (v !== undefined && k !== 'undefined' && k.trim() !== '') {
+    if (v !== undefined && k !== 'undefined' && k.trim() !== '' && k !== 'metadata') {
       cleanPayload[k] = v;
     }
   }
@@ -360,14 +360,14 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
     return cachedLeadsCols;
   }
 
-  // Baseline verified schema columns guaranteed to exist
+  // Baseline verified schema columns guaranteed to exist (excluding non-existent 'metadata')
   const baselineInquiries = new Set([
     'id', 'title', 'type', 'full_name', 'phone', 'email', 'check_in_date',
     'guests', 'adults', 'children', 'child_ages', 'plan', 'special_requests',
     'pickup_location', 'dropoff_location', 'user_id', 'status',
     'assigned_staff_id', 'assigned_staff_name', 'is_locked_for_staff',
     'notes', 'created_at', 'customer_name', 'city', 'accommodation_tier',
-    'updated_at', 'metadata', 'whatsapp_number',
+    'updated_at', 'whatsapp_number',
     'is_deleted', 'deleted_at', 'deleted_by',
   ]);
 
@@ -375,7 +375,7 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
     'id', 'customer_name', 'full_name', 'phone', 'whatsapp_number', 'email',
     'city', 'accommodation_tier', 'accommodation_preference',
     'assigned_staff_id', 'assigned_staff_name', 'status',
-    'metadata', 'created_at', 'updated_at',
+    'created_at', 'updated_at',
     'is_deleted', 'deleted_at', 'deleted_by',
   ]);
 
@@ -387,10 +387,12 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
         const liveCols = new Set(Object.keys(data[0]));
+        liveCols.delete('metadata');
         const merged = table === 'inquiries'
           ? new Set([...baselineInquiries, ...liveCols])
           : new Set([...baselineLeads, ...liveCols]);
 
+        merged.delete('metadata');
         if (table === 'inquiries') cachedInquiriesCols = merged;
         else cachedLeadsCols = merged;
         lastColsCheck = now;
@@ -401,7 +403,9 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
     console.warn(`[getTableColumns] Could not inspect active columns for ${table}, using baseline:`, err);
   }
 
-  return table === 'inquiries' ? baselineInquiries : baselineLeads;
+  const fallback = table === 'inquiries' ? new Set(baselineInquiries) : new Set(baselineLeads);
+  fallback.delete('metadata');
+  return fallback;
 }
 
 /**
@@ -606,7 +610,6 @@ export async function updateLeadOrInquiryStatus(
       const allowedCols = await getTableColumns(table);
       const tablePayload: Record<string, any> = {
         updated_at: dbPayload.updated_at,
-        metadata: mergedMetadata,
       };
 
       for (const [k, v] of Object.entries(dbPayload)) {
@@ -685,7 +688,6 @@ export async function updateLeadOrInquiryStatus(
         const allowedCols = await getTableColumns(table);
         const tablePayload: Record<string, any> = {
           updated_at: dbPayload.updated_at,
-          metadata: mergedMetadata,
         };
 
         for (const [k, v] of Object.entries(dbPayload)) {
@@ -866,7 +868,6 @@ export async function submitCustomerInquiry(formData: any) {
     accommodation_tier: accommodationTierVal || null,
     accommodation_preference: accommodationTierVal || null,
     plan: accommodationTierVal || null,
-    metadata: metadataPayload,
   };
 
   let res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
@@ -879,7 +880,7 @@ export async function submitCustomerInquiry(formData: any) {
     handleUnauthorizedResponse('/rest/v1/inquiries');
   }
 
-  // If table does not yet have end_date/duration_days/budget/accommodation_tier columns in PostgREST cache, retry cleanly with metadata
+  // If table does not yet have end_date/duration_days/budget/accommodation_tier columns in PostgREST cache, retry cleanly
   if (!res.ok && res.status === 400) {
     const errText = await res.text();
     if (
@@ -897,7 +898,6 @@ export async function submitCustomerInquiry(formData: any) {
         whatsapp_number: phoneVal,
         status: 'new',
         plan: accommodationTierVal || null,
-        metadata: metadataPayload,
       };
       res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
         method: 'POST',
@@ -2049,14 +2049,13 @@ export const api = {
       assigned_staff_id: leadData.assignedStaffId || null,
       assigned_staff_name: leadData.assignedStaffName || null,
       is_locked_for_staff: false,
-      metadata: structuredMetadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    const inquiriesPayload: Record<string, any> = { metadata: structuredMetadata };
+    const inquiriesPayload: Record<string, any> = {};
     for (const [k, v] of Object.entries(allInquiriesProps)) {
-      if (inqAllowed.has(k)) {
+      if (inqAllowed.has(k) && k !== 'metadata') {
         inquiriesPayload[k] = v;
       }
     }
@@ -2091,14 +2090,13 @@ export const api = {
       assigned_staff_name: leadData.assignedStaffName || null,
       status: statusVal || 'NEW',
       is_locked_for_staff: false,
-      metadata: structuredMetadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    const leadsDbPayload: Record<string, any> = { metadata: structuredMetadata };
+    const leadsDbPayload: Record<string, any> = {};
     for (const [k, v] of Object.entries(allLeadsProps)) {
-      if (leadAllowed.has(k)) {
+      if (leadAllowed.has(k) && k !== 'metadata') {
         leadsDbPayload[k] = v;
       }
     }
@@ -2511,15 +2509,14 @@ export const api = {
 
     // 1. Soft Delete Implementation:
     // Update Supabase inquiries & leads tables:
-    // .from('inquiries').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', recordId)
-    // Never perform hard SQL delete on standard delete action
-    // Strictly mark as deleted without changing status (no fallback to TRIP/CANCELLED)
+    // Only send fields that exist in the database schema ('is_deleted', 'deleted_at', 'deleted_by')
     const recordId = cleanId;
     const { error: inqErr } = await supabase
       .from('inquiries')
       .update({
         is_deleted: true,
-        deleted_at: new Date().toISOString(),
+        deleted_at: nowIso,
+        deleted_by: who,
       })
       .eq('id', recordId);
     if (inqErr) console.error('Soft delete error on inquiries:', inqErr);
@@ -2528,7 +2525,8 @@ export const api = {
       .from('leads')
       .update({
         is_deleted: true,
-        deleted_at: new Date().toISOString(),
+        deleted_at: nowIso,
+        deleted_by: who,
       })
       .eq('id', recordId);
     if (leadsErr) console.error('Soft delete error on leads:', leadsErr);
@@ -2544,14 +2542,9 @@ export const api = {
         } catch {}
       }
 
-      // Metadata fallback to ensure persistence if schema column is pending
       try {
-        const metaPayload = {
-          ...softDeletePayload,
-          metadata: { is_deleted: true, deleted_at: nowIso, deleted_by: who },
-        };
-        await resilientPatchRecord('leads', cid, metaPayload);
-        await resilientPatchRecord('inquiries', cid, metaPayload);
+        await resilientPatchRecord('leads', cid, softDeletePayload);
+        await resilientPatchRecord('inquiries', cid, softDeletePayload);
       } catch {}
     }
 
@@ -2684,14 +2677,9 @@ export const api = {
         console.warn(`[restoreInquiry] Supabase inquiries restore update failed for id ${cid}:`, err);
       }
 
-      // Metadata fallback
       try {
-        const metaPayload = {
-          ...restorePayload,
-          metadata: { is_deleted: false, deleted_at: null, deleted_by: null },
-        };
-        await resilientPatchRecord('leads', cid, metaPayload);
-        await resilientPatchRecord('inquiries', cid, metaPayload);
+        await resilientPatchRecord('leads', cid, restorePayload);
+        await resilientPatchRecord('inquiries', cid, restorePayload);
       } catch {}
     }
 
@@ -3142,7 +3130,9 @@ export const api = {
 
     const rawPayload = hotelToRow(hotel);
     delete rawPayload.id;
+    delete rawPayload.metadata;
     let payload = { ...rawPayload };
+    delete payload.metadata;
 
     const explicitHeaders = getSupabaseHeaders();
 
@@ -3375,15 +3365,24 @@ export const api = {
     return saved;
   },
 
-  async deleteHotel(id: string): Promise<boolean> {
+  async deleteHotel(id: string, deletedBy: string = 'Administrator'): Promise<boolean> {
     if (!isValidEntityId(id)) {
       console.warn('[Supabase deleteHotel] Invalid ID provided for deletion:', id);
       return false;
     }
     const cleanId = String(id).trim();
+    const who = deletedBy || 'Administrator';
+    const nowIso = new Date().toISOString();
     try {
-      await supabase.from('hotels').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', cleanId);
-      await supabase.from('hotels').delete().eq('id', cleanId);
+      // Soft delete: Only send columns that exist in the database schema ('is_deleted', 'deleted_at', 'deleted_by')
+      await supabase
+        .from('hotels')
+        .update({
+          is_deleted: true,
+          deleted_at: nowIso,
+          deleted_by: who,
+        })
+        .eq('id', cleanId);
     } catch (err) {
       console.warn('[Supabase deleteHotel] Supabase delete error:', err);
     }
