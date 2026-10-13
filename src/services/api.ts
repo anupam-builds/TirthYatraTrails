@@ -2921,26 +2921,16 @@ export const api = {
       }
     };
 
-    let matchedId = targetId;
+    const hotelId = targetId;
 
-    // 2. Primary Attempt: Check existence & update table 'hotels' by ID
+    // 2. Primary Attempt: Strictly isolate hotel update by unique ID
+    // Targets ONLY that specific hotel record: .from('hotels').update(payload).eq('id', hotelId)
+    // Never matches by name, never switches IDs, and never overwrites other records or the table
     try {
-      // Check if hotel exists by targetId
-      const { data: existingById } = await supabase.from('hotels').select('id, name').eq('id', targetId).maybeSingle();
-
-      if (!existingById && hotel.name) {
-        // ID not found directly — check if record exists under a different ID matching the name
-        const { data: existingByName } = await supabase.from('hotels').select('id, name').ilike('name', hotel.name.trim()).maybeSingle();
-        if (existingByName?.id) {
-          matchedId = existingByName.id;
-          console.log(`[Supabase updateHotel] Found hotel by name "${hotel.name}" in table 'hotels' -> matched ID: "${matchedId}"`);
-        }
-      }
-
       let { data, error } = await supabase
         .from('hotels')
         .update(payload)
-        .eq('id', matchedId)
+        .eq('id', hotelId)
         .select()
         .maybeSingle();
 
@@ -2948,14 +2938,14 @@ export const api = {
         lastSupabaseError = error;
         console.error('[Supabase updateHotel] SDK update returned error:', error.message);
 
-        // Strip missing schema cache column and retry update
+        // Strip missing schema cache column and retry update strictly targeting this hotel ID
         const stripped = stripMissingColumn(error, payload);
         if (stripped) {
           payload = stripped;
           const retryRes = await supabase
             .from('hotels')
             .update(payload)
-            .eq('id', matchedId)
+            .eq('id', hotelId)
             .select()
             .maybeSingle();
           if (!retryRes.error && retryRes.data) {
@@ -2966,11 +2956,11 @@ export const api = {
       }
 
       if (data) {
-        console.log(`[Supabase updateHotel] Successfully updated row in table 'hotels' for ID: "${matchedId}"`);
+        console.log(`[Supabase updateHotel] Successfully updated row in table 'hotels' for ID: "${hotelId}"`);
         const mapped = mapHotelRow(data);
-        localStore.updateHotel(matchedId, mapped);
-        syncHotelInventory(matchedId);
-        fetch(`/api/hotels/${encodeURIComponent(matchedId)}`, {
+        localStore.updateHotel(hotelId, mapped);
+        syncHotelInventory(hotelId);
+        fetch(`/api/hotels/${encodeURIComponent(hotelId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(mapped),
@@ -2985,58 +2975,9 @@ export const api = {
       lastSupabaseError = sdkErr;
     }
 
-    // 3. Upsert Fallback in Supabase: Record was missing or not found by ID
+    // 3. Fallback: Direct REST PATCH strictly isolated by unique ID
     try {
-      console.log(`[Supabase updateHotel] Record missing or not found in table 'hotels' for ID: "${matchedId}". Performing upsert fallback...`);
-      let upsertPayload = { ...payload, id: matchedId };
-      let { data: upsertData, error: upsertErr } = await supabase
-        .from('hotels')
-        .upsert(upsertPayload)
-        .select()
-        .maybeSingle();
-
-      if (upsertErr) {
-        const stripped = stripMissingColumn(upsertErr, payload);
-        if (stripped) {
-          payload = stripped;
-          upsertPayload = { ...payload, id: matchedId };
-          const retryUpsert = await supabase
-            .from('hotels')
-            .upsert(upsertPayload)
-            .select()
-            .maybeSingle();
-          if (!retryUpsert.error && retryUpsert.data) {
-            upsertData = retryUpsert.data;
-            upsertErr = null;
-          }
-        }
-      }
-
-      if (!upsertErr && upsertData) {
-        console.log(`[Supabase updateHotel] Upsert fallback succeeded in table 'hotels' for ID: "${upsertData.id}"`);
-        const mapped = mapHotelRow(upsertData);
-        localStore.updateHotel(matchedId, mapped);
-        syncHotelInventory(matchedId);
-        fetch(`/api/hotels/${encodeURIComponent(matchedId)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(mapped),
-        }).catch(() => {});
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: mapped } }));
-        }
-        return mapped;
-      }
-      if (upsertErr) {
-        lastSupabaseError = upsertErr;
-      }
-    } catch (upsertEx) {
-      console.warn('[Supabase updateHotel] Upsert fallback exception:', upsertEx);
-    }
-
-    // 4. Secondary Attempt: Direct REST PATCH / POST with explicit headers
-    try {
-      const restUrl = `${SUPABASE_URL}/rest/v1/hotels?id=eq.${encodeURIComponent(matchedId)}`;
+      const restUrl = `${SUPABASE_URL}/rest/v1/hotels?id=eq.${encodeURIComponent(hotelId)}`;
       const patchRes = await fetch(restUrl, {
         method: 'PATCH',
         headers: explicitHeaders,
@@ -3048,9 +2989,9 @@ export const api = {
         const row = Array.isArray(patchData) ? patchData[0] : patchData;
         if (row) {
           const mapped = mapHotelRow(row);
-          localStore.updateHotel(matchedId, mapped);
-          syncHotelInventory(matchedId);
-          fetch(`/api/hotels/${encodeURIComponent(matchedId)}`, {
+          localStore.updateHotel(hotelId, mapped);
+          syncHotelInventory(hotelId);
+          fetch(`/api/hotels/${encodeURIComponent(hotelId)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(mapped),
@@ -3065,16 +3006,16 @@ export const api = {
       console.warn('[Supabase updateHotel] Direct REST exception:', restErr);
     }
 
-    // 5. Fallback to Express backend /api/hotels/:id
+    // 4. Fallback to Express backend /api/hotels/:id
     try {
-      const serverRes = await fetch(`/api/hotels/${encodeURIComponent(matchedId)}`, {
+      const serverRes = await fetch(`/api/hotels/${encodeURIComponent(hotelId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...hotel, id: matchedId }),
+        body: JSON.stringify({ ...hotel, id: hotelId }),
       });
       if (serverRes.ok) {
         const serverHotel = await serverRes.json();
-        const saved = localStore.updateHotel(matchedId, serverHotel);
+        const saved = localStore.updateHotel(hotelId, serverHotel);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: saved } }));
         }
@@ -3084,10 +3025,10 @@ export const api = {
       console.warn('[Supabase updateHotel] Backend server route exception:', serverErr);
     }
 
-    // 6. Graceful local persistence fallback
+    // 5. Graceful local persistence fallback
     const fallbackHotel: Hotel = {
       ...hotel,
-      id: matchedId,
+      id: hotelId,
       name: hotel.name || 'Sacred Hotel',
       cityName: hotel.cityName || 'Sacred City',
       cityId: hotel.cityId || '',
@@ -3103,7 +3044,7 @@ export const api = {
       rooms: hotel.rooms || [],
     } as Hotel;
 
-    const saved = localStore.updateHotel(matchedId, fallbackHotel);
+    const saved = localStore.updateHotel(hotelId, fallbackHotel);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: saved } }));
     }

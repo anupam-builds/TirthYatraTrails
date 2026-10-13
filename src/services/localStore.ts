@@ -417,12 +417,9 @@ export const localStore = {
     if (idx === -1) {
       idx = hotels.findIndex((h) => (h.id || '').toLowerCase() === targetId.toLowerCase());
     }
-    if (idx === -1 && updates.name) {
-      idx = hotels.findIndex((h) => (h.name || '').toLowerCase() === updates.name!.toLowerCase());
-    }
 
     if (idx === -1) {
-      console.log(`[localStore.updateHotel] Hotel ID "${targetId}" not found. Executing upsert fallback...`);
+      console.log(`[localStore.updateHotel] Hotel ID "${targetId}" not found. Creating isolated hotel record...`);
       return this.createHotel({ ...updates, id: targetId || (updates as any).hotel_id });
     }
 

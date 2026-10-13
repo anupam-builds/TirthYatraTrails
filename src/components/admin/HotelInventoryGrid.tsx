@@ -142,8 +142,8 @@ export const HotelInventoryGrid: React.FC<HotelInventoryGridProps> = ({ hotel, o
       updatedBy: 'Admin (Live)',
     };
 
-    // 1. Optimistic reconcile
-    setInventory((prev) => reconcileRealtimeList(prev, 'UPDATE', optimistic));
+    // 1. Optimistic state update isolated to matching inventory ID
+    setInventory((prev) => prev.map((inv) => (inv.id === optimistic.id ? optimistic : inv)));
 
     // 2. Persist to Supabase
     try {

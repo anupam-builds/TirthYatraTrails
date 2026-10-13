@@ -73,7 +73,12 @@ export const AdminHotels: React.FC = () => {
   useEffect(() => {
     loadData();
 
-    const handleDataChange = () => {
+    const handleDataChange = (e?: Event) => {
+      if (e instanceof CustomEvent && e.detail?.action === 'update' && e.detail?.hotel) {
+        const updatedHotel = e.detail.hotel;
+        setHotels((prev) => prev.map((item) => (item.id === updatedHotel.id ? updatedHotel : item)));
+        return;
+      }
       loadData();
     };
     window.addEventListener('tirth-hotel-changed', handleDataChange);
@@ -98,6 +103,12 @@ export const AdminHotels: React.FC = () => {
         if (eventType === 'DELETE') {
           const id = String(payload.old?.id || payload.new?.id);
           setHotels((prev) => prev.filter((h) => h.id !== id));
+        } else if (eventType === 'UPDATE') {
+          const raw = payload.new || payload.old;
+          if (raw) {
+            const mapped = mapHotelRow(raw);
+            setHotels((prev) => prev.map((item) => (item.id === mapped.id ? mapped : item)));
+          }
         } else {
           const raw = payload.new || payload.old;
           if (raw) {
@@ -295,9 +306,11 @@ export const AdminHotels: React.FC = () => {
     try {
       const targetHotelId = String(editingHotel?.id || (editingHotel as any)?.hotel_id || (editingHotel as any)?._id || '').trim();
       if (editingHotel && targetHotelId && targetHotelId !== 'undefined' && targetHotelId !== 'null') {
-        console.log('[AdminHotels] Submitting hotel update for ID:', targetHotelId, hotelData);
         const updated = await api.updateHotel(targetHotelId, { ...hotelData, id: targetHotelId });
-        setHotels((prev) => reconcileRealtimeList(prev, 'UPDATE', updated));
+        setHotels((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        if (selectedInventoryHotel && selectedInventoryHotel.id === updated.id) {
+          setSelectedInventoryHotel(updated);
+        }
         await refreshCities();
         setToast({
           id: String(Date.now()),

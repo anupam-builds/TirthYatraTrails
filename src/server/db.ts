@@ -734,14 +734,10 @@ class DatabaseStore {
     if (index === -1) {
       index = this.data.hotels.findIndex((h) => (h.id || '').toLowerCase() === targetId.toLowerCase());
     }
-    // Tertiary match: check by hotel name if available
-    if (index === -1 && updates.name) {
-      index = this.data.hotels.findIndex((h) => (h.name || '').toLowerCase() === updates.name!.toLowerCase());
-    }
 
-    // Upsert fallback if hotel record does not exist
+    // Isolated record creation if hotel record does not exist
     if (index === -1) {
-      console.log(`[server db.updateHotel] Hotel ID "${targetId}" not found. Executing upsert fallback...`);
+      console.log(`[server db.updateHotel] Hotel ID "${targetId}" not found. Creating isolated hotel record...`);
       return this.createHotel({ ...updates, id: targetId || (updates as any).hotel_id });
     }
 
