@@ -148,6 +148,9 @@ export interface Hotel {
   rooms: Room[];
   distanceToTemple?: string;
   darshanType?: string;
+  isDeleted?: boolean;
+  is_deleted?: boolean;
+  deletedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }

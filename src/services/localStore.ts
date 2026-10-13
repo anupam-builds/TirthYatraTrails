@@ -351,6 +351,7 @@ export const localStore = {
         list = [...INITIAL_HOTELS];
       }
     }
+    list = list.filter((h) => !h.isDeleted && !(h as any).is_deleted);
     if (cityId) {
       const cLower = cityId.toLowerCase().trim();
       list = list.filter((h) =>
@@ -692,7 +693,18 @@ export const localStore = {
     }
 
     if (!includeDeleted) {
-      list = list.filter((i) => !i.isDeleted);
+      list = list.filter((i) => {
+        const isDel = Boolean(
+          i.isDeleted === true ||
+          (i.isDeleted as any) === 'true' ||
+          (i as any).is_deleted === true ||
+          (i as any).is_deleted === 'true' ||
+          (i as any).metadata?.is_deleted === true ||
+          (i as any).metadata?.is_deleted === 'true' ||
+          (i as any).metadata?.isDeleted === true
+        );
+        return !isDel;
+      });
     }
 
     list = [...list].sort(
@@ -707,7 +719,17 @@ export const localStore = {
   getDeletedInquiries(): Inquiry[] {
     const list = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
     return list
-      .filter((i) => i.isDeleted === true)
+      .filter((i) => {
+        return Boolean(
+          i.isDeleted === true ||
+          (i.isDeleted as any) === 'true' ||
+          (i as any).is_deleted === true ||
+          (i as any).is_deleted === 'true' ||
+          (i as any).metadata?.is_deleted === true ||
+          (i as any).metadata?.is_deleted === 'true' ||
+          (i as any).metadata?.isDeleted === true
+        );
+      })
       .sort(
         (a, b) =>
           new Date(b.deletedAt || b.createdAt).getTime() -

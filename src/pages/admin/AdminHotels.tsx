@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api, mapHotelRow } from '../../services/api.js';
+import { api, mapHotelRow, isValidEntityId } from '../../services/api.js';
 import { Hotel, City, Room } from '../../types.js';
 import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { useCitiesMaster } from '../../context/CitiesContext.js';
@@ -197,11 +197,11 @@ export const AdminHotels: React.FC = () => {
    * Removes from table state immediately, triggers confirmation toast, and persists to DB and local storage.
    */
   const handleDeleteHotel = async (id: string, hName?: string) => {
-    const cleanId = String(id || '').trim();
-    if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+    if (!isValidEntityId(id)) {
       console.warn('[AdminHotels] Cannot delete hotel: invalid ID provided:', id);
       return;
     }
+    const cleanId = String(id).trim();
     const hotelName = hName || cleanId;
     const deletedRecord = hotels.find((h) => h.id === cleanId);
 
@@ -303,7 +303,7 @@ export const AdminHotels: React.FC = () => {
 
     try {
       const targetHotelId = String(editingHotel?.id || (editingHotel as any)?.hotel_id || (editingHotel as any)?._id || '').trim();
-      if (editingHotel && targetHotelId && targetHotelId !== 'undefined' && targetHotelId !== 'null') {
+      if (editingHotel && isValidEntityId(targetHotelId)) {
         const updated = await api.updateHotel(targetHotelId, { ...hotelData, id: targetHotelId });
         setHotels((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
         if (selectedInventoryHotel && selectedInventoryHotel.id === updated.id) {

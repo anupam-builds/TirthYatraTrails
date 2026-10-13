@@ -51,10 +51,19 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     setLoading(true);
     console.log('🔍 [StaffLeads] Querying assigned leads for staffId:', staffId);
     try {
-      const [leadsRes, inqRes] = await Promise.allSettled([
-        supabase.from('leads').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false }),
-        supabase.from('inquiries').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false })
-      ]);
+      let qLeads = supabase.from('leads').select('*').eq('assigned_staff_id', staffId).or('is_deleted.is.null,is_deleted.eq.false').order('created_at', { ascending: false });
+      let qInq = supabase.from('inquiries').select('*').eq('assigned_staff_id', staffId).or('is_deleted.is.null,is_deleted.eq.false').order('created_at', { ascending: false });
+      let [leadsRes, inqRes] = await Promise.allSettled([qLeads, qInq]);
+
+      if (
+        (leadsRes.status === 'fulfilled' && (leadsRes.value as any)?.error?.code === '42703') ||
+        (inqRes.status === 'fulfilled' && (inqRes.value as any)?.error?.code === '42703')
+      ) {
+        [leadsRes, inqRes] = await Promise.allSettled([
+          supabase.from('leads').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false }),
+          supabase.from('inquiries').select('*').eq('assigned_staff_id', staffId).order('created_at', { ascending: false })
+        ]);
+      }
 
       if (
         (leadsRes.status === 'fulfilled' && ((leadsRes.value as any)?.error?.status === 401 || (leadsRes.value as any)?.error?.code === 'PGRST301')) ||

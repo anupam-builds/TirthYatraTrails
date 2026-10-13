@@ -1656,11 +1656,25 @@ export const api = {
 
   async getHotels(cityId?: string, query?: string): Promise<Hotel[]> {
     try {
-      let q = supabase.from('hotels').select('*');
+      let q = supabase
+        .from('hotels')
+        .select('*')
+        .or('is_deleted.is.null,is_deleted.eq.false');
       if (cityId) q = q.eq('city_id', cityId);
-      const { data, error } = await q;
+      let { data, error } = await q;
+
+      if (error && error.code === '42703') {
+        let fallbackQ = supabase.from('hotels').select('*');
+        if (cityId) fallbackQ = fallbackQ.eq('city_id', cityId);
+        const fallbackRes = await fallbackQ;
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
+
       if (!error && data && data.length) {
-        let list = data.map(mapHotelRow);
+        let list = data
+          .filter((h) => !h.is_deleted && !(h as any).isDeleted)
+          .map(mapHotelRow);
         if (query) {
           const lower = query.toLowerCase();
           list = list.filter((h) => h.name.toLowerCase().includes(lower) || h.cityName?.toLowerCase().includes(lower));
@@ -1672,11 +1686,25 @@ export const api = {
   },
 
   async getHotelById(id: string): Promise<Hotel> {
+    if (!isValidEntityId(id)) return localStore.getHotelById(id)!;
+    const cleanId = String(id).trim();
     try {
-      const { data, error } = await supabase.from('hotels').select('*').eq('id', id).maybeSingle();
-      if (!error && data) return mapHotelRow(data);
+      let { data, error } = await supabase
+        .from('hotels')
+        .select('*')
+        .eq('id', cleanId)
+        .or('is_deleted.is.null,is_deleted.eq.false')
+        .maybeSingle();
+
+      if (error && error.code === '42703') {
+        const fallbackRes = await supabase.from('hotels').select('*').eq('id', cleanId).maybeSingle();
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
+
+      if (!error && data && !data.is_deleted && !(data as any).isDeleted) return mapHotelRow(data);
     } catch {}
-    return localStore.getHotelById(id)!;
+    return localStore.getHotelById(cleanId)!;
   },
 
   async getPackages(category?: string, query?: string): Promise<Package[]> {
@@ -2168,17 +2196,17 @@ export const api = {
 
   async getInquiries(userId?: string): Promise<Inquiry[]> {
     try {
-      // 1. Primary Attempt: Query Supabase for active leads where is_deleted is false or null
+      // 1. Mandatory Supabase query filter to exclude soft-deleted items across all active views
       let qInq = supabase
         .from('inquiries')
         .select('*')
-        .or('is_deleted.eq.false,is_deleted.is.null')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false });
 
       let qLeads = supabase
         .from('leads')
         .select('*')
-        .or('is_deleted.eq.false,is_deleted.is.null')
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false });
 
       if (userId) {
@@ -2215,10 +2243,20 @@ export const api = {
       const combined = [...inqData, ...leadsData];
       if (combined.length > 0) {
         const seen = new Set<string>();
-        // Strict Active Leads View: Only include leads where is_deleted is false or not true
+        // Strict Active Leads View: Exclude all soft-deleted items across flags and metadata
         const activeRecords = combined.filter((r) => {
-          if (r.is_deleted === true || r.isDeleted === true) return false;
-          if (r.metadata?.is_deleted === true || r.metadata?.isDeleted === true) return false;
+          const isDel = Boolean(
+            r.is_deleted === true ||
+            r.is_deleted === 'true' ||
+            r.is_deleted === 1 ||
+            r.isDeleted === true ||
+            r.isDeleted === 'true' ||
+            r.metadata?.is_deleted === true ||
+            r.metadata?.is_deleted === 'true' ||
+            r.metadata?.isDeleted === true ||
+            r.metadata?.isDeleted === 'true'
+          );
+          if (isDel) return false;
           const idStr = String(r.id);
           if (seen.has(idStr)) return false;
           seen.add(idStr);
@@ -3321,6 +3359,7 @@ export const api = {
     }
     const cleanId = String(id).trim();
     try {
+      await supabase.from('hotels').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', cleanId);
       await supabase.from('hotels').delete().eq('id', cleanId);
     } catch (err) {
       console.warn('[Supabase deleteHotel] Supabase delete error:', err);
