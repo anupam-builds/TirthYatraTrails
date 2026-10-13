@@ -8,7 +8,6 @@ import {
   ChevronRight,
   MapPin,
   Clock,
-  ShieldCheck,
   Award,
   Sparkles,
   Calendar,
@@ -17,7 +16,6 @@ import {
   CheckCircle2,
   Car,
   Building,
-  HeartHandshake,
   MessageCircle,
   FileText,
   HelpCircle,
@@ -462,17 +460,6 @@ export const PackageDetailPage: React.FC<{ packageId: string }> = ({ packageId }
                 <FileText className="w-4 h-4" />
                 <span>Enquire Now (Detailed Form)</span>
               </button>
-
-              <div className="space-y-2 pt-2 border-t border-slate-100 text-xs text-slate-600">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-orange-500 shrink-0" />
-                  <span>Direct connection with Senior Pilgrimage Officer</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <HeartHandshake className="w-4 h-4 text-orange-500 shrink-0" />
-                  <span>Customizable for senior citizen comfort</span>
-                </div>
-              </div>
             </div>
           </div>
 
