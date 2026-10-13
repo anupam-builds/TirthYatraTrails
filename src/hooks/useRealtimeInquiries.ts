@@ -85,8 +85,19 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
       return;
     }
 
+    const isDeleted = Boolean(
+      rawRow.is_deleted === true ||
+      rawRow.is_deleted === 'true' ||
+      rawRow.is_deleted === 1 ||
+      rawRow.isDeleted === true ||
+      rawRow.isDeleted === 'true' ||
+      rawRow.metadata?.is_deleted === true ||
+      rawRow.metadata?.is_deleted === 'true' ||
+      rawRow.metadata?.isDeleted === true ||
+      rawRow.metadata?.isDeleted === 'true'
+    );
+
     if (eventType === 'INSERT') {
-      const isDeleted = Boolean(rawRow.is_deleted ?? rawRow.isDeleted ?? rawRow.metadata?.is_deleted ?? rawRow.metadata?.isDeleted);
       if (isDeleted) return;
 
       const mapped = mapInquiryRow(rawRow);
@@ -99,9 +110,8 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
         optionsRef.current.onInsert(mapped);
       }
     } else if (eventType === 'UPDATE') {
-      const isDeleted = Boolean(rawRow.is_deleted ?? rawRow.isDeleted ?? rawRow.metadata?.is_deleted ?? rawRow.metadata?.isDeleted);
       if (isDeleted) {
-        // Soft-deleted in Supabase: remove from active leads view
+        // Soft-deleted in Supabase: remove from active leads view immediately
         setInquiries((prev) => prev.filter((i) => !matchLeadId(i, rawRow.id)));
         if (optionsRef.current.onDelete) {
           optionsRef.current.onDelete(String(rawRow.id));
@@ -129,6 +139,10 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
       }
     } else {
       // Catch-all for any other event
+      if (isDeleted) {
+        setInquiries((prev) => prev.filter((i) => !matchLeadId(i, rawRow.id)));
+        return;
+      }
       setInquiries((prev) => {
         const exists = prev.some((i) => matchLeadId(i, rawRow.id));
         if (!exists) {

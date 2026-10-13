@@ -18,9 +18,19 @@ export function useStaffLeadsRealtime(currentStaffId?: string) {
           const oldRow = payload.old as any;
 
           setLeads((prevLeads) => {
-            // If deleted
-            if (payload.eventType === 'DELETE') {
-              return prevLeads.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id));
+            const isSoftDeleted = Boolean(
+              newRow?.is_deleted === true ||
+              newRow?.is_deleted === 'true' ||
+              newRow?.is_deleted === 1 ||
+              newRow?.isDeleted === true ||
+              newRow?.metadata?.is_deleted === true ||
+              newRow?.metadata?.isDeleted === true
+            );
+
+            // If deleted or marked soft-deleted
+            if (payload.eventType === 'DELETE' || isSoftDeleted) {
+              const targetId = oldRow?.id || newRow?.id;
+              return prevLeads.filter((l) => l.id !== targetId && String(l.id) !== String(targetId));
             }
 
             const belongsToStaff = newRow?.assigned_staff_id === currentStaffId;

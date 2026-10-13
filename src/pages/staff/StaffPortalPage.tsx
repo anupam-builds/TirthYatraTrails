@@ -317,9 +317,18 @@ export const StaffPortalPage: React.FC = () => {
           const newRow = payload.new as any;
           const oldRow = payload.old as any;
 
+          const isSoftDeleted = Boolean(
+            newRow?.is_deleted === true ||
+            newRow?.is_deleted === 'true' ||
+            newRow?.is_deleted === 1 ||
+            newRow?.isDeleted === true ||
+            newRow?.metadata?.is_deleted === true ||
+            newRow?.metadata?.is_deleted === 'true' ||
+            newRow?.metadata?.isDeleted === true
+          );
+
           setStaffLeads((prevLeads) => {
             // If hard deleted or soft deleted
-            const isSoftDeleted = Boolean(newRow?.is_deleted || newRow?.metadata?.is_deleted);
             if (payload.eventType === 'DELETE' || isSoftDeleted) {
               const targetId = oldRow?.id || newRow?.id;
               return prevLeads.filter((l) => l.id !== targetId && String(l.id) !== String(targetId));
@@ -343,7 +352,6 @@ export const StaffPortalPage: React.FC = () => {
           });
 
           // Also synchronize mapped record into inquiries state
-          const isSoftDeleted = Boolean(newRow?.is_deleted || newRow?.metadata?.is_deleted);
           if (payload.eventType === 'DELETE' || isSoftDeleted) {
             const targetId = oldRow?.id || newRow?.id;
             setInquiries((prev) => prev.filter((i) => i.id !== targetId && (i as any).id !== String(targetId)));

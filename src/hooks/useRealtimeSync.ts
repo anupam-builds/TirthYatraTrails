@@ -468,6 +468,16 @@ export function useIsolatedLeadsRealtime<T extends Record<string, any> = any>(
       setLeads((currentLeads) => {
         if (payload.eventType === 'INSERT') {
           const inserted = payload.new as T;
+          const isDeleted = Boolean(
+            (inserted as any)?.is_deleted === true ||
+            (inserted as any)?.is_deleted === 'true' ||
+            (inserted as any)?.is_deleted === 1 ||
+            (inserted as any)?.isDeleted === true ||
+            (inserted as any)?.metadata?.is_deleted === true ||
+            (inserted as any)?.metadata?.isDeleted === true
+          );
+          if (isDeleted) return currentLeads;
+
           optionsRef.current?.onInsert?.(inserted);
           const exists = currentLeads.some((i) => matchLeadId(i as any, (inserted as any).id));
           if (exists) return currentLeads;
@@ -476,6 +486,22 @@ export function useIsolatedLeadsRealtime<T extends Record<string, any> = any>(
         if (payload.eventType === 'UPDATE') {
           const updatedRow = payload.new;
           if (!updatedRow) return currentLeads;
+
+          const isDeleted = Boolean(
+            updatedRow?.is_deleted === true ||
+            updatedRow?.is_deleted === 'true' ||
+            updatedRow?.is_deleted === 1 ||
+            updatedRow?.isDeleted === true ||
+            updatedRow?.metadata?.is_deleted === true ||
+            updatedRow?.metadata?.isDeleted === true
+          );
+
+          if (isDeleted) {
+            const targetId = updatedRow.id;
+            optionsRef.current?.onDelete?.(targetId);
+            return currentLeads.filter((item) => !matchLeadId(item as any, targetId));
+          }
+
           let mergedResult: any = null;
           const updatedList = currentLeads.map((item) => {
             if (matchLeadId(item as any, updatedRow.id)) {

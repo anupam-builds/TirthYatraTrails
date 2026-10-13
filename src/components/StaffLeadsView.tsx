@@ -117,7 +117,15 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
             }
             if (!newRow) return prev;
 
-            const isDeleted = Boolean(newRow.is_deleted ?? (newRow as any).isDeleted ?? (newRow as any).metadata?.is_deleted);
+            const isDeleted = Boolean(
+              newRow.is_deleted === true ||
+              newRow.is_deleted === 'true' ||
+              newRow.is_deleted === 1 ||
+              (newRow as any).isDeleted === true ||
+              (newRow as any).metadata?.is_deleted === true ||
+              (newRow as any).metadata?.is_deleted === 'true' ||
+              (newRow as any).metadata?.isDeleted === true
+            );
             if (isDeleted) {
               return prev.filter((l) => String(l.id) !== String(newRow.id));
             }
@@ -151,7 +159,15 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
             }
             if (!newRow) return prev;
 
-            const isDeleted = Boolean(newRow.is_deleted ?? (newRow as any).isDeleted ?? (newRow as any).metadata?.is_deleted);
+            const isDeleted = Boolean(
+              newRow.is_deleted === true ||
+              newRow.is_deleted === 'true' ||
+              newRow.is_deleted === 1 ||
+              (newRow as any).isDeleted === true ||
+              (newRow as any).metadata?.is_deleted === true ||
+              (newRow as any).metadata?.is_deleted === 'true' ||
+              (newRow as any).metadata?.isDeleted === true
+            );
             if (isDeleted) {
               return prev.filter((l) => String(l.id) !== String(newRow.id));
             }
