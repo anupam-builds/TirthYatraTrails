@@ -2498,15 +2498,7 @@ export const api = {
       } catch {}
     }
 
-    // 2. Server-side API soft-delete fallback
-    try {
-      await fetch(`/api/admin/inquiries/${encodeURIComponent(cleanId)}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-      });
-    } catch {}
-
-    // 3. Local storage update
+    // 2. Local storage update
     localStore.deleteInquiry(cleanId, who);
 
     // 4. Dispatch real-time events across all tabs/windows
@@ -2642,16 +2634,7 @@ export const api = {
       } catch {}
     }
 
-    // 2. Call server endpoint if available
-    try {
-      await fetch(`/api/admin/inquiries/${encodeURIComponent(cleanId)}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ staffId: sId, staffName: sName }),
-      });
-    } catch {}
-
-    // 3. Update local storage
+    // 2. Update local storage
     const restored = localStore.restoreInquiry(cleanId, sId, sName);
 
     // 4. Broadcast and dispatch events
@@ -2686,14 +2669,6 @@ export const api = {
       }
     }
 
-    // Server-side permanent delete API call
-    try {
-      await fetch(`/api/admin/inquiries/${encodeURIComponent(cleanId)}/permanent`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-      });
-    } catch {}
-
     localStore.permanentlyDeleteInquiry(cleanId);
 
     if (typeof window !== 'undefined') {
@@ -2724,15 +2699,7 @@ export const api = {
         }
       }
 
-      // 3. Server API call
-      try {
-        await fetch('/api/admin/inquiries/trash/empty', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } catch {}
-
-      // 4. Clear localStore
+      // 3. Clear localStore
       localStore.emptyTrash();
 
       if (typeof window !== 'undefined') {

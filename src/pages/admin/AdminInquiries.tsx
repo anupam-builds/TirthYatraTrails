@@ -203,6 +203,9 @@ export const AdminInquiries: React.FC = () => {
         const delId = detail.leadId || detail.inquiryId || detail.lead?.id;
         if (delId) {
           setInquiries((prev) => prev.filter((i) => !matchLeadId(i, delId)));
+          if (detail.lead) {
+            setDeletedInquiries((prev) => [detail.lead, ...prev.filter((d) => !matchLeadId(d, delId))]);
+          }
           loadDeletedInquiries();
         }
       } else if (detail?.action === 'restore' || detail?.action === 'purge' || detail?.action === 'empty_trash') {
@@ -410,19 +413,45 @@ export const AdminInquiries: React.FC = () => {
       return;
     }
     const cleanId = String(id).trim();
-    const inq = inquiries.find((i) => i.id === cleanId);
+    const inq = inquiries.find((i) => i.id === cleanId || matchLeadId(i, cleanId));
     const leadId = inq ? getLeadId(inq) : cleanId;
     if (window.confirm(`Move Lead ${leadId} to Recently Deleted / Trash Bin? You can review and restore it anytime.`)) {
       try {
-        await api.deleteInquiry(cleanId);
-        setInquiries((prev) => prev.filter((i) => i.id !== cleanId));
-        loadDeletedInquiries();
+        const who = adminUser?.name || 'Administrator';
+        const nowIso = new Date().toISOString();
+        const deletedRecord: Inquiry = inq
+          ? {
+              ...inq,
+              isDeleted: true,
+              deletedAt: nowIso,
+              deletedBy: who,
+            }
+          : ({
+              id: cleanId,
+              isDeleted: true,
+              deletedAt: nowIso,
+              deletedBy: who,
+              createdAt: nowIso,
+            } as any);
+
+        // 1. Immediately update React state so the item vanishes from active view
+        // and immediately populates the trash bin without needing a page reload
+        setInquiries((prev) => prev.filter((i) => i.id !== cleanId && !matchLeadId(i, cleanId)));
+        setDeletedInquiries((prev) => [deletedRecord, ...prev.filter((d) => d.id !== cleanId && !matchLeadId(d, cleanId))]);
+
+        // 2. Perform soft-delete directly via Supabase client (no backend /api calls)
+        await api.deleteInquiry(cleanId, who);
+
+        // 3. Keep trash bin fully synchronized with Supabase
+        await loadDeletedInquiries();
+
         setActionMessage({
           type: 'info',
           text: `Lead ${leadId} moved to Recently Deleted / Trash Bin.`,
         });
         setTimeout(() => setActionMessage(null), 4500);
       } catch (err) {
+        console.error('Failed to delete inquiry:', err);
         alert('Failed to delete inquiry');
       }
     }
@@ -436,14 +465,14 @@ export const AdminInquiries: React.FC = () => {
     const cleanId = String(id).trim();
     try {
       setRestoringId(cleanId);
-      const inq = deletedInquiries.find((i) => i.id === cleanId);
+      const inq = deletedInquiries.find((i) => i.id === cleanId || matchLeadId(i, cleanId));
       const chosenStaffId = selectedRestoreStaff[cleanId] || inq?.assignedStaffId || staffList[0]?.id;
       const chosenStaff = staffList.find((s) => s.id === chosenStaffId);
       const staffName = chosenStaff ? chosenStaff.name : (staffList[0]?.name || 'Staff Member');
 
       const restored = await api.restoreInquiry(cleanId, chosenStaffId, staffName);
-      setDeletedInquiries((prev) => prev.filter((i) => i.id !== cleanId));
-      setInquiries((prev) => [restored, ...prev.filter((i) => i.id !== cleanId)]);
+      setDeletedInquiries((prev) => prev.filter((i) => i.id !== cleanId && !matchLeadId(i, cleanId)));
+      setInquiries((prev) => [restored, ...prev.filter((i) => i.id !== cleanId && !matchLeadId(i, cleanId))]);
 
       setActionMessage({
         type: 'success',
@@ -463,12 +492,12 @@ export const AdminInquiries: React.FC = () => {
       return;
     }
     const cleanId = String(id).trim();
-    const inq = deletedInquiries.find((i) => i.id === cleanId);
+    const inq = deletedInquiries.find((i) => i.id === cleanId || matchLeadId(i, cleanId));
     const leadId = inq ? getLeadId(inq) : cleanId;
     if (window.confirm(`Permanently erase Lead ${leadId} from the database? This action is irreversible.`)) {
       try {
+        setDeletedInquiries((prev) => prev.filter((i) => i.id !== cleanId && !matchLeadId(i, cleanId)));
         await api.permanentlyDeleteInquiry(cleanId);
-        setDeletedInquiries((prev) => prev.filter((i) => i.id !== cleanId));
         setActionMessage({
           type: 'info',
           text: `Lead ${leadId} permanently erased.`,
