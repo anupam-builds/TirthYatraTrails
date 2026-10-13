@@ -318,9 +318,11 @@ export const StaffPortalPage: React.FC = () => {
           const oldRow = payload.old as any;
 
           setStaffLeads((prevLeads) => {
-            // If deleted
-            if (payload.eventType === 'DELETE') {
-              return prevLeads.filter((l) => l.id !== oldRow?.id && String(l.id) !== String(oldRow?.id));
+            // If hard deleted or soft deleted
+            const isSoftDeleted = Boolean(newRow?.is_deleted || newRow?.metadata?.is_deleted);
+            if (payload.eventType === 'DELETE' || isSoftDeleted) {
+              const targetId = oldRow?.id || newRow?.id;
+              return prevLeads.filter((l) => l.id !== targetId && String(l.id) !== String(targetId));
             }
 
             // Check if this lead belongs to current staff or was newly assigned/unassigned
@@ -341,8 +343,10 @@ export const StaffPortalPage: React.FC = () => {
           });
 
           // Also synchronize mapped record into inquiries state
-          if (payload.eventType === 'DELETE') {
-            setInquiries((prev) => prev.filter((i) => i.id !== oldRow?.id && (i as any).id !== String(oldRow?.id)));
+          const isSoftDeleted = Boolean(newRow?.is_deleted || newRow?.metadata?.is_deleted);
+          if (payload.eventType === 'DELETE' || isSoftDeleted) {
+            const targetId = oldRow?.id || newRow?.id;
+            setInquiries((prev) => prev.filter((i) => i.id !== targetId && (i as any).id !== String(targetId)));
           } else if (newRow) {
             const mapped = mapInquiryRow(newRow);
             const isForThisStaff = newRow.assigned_staff_id === currentStaffId;

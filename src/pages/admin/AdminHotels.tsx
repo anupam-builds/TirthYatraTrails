@@ -197,15 +197,16 @@ export const AdminHotels: React.FC = () => {
    * Removes from table state immediately, triggers confirmation toast, and persists to DB and local storage.
    */
   const handleDeleteHotel = async (id: string, hName?: string) => {
-    const hotelName = hName || id;
-    const deletedRecord = hotels.find(
-      (h) => h.id === id || h.name.toLowerCase() === hotelName.toLowerCase()
-    );
+    const cleanId = String(id || '').trim();
+    if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+      console.warn('[AdminHotels] Cannot delete hotel: invalid ID provided:', id);
+      return;
+    }
+    const hotelName = hName || cleanId;
+    const deletedRecord = hotels.find((h) => h.id === cleanId);
 
-    // 1. Instant optimistic state update in the UI
-    setHotels((prev) =>
-      prev.filter((h) => h.id !== id && h.name.toLowerCase() !== hotelName.toLowerCase())
-    );
+    // 1. Instant optimistic state update strictly isolated to this hotel ID
+    setHotels((prev) => prev.filter((h) => h.id !== cleanId));
     if (deletedRecord) {
       refreshCities();
     }
@@ -225,12 +226,9 @@ export const AdminHotels: React.FC = () => {
       setToast((curr) => (curr?.id === toastId ? null : curr));
     }, 6000);
 
-    // 3. Persist deletion to backend and local store
+    // 3. Persist deletion strictly targeting unique ID
     try {
-      await api.deleteHotel(id);
-      if (hName && hName !== id) {
-        api.deleteHotel(hName).catch(() => {});
-      }
+      await api.deleteHotel(cleanId);
       await refreshCities();
     } catch (err: any) {
       console.error('Failed to delete hotel:', err);

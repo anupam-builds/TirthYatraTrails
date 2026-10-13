@@ -115,17 +115,27 @@ async function sanitizeEntityImages<T extends Record<string, any>>(data: T, fold
 // ------------------------------------------------------------------------------
 
 /**
- * Resolves candidate IDs for a lead/inquiry to handle type and format mismatches
- * (e.g. UUID, integer, client prefix 'inq-', 'lead-', reference_id, or localStore mapping).
+ * Robust ID Validation: Verifies that an entity ID is defined, non-empty, and not a malformed placeholder string.
+ */
+export function isValidEntityId(id: unknown): id is string | number {
+  if (id === null || id === undefined) return false;
+  const s = String(id).trim();
+  if (!s || s === 'undefined' || s === 'null' || s === 'NaN') return false;
+  return true;
+}
+
+/**
+ * Resolves candidate IDs for a lead/inquiry to handle exact record IDs and localStore mappings.
+ * Strictly returns validated IDs to target primary key column 'id'.
  */
 export function getCandidateLeadIds(rawId: string | number): string[] {
-  const trimmed = String(rawId || '').trim();
-  if (!trimmed) return [];
+  if (!isValidEntityId(rawId)) return [];
+  const trimmed = String(rawId).trim();
 
   const candidates = new Set<string>();
   candidates.add(trimmed);
 
-  // If there's an inquiry in localStore with this id, leadId, or referenceId:
+  // If there's an inquiry in localStore with this id, leadId, or referenceId, retrieve the true record id:
   try {
     const list = localStore.getInquiries();
     const found = list.find(
@@ -134,26 +144,12 @@ export function getCandidateLeadIds(rawId: string | number): string[] {
         String(i.leadId) === trimmed ||
         String(i.referenceId) === trimmed
     );
-    if (found) {
-      if (found.id) candidates.add(String(found.id));
-      if (found.leadId) candidates.add(String(found.leadId));
-      if (found.referenceId) candidates.add(String(found.referenceId));
+    if (found && found.id && isValidEntityId(found.id)) {
+      candidates.add(String(found.id).trim());
     }
   } catch {}
 
-  // Strip prefixes like "inq-", "lead-", "ttt-", or "htl-"
-  if (/^(inq|lead|ttt|htl)[-_]/i.test(trimmed)) {
-    const stripped = trimmed.replace(/^(inq|lead|ttt|htl)[-_]/i, '');
-    if (stripped) candidates.add(stripped);
-  }
-
-  // If ends with numeric digits
-  const numMatch = trimmed.match(/\d+$/);
-  if (numMatch) {
-    candidates.add(numMatch[0]);
-  }
-
-  return Array.from(candidates).filter((c) => c && c !== 'undefined' && c !== 'null');
+  return Array.from(candidates).filter((c) => isValidEntityId(c));
 }
 
 /**
@@ -169,11 +165,10 @@ export const getTargetTable = (id: string | number): 'inquiries' | 'hotels' | 'l
 
 /**
  * Resilient PATCH executor for Supabase tables ('leads', 'inquiries', and 'hotels').
- * Dynamically routes IDs to target tables based on ID prefix ('inq' -> inquiries, 'htl' -> hotels, other -> leads),
- * strips malformed requests (invalid IDs or empty payloads),
- * tries candidate IDs across common ID columns ('id', 'lead_id', 'reference_id'),
- * logs exact Supabase/PostgREST error details on non-2xx responses,
- * and recovers gracefully.
+ * - Validates IDs robustly before firing requests.
+ * - Targets ONLY the correct primary key column ('id') using exact record ID.
+ * - Never uses non-existent query columns such as 'lead_id' or 'reference_id'.
+ * - Recovers gracefully from casing or schema constraints.
  */
 export async function resilientPatchRecord(
   tablesOrTarget: Array<'leads' | 'inquiries' | 'hotels'> | 'leads' | 'inquiries' | 'hotels' | undefined,
@@ -181,13 +176,13 @@ export async function resilientPatchRecord(
   payload: Record<string, any>
 ): Promise<any | null> {
   const id = rawId;
-  const cleanId = String(id || '').trim();
 
-  // Strip malformed requests (empty, 'undefined', 'null')
-  if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+  // Robust ID Validation: Reject undefined, null, or empty identifier
+  if (!isValidEntityId(id)) {
     console.warn('[resilientPatchRecord] Stripped malformed request with invalid id:', id);
     return null;
   }
+  const cleanId = String(id).trim();
 
   // Dynamic Table Resolver
   const targetTable = getTargetTable(cleanId);
@@ -213,69 +208,63 @@ export async function resilientPatchRecord(
     : [targetTable, ...allKnownTables.filter((t) => t !== targetTable)];
 
   const explicitHeaders = getSupabaseHeaders();
-
   const candidateIds = getCandidateLeadIds(cleanId);
-  const candidateColumns = ['id', 'lead_id', 'reference_id'];
 
+  // 1. Primary REST PATCH: Strictly targets primary key column 'id' with exact ID
   for (const table of tables) {
     for (const cid of candidateIds) {
-      for (const col of candidateColumns) {
-        try {
-          const url = `${SUPABASE_URL}/rest/v1/${table}?${col}=eq.${encodeURIComponent(cid)}`;
-          const res = await fetch(url, {
-            method: 'PATCH',
-            headers: explicitHeaders,
-            body: JSON.stringify(cleanPayload),
-          });
+      try {
+        const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(cid)}`;
+        const res = await fetch(url, {
+          method: 'PATCH',
+          headers: explicitHeaders,
+          body: JSON.stringify(cleanPayload),
+        });
 
-          if (!res.ok) {
-            if (res.status === 401) {
-              handleUnauthorizedResponse(url);
-            }
-            const errData = await res.json().catch(() => null);
-            console.error('PATCH failed details:', { status: res.status, errData, payload: cleanPayload });
+        if (!res.ok) {
+          if (res.status === 401) {
+            handleUnauthorizedResponse(url);
+          }
+          const errData = await res.json().catch(() => null);
+          console.error('PATCH failed details:', { status: res.status, errData, payload: cleanPayload, table, id: cid });
 
-            // If error is 400 and might be due to check constraint on status (e.g. enum casing), try alternate casing
-            if (res.status === 400 && cleanPayload.status && typeof cleanPayload.status === 'string') {
-              const altStatus =
-                cleanPayload.status === cleanPayload.status.toLowerCase()
-                  ? cleanPayload.status.toUpperCase()
-                  : cleanPayload.status.toLowerCase();
-              const altPayload = { ...cleanPayload, status: altStatus };
-              try {
-                const retryRes = await fetch(url, {
-                  method: 'PATCH',
-                  headers: explicitHeaders,
-                  body: JSON.stringify(altPayload),
-                });
-                if (!retryRes.ok) {
-                  const retryErrData = await retryRes.json().catch(() => null);
-                  console.error('PATCH failed details:', { status: retryRes.status, errData: retryErrData, payload: altPayload });
-                } else {
-                  const retryData = await retryRes.json().catch(() => null);
-                  const row = Array.isArray(retryData) ? retryData[0] : retryData;
-                  if (row && Object.keys(row).length > 0) {
-                    return row;
-                  }
+          // If error is 400 and might be due to check constraint on status (e.g. enum casing), try alternate casing
+          if (res.status === 400 && cleanPayload.status && typeof cleanPayload.status === 'string') {
+            const altStatus =
+              cleanPayload.status === cleanPayload.status.toLowerCase()
+                ? cleanPayload.status.toUpperCase()
+                : cleanPayload.status.toLowerCase();
+            const altPayload = { ...cleanPayload, status: altStatus };
+            try {
+              const retryRes = await fetch(url, {
+                method: 'PATCH',
+                headers: explicitHeaders,
+                body: JSON.stringify(altPayload),
+              });
+              if (retryRes.ok) {
+                const retryData = await retryRes.json().catch(() => null);
+                const row = Array.isArray(retryData) ? retryData[0] : retryData;
+                if (row && Object.keys(row).length > 0) {
+                  return row;
                 }
-              } catch {}
-            }
-            continue;
+              }
+            } catch {}
           }
-
-          const data = await res.json().catch(() => null);
-          const row = Array.isArray(data) ? data[0] : data;
-          if (row && Object.keys(row).length > 0) {
-            return row;
-          }
-        } catch (fetchErr) {
-          console.warn(`[resilientPatchRecord] Network error patching ${table}.${col}=${cid}:`, fetchErr);
+          continue;
         }
+
+        const data = await res.json().catch(() => null);
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row && Object.keys(row).length > 0) {
+          return row;
+        }
+      } catch (fetchErr) {
+        console.warn(`[resilientPatchRecord] Network error patching ${table}.id=${cid}:`, fetchErr);
       }
     }
   }
 
-  // SDK fallback
+  // 2. SDK fallback: Strictly targets primary key column 'id' using exact record ID
   for (const table of tables) {
     for (const cid of candidateIds) {
       try {
@@ -2467,8 +2456,11 @@ export const api = {
   },
 
   async deleteInquiry(id: string, deletedBy: string = 'Administrator'): Promise<boolean> {
-    const cleanId = String(id || '').trim();
-    if (!cleanId) return false;
+    if (!isValidEntityId(id)) {
+      console.warn('[deleteInquiry] Stripped malformed request with invalid id:', id);
+      return false;
+    }
+    const cleanId = String(id).trim();
 
     const nowIso = new Date().toISOString();
     const who = deletedBy || 'Administrator';
@@ -2608,7 +2600,10 @@ export const api = {
   },
 
   async restoreInquiry(id: string, sId?: string, sName?: string): Promise<Inquiry> {
-    const cleanId = String(id || '').trim();
+    if (!isValidEntityId(id)) {
+      throw new Error('Valid lead ID is required for restoration');
+    }
+    const cleanId = String(id).trim();
     const nowIso = new Date().toISOString();
 
     const restorePayload: Record<string, any> = {
@@ -2670,8 +2665,11 @@ export const api = {
   },
 
   async permanentlyDeleteInquiry(id: string): Promise<boolean> {
-    const cleanId = String(id || '').trim();
-    if (!cleanId) return false;
+    if (!isValidEntityId(id)) {
+      console.warn('[permanentlyDeleteInquiry] Stripped malformed request with invalid id:', id);
+      return false;
+    }
+    const cleanId = String(id).trim();
 
     // Purge Action: Perform the actual hard DELETE query only when permanently deleting from the trash
     const candidateIds = getCandidateLeadIds(cleanId);
@@ -2711,19 +2709,18 @@ export const api = {
       // 1. Fetch all items in trash
       const deletedList = await this.getDeletedInquiries();
 
-      // 2. Perform hard DELETE for each trash item in Supabase
+      // 2. Perform hard DELETE for each trash item in Supabase targeting primary key column 'id'
       for (const item of deletedList) {
-        const cleanId = String(item.id || '').trim();
-        if (cleanId) {
-          const candidateIds = getCandidateLeadIds(cleanId);
-          for (const cid of candidateIds) {
-            try {
-              await supabase.from('leads').delete().eq('id', cid);
-            } catch {}
-            try {
-              await supabase.from('inquiries').delete().eq('id', cid);
-            } catch {}
-          }
+        if (!isValidEntityId(item.id)) continue;
+        const cleanId = String(item.id).trim();
+        const candidateIds = getCandidateLeadIds(cleanId);
+        for (const cid of candidateIds) {
+          try {
+            await supabase.from('leads').delete().eq('id', cid);
+          } catch {}
+          try {
+            await supabase.from('inquiries').delete().eq('id', cid);
+          } catch {}
         }
       }
 
@@ -3109,12 +3106,11 @@ export const api = {
   async updateHotel(id: string, hotel: Partial<Hotel>): Promise<Hotel> {
     // 1. Diagnose and Sanitize Hotel ID & Primary Key
     const rawId = String(id || hotel.id || (hotel as any).hotel_id || (hotel as any)._id || '').trim();
-    let targetId = rawId;
-
-    if (!targetId || targetId === 'undefined' || targetId === 'null') {
-      console.warn('[Supabase updateHotel] Received invalid or missing ID. Checking name or generating ID...');
-      targetId = hotel.name ? `htl-${hotel.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : `htl-${Date.now()}`;
+    if (!isValidEntityId(rawId)) {
+      console.error('[Supabase updateHotel] Received invalid, empty, or undefined hotel ID:', id);
+      throw new Error('Valid hotel ID is required for updating hotel');
     }
+    const targetId = rawId;
 
     const rawPayload = hotelToRow(hotel);
     delete rawPayload.id;
@@ -3352,10 +3348,20 @@ export const api = {
   },
 
   async deleteHotel(id: string): Promise<boolean> {
+    if (!isValidEntityId(id)) {
+      console.warn('[Supabase deleteHotel] Invalid ID provided for deletion:', id);
+      return false;
+    }
+    const cleanId = String(id).trim();
     try {
-      await supabase.from('hotels').delete().eq('id', id);
-    } catch {}
-    localStore.deleteHotel(id);
+      await supabase.from('hotels').delete().eq('id', cleanId);
+    } catch (err) {
+      console.warn('[Supabase deleteHotel] Supabase delete error:', err);
+    }
+    localStore.deleteHotel(cleanId);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', hotelId: cleanId } }));
+    }
     return true;
   },
 

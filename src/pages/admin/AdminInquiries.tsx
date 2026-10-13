@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api, updateLeadOrInquiryStatus, cleanUnassignedValue, matchLeadId, mergeUpdatedLeadFields, mapInquiryRow } from '../../services/api.js';
+import { api, updateLeadOrInquiryStatus, cleanUnassignedValue, matchLeadId, mergeUpdatedLeadFields, mapInquiryRow, isValidEntityId } from '../../services/api.js';
 import { supabase } from '../../lib/supabase.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../services/soundNotification.js';
@@ -405,12 +405,17 @@ export const AdminInquiries: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    const inq = inquiries.find((i) => i.id === id);
-    const leadId = inq ? getLeadId(inq) : id;
+    if (!isValidEntityId(id)) {
+      console.warn('[AdminInquiries] Cannot delete lead: invalid ID provided:', id);
+      return;
+    }
+    const cleanId = String(id).trim();
+    const inq = inquiries.find((i) => i.id === cleanId);
+    const leadId = inq ? getLeadId(inq) : cleanId;
     if (window.confirm(`Move Lead ${leadId} to Recently Deleted / Trash Bin? You can review and restore it anytime.`)) {
       try {
-        await api.deleteInquiry(id);
-        setInquiries((prev) => prev.filter((i) => i.id !== id));
+        await api.deleteInquiry(cleanId);
+        setInquiries((prev) => prev.filter((i) => i.id !== cleanId));
         loadDeletedInquiries();
         setActionMessage({
           type: 'info',
@@ -424,16 +429,21 @@ export const AdminInquiries: React.FC = () => {
   };
 
   const handleRestore = async (id: string) => {
+    if (!isValidEntityId(id)) {
+      console.warn('[AdminInquiries] Cannot restore lead: invalid ID provided:', id);
+      return;
+    }
+    const cleanId = String(id).trim();
     try {
-      setRestoringId(id);
-      const inq = deletedInquiries.find((i) => i.id === id);
-      const chosenStaffId = selectedRestoreStaff[id] || inq?.assignedStaffId || staffList[0]?.id;
+      setRestoringId(cleanId);
+      const inq = deletedInquiries.find((i) => i.id === cleanId);
+      const chosenStaffId = selectedRestoreStaff[cleanId] || inq?.assignedStaffId || staffList[0]?.id;
       const chosenStaff = staffList.find((s) => s.id === chosenStaffId);
       const staffName = chosenStaff ? chosenStaff.name : (staffList[0]?.name || 'Staff Member');
 
-      const restored = await api.restoreInquiry(id, chosenStaffId, staffName);
-      setDeletedInquiries((prev) => prev.filter((i) => i.id !== id));
-      setInquiries((prev) => [restored, ...prev.filter((i) => i.id !== id)]);
+      const restored = await api.restoreInquiry(cleanId, chosenStaffId, staffName);
+      setDeletedInquiries((prev) => prev.filter((i) => i.id !== cleanId));
+      setInquiries((prev) => [restored, ...prev.filter((i) => i.id !== cleanId)]);
 
       setActionMessage({
         type: 'success',
@@ -448,12 +458,17 @@ export const AdminInquiries: React.FC = () => {
   };
 
   const handlePermanentDelete = async (id: string) => {
-    const inq = deletedInquiries.find((i) => i.id === id);
-    const leadId = inq ? getLeadId(inq) : id;
+    if (!isValidEntityId(id)) {
+      console.warn('[AdminInquiries] Cannot purge lead: invalid ID provided:', id);
+      return;
+    }
+    const cleanId = String(id).trim();
+    const inq = deletedInquiries.find((i) => i.id === cleanId);
+    const leadId = inq ? getLeadId(inq) : cleanId;
     if (window.confirm(`Permanently erase Lead ${leadId} from the database? This action is irreversible.`)) {
       try {
-        await api.permanentlyDeleteInquiry(id);
-        setDeletedInquiries((prev) => prev.filter((i) => i.id !== id));
+        await api.permanentlyDeleteInquiry(cleanId);
+        setDeletedInquiries((prev) => prev.filter((i) => i.id !== cleanId));
         setActionMessage({
           type: 'info',
           text: `Lead ${leadId} permanently erased.`,
