@@ -2510,19 +2510,38 @@ export const api = {
     };
 
     // 1. Soft Delete Implementation:
-    // Update Supabase leads table: .from('leads').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', leadId)
+    // Update Supabase inquiries & leads tables:
+    // .from('inquiries').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', recordId)
     // Never perform hard SQL delete on standard delete action
+    // Strictly mark as deleted without changing status (no fallback to TRIP/CANCELLED)
+    const recordId = cleanId;
+    const { error: inqErr } = await supabase
+      .from('inquiries')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+      })
+      .eq('id', recordId);
+    if (inqErr) console.error('Soft delete error on inquiries:', inqErr);
+
+    const { error: leadsErr } = await supabase
+      .from('leads')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+      })
+      .eq('id', recordId);
+    if (leadsErr) console.error('Soft delete error on leads:', leadsErr);
+
     const candidateIds = getCandidateLeadIds(cleanId);
     for (const cid of candidateIds) {
-      try {
-        await supabase.from('leads').update(softDeletePayload).eq('id', cid);
-      } catch (err) {
-        console.warn(`[deleteInquiry] Supabase leads soft-delete update failed for id ${cid}:`, err);
-      }
-      try {
-        await supabase.from('inquiries').update(softDeletePayload).eq('id', cid);
-      } catch (err) {
-        console.warn(`[deleteInquiry] Supabase inquiries soft-delete update failed for id ${cid}:`, err);
+      if (cid !== recordId) {
+        try {
+          await supabase.from('leads').update(softDeletePayload).eq('id', cid);
+        } catch {}
+        try {
+          await supabase.from('inquiries').update(softDeletePayload).eq('id', cid);
+        } catch {}
       }
 
       // Metadata fallback to ensure persistence if schema column is pending
@@ -2539,7 +2558,7 @@ export const api = {
     // 2. Local storage update
     localStore.deleteInquiry(cleanId, who);
 
-    // 4. Dispatch real-time events across all tabs/windows
+    // 3. Dispatch real-time events across all tabs/windows
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-lead-changed', {
@@ -2561,6 +2580,10 @@ export const api = {
       );
     }
     return true;
+  },
+
+  async deleteLead(id: string, deletedBy: string = 'Administrator'): Promise<boolean> {
+    return this.deleteInquiry(id, deletedBy);
   },
 
   async getDeletedInquiries(): Promise<Inquiry[]> {

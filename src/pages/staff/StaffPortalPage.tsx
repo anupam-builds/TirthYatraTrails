@@ -248,7 +248,26 @@ export const StaffPortalPage: React.FC = () => {
     };
     window.addEventListener('tirth-staff-presence-changed', handlePresence);
 
+    const handleCrmChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.action === 'delete') {
+        const delId = detail.leadId || detail.inquiryId || detail.lead?.id;
+        if (delId) {
+          setInquiries((prev) => prev.filter((i) => i.id !== delId));
+          if (selectedInquiryForEdit && selectedInquiryForEdit.id === delId) {
+            setSelectedInquiryForEdit(null);
+          }
+        }
+      }
+    };
+    window.addEventListener('tirth-lead-changed', handleCrmChange);
+    window.addEventListener('tirth-inquiry-changed', handleCrmChange);
+
     const unsubNew = subscribeToNewInquiries((newInquiry) => {
+      if (newInquiry.isDeleted || (newInquiry as any).is_deleted) {
+        setInquiries((prev) => prev.filter((i) => i.id !== newInquiry.id));
+        return;
+      }
       setInquiries((prev) => [newInquiry, ...prev.filter((i) => i.id !== newInquiry.id)]);
       
       // Trigger sound if active
@@ -260,6 +279,13 @@ export const StaffPortalPage: React.FC = () => {
 
     const unsubUpdates = subscribeToInquiryUpdates(({ inquiry: updatedInquiry }) => {
       if (!updatedInquiry) return;
+      if (updatedInquiry.isDeleted || (updatedInquiry as any).is_deleted) {
+        setInquiries((prev) => prev.filter((item) => item.id !== updatedInquiry.id));
+        if (selectedInquiryForEdit && selectedInquiryForEdit.id === updatedInquiry.id) {
+          setSelectedInquiryForEdit(null);
+        }
+        return;
+      }
       setInquiries((prev) =>
         prev.map((item) => (item.id === updatedInquiry.id ? { ...item, ...updatedInquiry } : item))
       );
@@ -267,15 +293,24 @@ export const StaffPortalPage: React.FC = () => {
 
     return () => {
       window.removeEventListener('tirth-staff-presence-changed', handlePresence);
+      window.removeEventListener('tirth-lead-changed', handleCrmChange);
+      window.removeEventListener('tirth-inquiry-changed', handleCrmChange);
       unsubNew();
       unsubUpdates();
     };
-  }, []);
+  }, [selectedInquiryForEdit]);
 
   // Real-time Supabase synchronization hook for staff portal lead updates/assignments/status
   useRealtimeInquiries({
     channelName: 'public:leads-realtime',
     onUpdate: (updated) => {
+      if (updated.isDeleted || (updated as any).is_deleted) {
+        setInquiries((prev) => prev.filter((i) => i.id !== updated.id));
+        if (selectedInquiryForEdit && selectedInquiryForEdit.id === updated.id) {
+          setSelectedInquiryForEdit(null);
+        }
+        return;
+      }
       setInquiries((prev) => {
         const exists = prev.some((i) => i.id === updated.id);
         return exists
@@ -284,6 +319,12 @@ export const StaffPortalPage: React.FC = () => {
       });
       if (selectedInquiryForEdit && selectedInquiryForEdit.id === updated.id) {
         setSelectedInquiryForEdit((prev) => (prev ? { ...prev, ...updated } : null));
+      }
+    },
+    onDelete: (deletedId) => {
+      setInquiries((prev) => prev.filter((i) => i.id !== deletedId));
+      if (selectedInquiryForEdit && selectedInquiryForEdit.id === deletedId) {
+        setSelectedInquiryForEdit(null);
       }
     },
     onProfileUpdate: (profile) => {

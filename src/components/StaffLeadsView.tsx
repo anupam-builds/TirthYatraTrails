@@ -127,7 +127,7 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
               (newRow as any).metadata?.isDeleted === true
             );
             if (isDeleted) {
-              return prev.filter((l) => String(l.id) !== String(newRow.id));
+              return prev.filter((l) => l.id !== (payload.new as any)?.id && String(l.id) !== String(newRow.id));
             }
 
             const assigned = newRow.assigned_staff_id || newRow.assignedStaffId;
@@ -169,7 +169,7 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
               (newRow as any).metadata?.isDeleted === true
             );
             if (isDeleted) {
-              return prev.filter((l) => String(l.id) !== String(newRow.id));
+              return prev.filter((l) => l.id !== (payload.new as any)?.id && String(l.id) !== String(newRow.id));
             }
 
             const assigned = newRow.assigned_staff_id || newRow.assignedStaffId;

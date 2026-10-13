@@ -189,29 +189,46 @@ export const AdminDashboard: React.FC = () => {
   }, []);
 
   // Real-time synchronization across admins when status, staff assignment, or any inquiry changes
-  useRealtimeInquiries((updated) => {
-    setRecentInquiries((prev) => {
-      const exists = prev.some((i) => i.id === updated.id);
-      const updatedList = exists
-        ? prev.map((i) => (i.id === updated.id ? updated : i))
-        : [updated, ...prev];
-      return updatedList.slice(0, 5);
-    });
+  useRealtimeInquiries({
+    onUpdate: (updated) => {
+      if (updated.isDeleted || (updated as any).is_deleted) {
+        setRecentInquiries((prev) => prev.filter((i) => i.id !== updated.id));
+        api.getInquiries().then((allInq) => {
+          setStats((prev) => ({
+            ...prev,
+            inquiriesCount: allInq.length,
+            newInquiries: allInq.filter((i) => i.status === 'NEW').length,
+          }));
+        });
+        return;
+      }
+      setRecentInquiries((prev) => {
+        const exists = prev.some((i) => i.id === updated.id);
+        const updatedList = exists
+          ? prev.map((i) => (i.id === updated.id ? updated : i))
+          : [updated, ...prev];
+        return updatedList.slice(0, 5);
+      });
 
-    setStats((prev) => {
-      // Re-fetch counts cleanly or adjust dynamically
-      return {
-        ...prev,
-      };
-    });
-    // Async refresh full lists count accuracy
-    api.getInquiries().then((allInq) => {
-      setStats((prev) => ({
-        ...prev,
-        inquiriesCount: allInq.length,
-        newInquiries: allInq.filter((i) => i.status === 'NEW').length,
-      }));
-    });
+      // Async refresh full lists count accuracy
+      api.getInquiries().then((allInq) => {
+        setStats((prev) => ({
+          ...prev,
+          inquiriesCount: allInq.length,
+          newInquiries: allInq.filter((i) => i.status === 'NEW').length,
+        }));
+      });
+    },
+    onDelete: (deletedId) => {
+      setRecentInquiries((prev) => prev.filter((i) => i.id !== deletedId));
+      api.getInquiries().then((allInq) => {
+        setStats((prev) => ({
+          ...prev,
+          inquiriesCount: allInq.length,
+          newInquiries: allInq.filter((i) => i.status === 'NEW').length,
+        }));
+      });
+    },
   });
 
   const handleUpdateStatus = async (id: string, status: Inquiry['status']) => {

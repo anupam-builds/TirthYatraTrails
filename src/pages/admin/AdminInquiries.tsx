@@ -51,9 +51,23 @@ export const AdminInquiries: React.FC = () => {
   } = useRealtimeInquiries({
     channelName: 'public:leads-realtime',
     onInsert: (newInq) => {
+      if (newInq.isDeleted || (newInq as any).is_deleted) {
+        setInquiries((prev) => prev.filter((item) => item.id !== newInq.id && !matchLeadId(item, newInq.id)));
+        loadDeletedInquiries();
+        return;
+      }
       console.log('📡 [AdminInquiries] Realtime lead INSERT received:', newInq.id);
     },
     onUpdate: (updatedInq) => {
+      if (updatedInq.isDeleted || (updatedInq as any).is_deleted) {
+        setInquiries((prev) => prev.filter((item) => item.id !== updatedInq.id && !matchLeadId(item, updatedInq.id)));
+        loadDeletedInquiries();
+        setSelectedInquiryForEdit((curr) => {
+          if (!curr || !matchLeadId(curr, updatedInq.id)) return curr;
+          return null;
+        });
+        return;
+      }
       console.log('🔄 [AdminInquiries] Realtime lead UPDATE received:', updatedInq.id);
       setSelectedInquiryForEdit((curr) =>
         curr && matchLeadId(curr, updatedInq.id) ? { ...curr, ...updatedInq } : curr
@@ -100,7 +114,7 @@ export const AdminInquiries: React.FC = () => {
 
       if (isDeleted) {
         // Soft-deleted in Supabase: instantly remove from active desk table
-        setLeads((prevLeads) => prevLeads.filter((item) => !matchLeadId(item, newRow.id)));
+        setLeads((prevLeads) => prevLeads.filter((item) => item.id !== payload.new?.id && String(item.id) !== String(newRow.id) && !matchLeadId(item, newRow.id)));
         loadDeletedInquiries();
         setSelectedInquiryForEdit((curr) => {
           if (!curr || !matchLeadId(curr, newRow.id)) return curr;
@@ -136,6 +150,34 @@ export const AdminInquiries: React.FC = () => {
       });
     };
 
+    const handleRemoteInsert = (payload: any) => {
+      const newRow = payload?.new;
+      if (!newRow || !newRow.id) return;
+
+      const isDeleted = Boolean(
+        newRow.is_deleted === true ||
+        newRow.is_deleted === 'true' ||
+        newRow.is_deleted === 1 ||
+        newRow.isDeleted === true ||
+        newRow.metadata?.is_deleted === true ||
+        newRow.metadata?.is_deleted === 'true' ||
+        newRow.metadata?.isDeleted === true
+      );
+
+      if (isDeleted) {
+        setLeads((prevLeads) => prevLeads.filter((item) => item.id !== payload.new?.id && String(item.id) !== String(newRow.id) && !matchLeadId(item, newRow.id)));
+        loadDeletedInquiries();
+        return;
+      }
+
+      setLeads((prevLeads) => {
+        const exists = prevLeads.some((item) => matchLeadId(item, newRow.id));
+        if (exists) return prevLeads;
+        const mapped = mapInquiryRow(newRow);
+        return [mapped, ...prevLeads];
+      });
+    };
+
     const updateChannel = supabase
       .channel(channelName)
       .on(
@@ -147,6 +189,16 @@ export const AdminInquiries: React.FC = () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'inquiries' },
         handleRemoteUpdate
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'leads' },
+        handleRemoteInsert
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'inquiries' },
+        handleRemoteInsert
       )
       .on(
         'postgres_changes',
@@ -476,19 +528,33 @@ export const AdminInquiries: React.FC = () => {
         // and immediately populates the trash bin without needing a page reload
         setInquiries((prev) => prev.filter((i) => i.id !== cleanId && !matchLeadId(i, cleanId)));
         setDeletedInquiries((prev) => [deletedRecord, ...prev.filter((d) => d.id !== cleanId && !matchLeadId(d, cleanId))]);
+        setSelectedInquiryForEdit((curr) => {
+          if (!curr || !matchLeadId(curr, cleanId)) return curr;
+          return null;
+        });
 
         // 2. Perform soft-delete directly on Supabase on inquiries & leads tables:
         // Strictly marks record as deleted without changing status (no fallback to TRIP/CANCELLED)
         const recordId = cleanId;
-        await supabase
+        const { error: inqError } = await supabase
           .from('inquiries')
-          .update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: who })
+          .update({ 
+            is_deleted: true, 
+            deleted_at: new Date().toISOString() 
+          })
           .eq('id', recordId);
 
-        await supabase
+        if (inqError) console.error("Soft delete error on inquiries:", inqError);
+
+        const { error: leadsError } = await supabase
           .from('leads')
-          .update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: who })
+          .update({ 
+            is_deleted: true, 
+            deleted_at: new Date().toISOString() 
+          })
           .eq('id', recordId);
+
+        if (leadsError) console.error("Soft delete error on leads:", leadsError);
 
         // 3. Complete soft-delete via API service (syncs localStore & broadcasts real-time events)
         await api.deleteInquiry(recordId, who);
@@ -507,6 +573,9 @@ export const AdminInquiries: React.FC = () => {
       }
     }
   };
+
+  const deleteInquiry = handleDelete;
+  const deleteLead = handleDelete;
 
   const handleRestore = async (id: string) => {
     if (!isValidEntityId(id)) {

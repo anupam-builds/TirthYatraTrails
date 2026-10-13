@@ -98,7 +98,13 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
     );
 
     if (eventType === 'INSERT') {
-      if (isDeleted) return;
+      if (isDeleted) {
+        setInquiries((prev) => prev.filter((item) => item.id !== payload.new?.id && String(item.id) !== String(rawRow.id) && !matchLeadId(item, rawRow.id)));
+        if (optionsRef.current.onDelete) {
+          optionsRef.current.onDelete(String(rawRow.id));
+        }
+        return;
+      }
 
       const mapped = mapInquiryRow(rawRow);
       setInquiries((prev) => {
@@ -112,7 +118,7 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
     } else if (eventType === 'UPDATE') {
       if (isDeleted) {
         // Soft-deleted in Supabase: remove from active leads view immediately
-        setInquiries((prev) => prev.filter((i) => !matchLeadId(i, rawRow.id)));
+        setInquiries((prev) => prev.filter((item) => item.id !== payload.new?.id && String(item.id) !== String(rawRow.id) && !matchLeadId(item, rawRow.id)));
         if (optionsRef.current.onDelete) {
           optionsRef.current.onDelete(String(rawRow.id));
         }
@@ -140,7 +146,10 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
     } else {
       // Catch-all for any other event
       if (isDeleted) {
-        setInquiries((prev) => prev.filter((i) => !matchLeadId(i, rawRow.id)));
+        setInquiries((prev) => prev.filter((item) => item.id !== payload.new?.id && String(item.id) !== String(rawRow.id) && !matchLeadId(item, rawRow.id)));
+        if (optionsRef.current.onDelete) {
+          optionsRef.current.onDelete(String(rawRow.id));
+        }
         return;
       }
       setInquiries((prev) => {

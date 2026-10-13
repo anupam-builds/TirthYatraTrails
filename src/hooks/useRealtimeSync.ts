@@ -499,7 +499,7 @@ export function useIsolatedLeadsRealtime<T extends Record<string, any> = any>(
           if (isDeleted) {
             const targetId = updatedRow.id;
             optionsRef.current?.onDelete?.(targetId);
-            return currentLeads.filter((item) => !matchLeadId(item as any, targetId));
+            return currentLeads.filter((item) => (item as any)?.id !== payload.new?.id && !matchLeadId(item as any, targetId));
           }
 
           let mergedResult: any = null;
