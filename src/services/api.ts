@@ -379,6 +379,7 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
     'assigned_staff_id', 'assigned_staff_name', 'is_locked_for_staff',
     'notes', 'created_at', 'customer_name', 'city', 'accommodation_tier',
     'updated_at', 'metadata', 'whatsapp_number',
+    'is_deleted', 'deleted_at', 'deleted_by',
   ]);
 
   const baselineLeads = new Set([
@@ -386,6 +387,7 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
     'city', 'accommodation_tier', 'accommodation_preference',
     'assigned_staff_id', 'assigned_staff_name', 'status',
     'metadata', 'created_at', 'updated_at',
+    'is_deleted', 'deleted_at', 'deleted_by',
   ]);
 
   try {
@@ -2177,13 +2179,38 @@ export const api = {
 
   async getInquiries(userId?: string): Promise<Inquiry[]> {
     try {
-      let qInq = supabase.from('inquiries').select('*').order('created_at', { ascending: false });
-      let qLeads = supabase.from('leads').select('*').order('created_at', { ascending: false });
+      // 1. Primary Attempt: Query Supabase for active leads where is_deleted is false or null
+      let qInq = supabase
+        .from('inquiries')
+        .select('*')
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .order('created_at', { ascending: false });
+
+      let qLeads = supabase
+        .from('leads')
+        .select('*')
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .order('created_at', { ascending: false });
+
       if (userId) {
         qInq = qInq.eq('user_id', userId);
         qLeads = qLeads.eq('user_id', userId);
       }
-      const [resInq, resLeads] = await Promise.allSettled([qInq, qLeads]);
+      let [resInq, resLeads] = await Promise.allSettled([qInq, qLeads]);
+
+      // Schema tolerance: If column 'is_deleted' does not exist yet on remote table (PostgREST code 42703), fallback to select('*')
+      if (
+        (resInq.status === 'fulfilled' && (resInq.value as any)?.error?.code === '42703') ||
+        (resLeads.status === 'fulfilled' && (resLeads.value as any)?.error?.code === '42703')
+      ) {
+        let fallbackInq = supabase.from('inquiries').select('*').order('created_at', { ascending: false });
+        let fallbackLeads = supabase.from('leads').select('*').order('created_at', { ascending: false });
+        if (userId) {
+          fallbackInq = fallbackInq.eq('user_id', userId);
+          fallbackLeads = fallbackLeads.eq('user_id', userId);
+        }
+        [resInq, resLeads] = await Promise.allSettled([fallbackInq, fallbackLeads]);
+      }
 
       if (
         (resInq.status === 'fulfilled' && ((resInq.value as any)?.error?.status === 401 || (resInq.value as any)?.error?.code === 'PGRST301')) ||
@@ -2199,13 +2226,16 @@ export const api = {
       const combined = [...inqData, ...leadsData];
       if (combined.length > 0) {
         const seen = new Set<string>();
-        const unique = combined.filter((r) => {
+        // Strict Active Leads View: Only include leads where is_deleted is false or not true
+        const activeRecords = combined.filter((r) => {
+          if (r.is_deleted === true || r.isDeleted === true) return false;
+          if (r.metadata?.is_deleted === true || r.metadata?.isDeleted === true) return false;
           const idStr = String(r.id);
           if (seen.has(idStr)) return false;
           seen.add(idStr);
           return true;
         });
-        return unique.map(mapInquiryRow);
+        return activeRecords.map(mapInquiryRow);
       }
       return localStore.getInquiries(userId);
     } catch (err: any) {
@@ -2436,20 +2466,290 @@ export const api = {
     return this.updateLeadStatus(id, next);
   },
 
-  async deleteInquiry(id: string): Promise<boolean> {
+  async deleteInquiry(id: string, deletedBy: string = 'Administrator'): Promise<boolean> {
+    const cleanId = String(id || '').trim();
+    if (!cleanId) return false;
+
+    const nowIso = new Date().toISOString();
+    const who = deletedBy || 'Administrator';
+    const softDeletePayload: Record<string, any> = {
+      is_deleted: true,
+      deleted_at: nowIso,
+      deleted_by: who,
+      updated_at: nowIso,
+    };
+
+    // 1. Soft Delete Implementation:
+    // Update Supabase leads table: .from('leads').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', leadId)
+    // Never perform hard SQL delete on standard delete action
+    const candidateIds = getCandidateLeadIds(cleanId);
+    for (const cid of candidateIds) {
+      try {
+        await supabase.from('leads').update(softDeletePayload).eq('id', cid);
+      } catch (err) {
+        console.warn(`[deleteInquiry] Supabase leads soft-delete update failed for id ${cid}:`, err);
+      }
+      try {
+        await supabase.from('inquiries').update(softDeletePayload).eq('id', cid);
+      } catch (err) {
+        console.warn(`[deleteInquiry] Supabase inquiries soft-delete update failed for id ${cid}:`, err);
+      }
+
+      // Metadata fallback to ensure persistence if schema column is pending
+      try {
+        const metaPayload = {
+          ...softDeletePayload,
+          metadata: { is_deleted: true, deleted_at: nowIso, deleted_by: who },
+        };
+        await resilientPatchRecord('leads', cid, metaPayload);
+        await resilientPatchRecord('inquiries', cid, metaPayload);
+      } catch {}
+    }
+
+    // 2. Server-side API soft-delete fallback
     try {
-      await supabase.from('leads').delete().eq('id', id);
+      await fetch(`/api/admin/inquiries/${encodeURIComponent(cleanId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
     } catch {}
-    try {
-      await supabase.from('inquiries').delete().eq('id', id);
-    } catch {}
-    return localStore.deleteInquiry(id);
+
+    // 3. Local storage update
+    localStore.deleteInquiry(cleanId, who);
+
+    // 4. Dispatch real-time events across all tabs/windows
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tirth-lead-changed', {
+          detail: {
+            action: 'delete',
+            leadId: cleanId,
+            lead: { id: cleanId, isDeleted: true, deletedAt: nowIso, deletedBy: who },
+          },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('tirth-inquiry-changed', {
+          detail: {
+            action: 'delete',
+            inquiryId: cleanId,
+            inquiry: { id: cleanId, isDeleted: true, deletedAt: nowIso, deletedBy: who },
+          },
+        })
+      );
+    }
+    return true;
   },
 
-  async getDeletedInquiries() { return localStore.getDeletedInquiries(); },
-  async restoreInquiry(id: string, sId?: string, sName?: string) { return localStore.restoreInquiry(id, sId, sName); },
-  async permanentlyDeleteInquiry(id: string) { return localStore.permanentlyDeleteInquiry(id); },
-  async emptyTrash() { return localStore.emptyTrash(); },
+  async getDeletedInquiries(): Promise<Inquiry[]> {
+    try {
+      // 1. Trash Bin View: Fetch only leads where is_deleted is true from Supabase
+      let qInq = supabase.from('inquiries').select('*').eq('is_deleted', true).order('created_at', { ascending: false });
+      let qLeads = supabase.from('leads').select('*').eq('is_deleted', true).order('created_at', { ascending: false });
+
+      let [resInq, resLeads] = await Promise.allSettled([qInq, qLeads]);
+
+      let inqData: any[] = [];
+      let leadsData: any[] = [];
+
+      if (resInq.status === 'fulfilled') {
+        const val = resInq.value as any;
+        if (val.error && val.error.code === '42703') {
+          // Schema column tolerance: check metadata if is_deleted column not yet created
+          const allInq = await supabase.from('inquiries').select('*');
+          inqData = (allInq.data || []).filter((r: any) => r.metadata?.is_deleted === true || r.metadata?.isDeleted === true);
+        } else if (val.data) {
+          inqData = val.data;
+        }
+      }
+
+      if (resLeads.status === 'fulfilled') {
+        const val = resLeads.value as any;
+        if (val.error && val.error.code === '42703') {
+          const allLeads = await supabase.from('leads').select('*');
+          leadsData = (allLeads.data || []).filter((r: any) => r.metadata?.is_deleted === true || r.metadata?.isDeleted === true);
+        } else if (val.data) {
+          leadsData = val.data;
+        }
+      }
+
+      // Merge with localStore deleted records
+      const localDeleted = localStore.getDeletedInquiries();
+      const combined = [...inqData, ...leadsData];
+      const seen = new Set<string>();
+      const result: Inquiry[] = [];
+
+      for (const row of combined) {
+        const mapped = mapInquiryRow(row);
+        const idStr = String(mapped.id);
+        if (!seen.has(idStr)) {
+          seen.add(idStr);
+          result.push(mapped);
+        }
+      }
+
+      for (const loc of localDeleted) {
+        const idStr = String(loc.id);
+        if (!seen.has(idStr)) {
+          seen.add(idStr);
+          result.push(loc);
+        }
+      }
+
+      return result.sort(
+        (a, b) =>
+          new Date(b.deletedAt || b.createdAt).getTime() -
+          new Date(a.deletedAt || a.createdAt).getTime()
+      );
+    } catch (err) {
+      console.warn('[getDeletedInquiries] Error querying Supabase trash bin, fallback to localStore:', err);
+      return localStore.getDeletedInquiries();
+    }
+  },
+
+  async restoreInquiry(id: string, sId?: string, sName?: string): Promise<Inquiry> {
+    const cleanId = String(id || '').trim();
+    const nowIso = new Date().toISOString();
+
+    const restorePayload: Record<string, any> = {
+      is_deleted: false,
+      deleted_at: null,
+      deleted_by: null,
+      updated_at: nowIso,
+    };
+    if (sId) {
+      restorePayload.assigned_staff_id = sId;
+      restorePayload.assigned_staff_name = sName || null;
+    }
+
+    // 1. Restore Action: Update the lead's is_deleted flag back to false in Supabase
+    const candidateIds = getCandidateLeadIds(cleanId);
+    for (const cid of candidateIds) {
+      try {
+        await supabase.from('leads').update(restorePayload).eq('id', cid);
+      } catch (err) {
+        console.warn(`[restoreInquiry] Supabase leads restore update failed for id ${cid}:`, err);
+      }
+      try {
+        await supabase.from('inquiries').update(restorePayload).eq('id', cid);
+      } catch (err) {
+        console.warn(`[restoreInquiry] Supabase inquiries restore update failed for id ${cid}:`, err);
+      }
+
+      // Metadata fallback
+      try {
+        const metaPayload = {
+          ...restorePayload,
+          metadata: { is_deleted: false, deleted_at: null, deleted_by: null },
+        };
+        await resilientPatchRecord('leads', cid, metaPayload);
+        await resilientPatchRecord('inquiries', cid, metaPayload);
+      } catch {}
+    }
+
+    // 2. Call server endpoint if available
+    try {
+      await fetch(`/api/admin/inquiries/${encodeURIComponent(cleanId)}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: sId, staffName: sName }),
+      });
+    } catch {}
+
+    // 3. Update local storage
+    const restored = localStore.restoreInquiry(cleanId, sId, sName);
+
+    // 4. Broadcast and dispatch events
+    broadcastInquiryUpdated(restored, { newStatus: restored.status, staffName: restored.assignedStaffName });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'restore', lead: restored } }));
+      window.dispatchEvent(new CustomEvent('tirth-inquiry-changed', { detail: { action: 'restore', inquiry: restored } }));
+    }
+
+    return restored;
+  },
+
+  async permanentlyDeleteInquiry(id: string): Promise<boolean> {
+    const cleanId = String(id || '').trim();
+    if (!cleanId) return false;
+
+    // Purge Action: Perform the actual hard DELETE query only when permanently deleting from the trash
+    const candidateIds = getCandidateLeadIds(cleanId);
+    for (const cid of candidateIds) {
+      try {
+        await supabase.from('leads').delete().eq('id', cid);
+      } catch (err) {
+        console.warn(`[permanentlyDeleteInquiry] Supabase leads hard delete failed for id ${cid}:`, err);
+      }
+      try {
+        await supabase.from('inquiries').delete().eq('id', cid);
+      } catch (err) {
+        console.warn(`[permanentlyDeleteInquiry] Supabase inquiries hard delete failed for id ${cid}:`, err);
+      }
+    }
+
+    // Server-side permanent delete API call
+    try {
+      await fetch(`/api/admin/inquiries/${encodeURIComponent(cleanId)}/permanent`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch {}
+
+    localStore.permanentlyDeleteInquiry(cleanId);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'purge', leadId: cleanId } }));
+      window.dispatchEvent(new CustomEvent('tirth-inquiry-changed', { detail: { action: 'purge', inquiryId: cleanId } }));
+    }
+
+    return true;
+  },
+
+  async emptyTrash(): Promise<boolean> {
+    try {
+      // 1. Fetch all items in trash
+      const deletedList = await this.getDeletedInquiries();
+
+      // 2. Perform hard DELETE for each trash item in Supabase
+      for (const item of deletedList) {
+        const cleanId = String(item.id || '').trim();
+        if (cleanId) {
+          const candidateIds = getCandidateLeadIds(cleanId);
+          for (const cid of candidateIds) {
+            try {
+              await supabase.from('leads').delete().eq('id', cid);
+            } catch {}
+            try {
+              await supabase.from('inquiries').delete().eq('id', cid);
+            } catch {}
+          }
+        }
+      }
+
+      // 3. Server API call
+      try {
+        await fetch('/api/admin/inquiries/trash/empty', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch {}
+
+      // 4. Clear localStore
+      localStore.emptyTrash();
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'empty_trash' } }));
+        window.dispatchEvent(new CustomEvent('tirth-inquiry-changed', { detail: { action: 'empty_trash' } }));
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('[emptyTrash] Error emptying trash:', err);
+      localStore.emptyTrash();
+      return true;
+    }
+  },
 
   async updateInquiryStatusByStaff(id: string, status: InquiryStatus | string, staff: { id: string; name: string }) {
     return this.updateLeadStatus(id, status as any, staff.id, staff.name);
@@ -4367,9 +4667,9 @@ export function mapInquiryRow(row: any): Inquiry {
     isLockedForStaff: Boolean(row.is_locked_for_staff ?? row.isLockedForStaff),
     closedAt: row.closed_at || row.closedAt,
     closedBy: row.closed_by || row.closedBy,
-    isDeleted: Boolean(row.is_deleted ?? row.isDeleted),
-    deletedAt: row.deleted_at || row.deletedAt,
-    deletedBy: row.deleted_by || row.deletedBy,
+    isDeleted: Boolean(row.is_deleted ?? row.isDeleted ?? metadataObj?.is_deleted ?? metadataObj?.isDeleted),
+    deletedAt: row.deleted_at || row.deletedAt || metadataObj?.deleted_at || metadataObj?.deletedAt,
+    deletedBy: row.deleted_by || row.deletedBy || metadataObj?.deleted_by || metadataObj?.deletedBy,
     notes: typeof row.notes === 'string' ? row.notes : (Array.isArray(row.notes) ? row.notes.map((n: any) => n.text || JSON.stringify(n)).join('\n') : ''),
     followUpNotes: Array.isArray(row.follow_up_notes) ? row.follow_up_notes : (Array.isArray(row.followUpNotes) ? row.followUpNotes : (Array.isArray(row.notes) ? row.notes : [])),
     customerRating: row.customer_rating || row.customerRating,

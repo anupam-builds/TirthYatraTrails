@@ -182,6 +182,11 @@ export const AdminInquiries: React.FC = () => {
     // Auto sync lead updates live
     const unsubUpdates = subscribeToInquiryUpdates(({ inquiry: updatedInquiry }) => {
       if (!updatedInquiry) return;
+      if (updatedInquiry.isDeleted || (updatedInquiry as any).is_deleted) {
+        setInquiries((prev) => prev.filter((item) => !matchLeadId(item, updatedInquiry.id)));
+        loadDeletedInquiries();
+        return;
+      }
       setInquiries((prev) =>
         prev.map((item) =>
           matchLeadId(item, updatedInquiry.id)
@@ -191,8 +196,27 @@ export const AdminInquiries: React.FC = () => {
       );
     });
 
+    // Handle local and cross-tab CRM deletion and restoration events
+    const handleCrmChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.action === 'delete') {
+        const delId = detail.leadId || detail.inquiryId || detail.lead?.id;
+        if (delId) {
+          setInquiries((prev) => prev.filter((i) => !matchLeadId(i, delId)));
+          loadDeletedInquiries();
+        }
+      } else if (detail?.action === 'restore' || detail?.action === 'purge' || detail?.action === 'empty_trash') {
+        refetchInquiries();
+        loadDeletedInquiries();
+      }
+    };
+    window.addEventListener('tirth-lead-changed', handleCrmChange);
+    window.addEventListener('tirth-inquiry-changed', handleCrmChange);
+
     return () => {
       window.removeEventListener('tirth-staff-presence-changed', handlePresence);
+      window.removeEventListener('tirth-lead-changed', handleCrmChange);
+      window.removeEventListener('tirth-inquiry-changed', handleCrmChange);
       unsubNew();
       unsubUpdates();
     };
@@ -561,7 +585,10 @@ export const AdminInquiries: React.FC = () => {
             {/* View Switcher: Active vs Trash */}
             <div className="bg-slate-100 dark:bg-[#081220] p-1 rounded-2xl flex items-center gap-1 border border-slate-200 dark:border-slate-800 shadow-inner">
               <button
-                onClick={() => setActiveTab('active')}
+                onClick={() => {
+                  setActiveTab('active');
+                  refetchInquiries();
+                }}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   activeTab === 'active'
                     ? 'bg-white dark:bg-[#0d1d33] text-orange-600 dark:text-orange-400 shadow-xs'
@@ -575,7 +602,10 @@ export const AdminInquiries: React.FC = () => {
                 </span>
               </button>
               <button
-                onClick={() => setActiveTab('trash')}
+                onClick={() => {
+                  setActiveTab('trash');
+                  loadDeletedInquiries();
+                }}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   activeTab === 'trash'
                     ? 'bg-white dark:bg-[#0d1d33] text-rose-600 dark:text-rose-400 shadow-xs'

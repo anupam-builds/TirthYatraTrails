@@ -71,6 +71,7 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
       const combined = [...leadsData, ...inqData];
       const seen = new Set<string>();
       const unique = combined.filter((r) => {
+        if (r.is_deleted === true || r.isDeleted === true || r.metadata?.is_deleted === true || r.metadata?.isDeleted === true) return false;
         const idStr = String(r.id);
         if (seen.has(idStr)) return false;
         seen.add(idStr);
@@ -107,6 +108,11 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
             }
             if (!newRow) return prev;
 
+            const isDeleted = Boolean(newRow.is_deleted ?? (newRow as any).isDeleted ?? (newRow as any).metadata?.is_deleted);
+            if (isDeleted) {
+              return prev.filter((l) => String(l.id) !== String(newRow.id));
+            }
+
             const assigned = newRow.assigned_staff_id || newRow.assignedStaffId;
             const isAssignedToStaff = String(assigned || '').trim() === String(currentStaffId || HARDCODED_STAFF_ID).trim();
             const exists = prev.some((l) => String(l.id) === String(newRow.id));
@@ -135,6 +141,11 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
               return prev.filter((l) => String(l.id) !== String(oldRow?.id));
             }
             if (!newRow) return prev;
+
+            const isDeleted = Boolean(newRow.is_deleted ?? (newRow as any).isDeleted ?? (newRow as any).metadata?.is_deleted);
+            if (isDeleted) {
+              return prev.filter((l) => String(l.id) !== String(newRow.id));
+            }
 
             const assigned = newRow.assigned_staff_id || newRow.assignedStaffId;
             const isAssignedToStaff = String(assigned || '').trim() === String(currentStaffId || HARDCODED_STAFF_ID).trim();

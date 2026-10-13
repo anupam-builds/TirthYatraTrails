@@ -1026,13 +1026,13 @@ export const localStore = {
     return inquiries[idx];
   },
 
-  deleteInquiry(id: string): boolean {
+  deleteInquiry(id: string, deletedBy: string = 'Administrator'): boolean {
     const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
-    const idx = inquiries.findIndex((i) => i.id === id);
+    const idx = inquiries.findIndex((i) => String(i.id) === String(id) || String(i.leadId) === String(id));
     if (idx !== -1) {
       inquiries[idx].isDeleted = true;
       inquiries[idx].deletedAt = new Date().toISOString();
-      inquiries[idx].deletedBy = 'Administrator';
+      inquiries[idx].deletedBy = deletedBy || 'Administrator';
       setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     }
     return true;
@@ -1040,7 +1040,7 @@ export const localStore = {
 
   restoreInquiry(id: string, staffId?: string, staffName?: string): Inquiry {
     const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
-    const idx = inquiries.findIndex((i) => i.id === id);
+    const idx = inquiries.findIndex((i) => String(i.id) === String(id) || String(i.leadId) === String(id));
     if (idx === -1) throw new Error('Inquiry not found');
 
     const inq = inquiries[idx];
@@ -1057,7 +1057,9 @@ export const localStore = {
   },
 
   permanentlyDeleteInquiry(id: string): boolean {
-    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []).filter((i) => i.id !== id);
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []).filter(
+      (i) => String(i.id) !== String(id) && String(i.leadId) !== String(id)
+    );
     setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     return true;
   },

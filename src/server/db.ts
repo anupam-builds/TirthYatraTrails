@@ -1746,18 +1746,18 @@ class DatabaseStore {
       );
   }
 
-  public deleteInquiry(id: string) {
-    const index = this.data.inquiries.findIndex((i) => i.id === id);
+  public deleteInquiry(id: string, deletedBy: string = 'Administrator') {
+    const index = this.data.inquiries.findIndex((i) => String(i.id) === String(id) || String(i.leadId) === String(id));
     if (index === -1) throw new Error('Inquiry not found');
     this.data.inquiries[index].isDeleted = true;
     this.data.inquiries[index].deletedAt = new Date().toISOString();
-    this.data.inquiries[index].deletedBy = 'Administrator';
+    this.data.inquiries[index].deletedBy = deletedBy || 'Administrator';
     this.save();
     return this.data.inquiries[index];
   }
 
   public restoreInquiry(id: string, staffId?: string, staffName?: string) {
-    const index = this.data.inquiries.findIndex((i) => i.id === id);
+    const index = this.data.inquiries.findIndex((i) => String(i.id) === String(id) || String(i.leadId) === String(id));
     if (index === -1) throw new Error('Inquiry not found');
     const inq = this.data.inquiries[index];
     inq.isDeleted = false;
@@ -1774,7 +1774,7 @@ class DatabaseStore {
   }
 
   public permanentlyDeleteInquiry(id: string) {
-    const index = this.data.inquiries.findIndex((i) => i.id === id);
+    const index = this.data.inquiries.findIndex((i) => String(i.id) === String(id) || String(i.leadId) === String(id));
     if (index !== -1) {
       this.data.inquiries.splice(index, 1);
       this.save();

@@ -86,6 +86,9 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
     }
 
     if (eventType === 'INSERT') {
+      const isDeleted = Boolean(rawRow.is_deleted ?? rawRow.isDeleted ?? rawRow.metadata?.is_deleted ?? rawRow.metadata?.isDeleted);
+      if (isDeleted) return;
+
       const mapped = mapInquiryRow(rawRow);
       setInquiries((prev) => {
         const exists = prev.some((i) => matchLeadId(i, mapped.id));
@@ -96,6 +99,16 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
         optionsRef.current.onInsert(mapped);
       }
     } else if (eventType === 'UPDATE') {
+      const isDeleted = Boolean(rawRow.is_deleted ?? rawRow.isDeleted ?? rawRow.metadata?.is_deleted ?? rawRow.metadata?.isDeleted);
+      if (isDeleted) {
+        // Soft-deleted in Supabase: remove from active leads view
+        setInquiries((prev) => prev.filter((i) => !matchLeadId(i, rawRow.id)));
+        if (optionsRef.current.onDelete) {
+          optionsRef.current.onDelete(String(rawRow.id));
+        }
+        return;
+      }
+
       let updatedItem: Inquiry | null = null;
       setInquiries((prev) => {
         const exists = prev.some((i) => matchLeadId(i, rawRow.id));
@@ -247,7 +260,18 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
     // Local window event listeners for instantaneous optimistic sync
     const handleLocalLeadChange = (e: Event) => {
       const detail = (e as CustomEvent).detail;
+      if (detail?.action === 'delete' || detail?.action === 'purge') {
+        const idToFilter = String(detail.leadId || detail.inquiryId || detail.lead?.id || '');
+        if (idToFilter) {
+          setInquiries((prev) => prev.filter((i) => !matchLeadId(i, idToFilter)));
+        }
+        return;
+      }
       if (detail?.lead) {
+        if (detail.lead.isDeleted) {
+          setInquiries((prev) => prev.filter((i) => !matchLeadId(i, detail.lead.id)));
+          return;
+        }
         setInquiries((prev) => {
           const exists = prev.some((i) => String(i.id) === String(detail.lead.id));
           if (!exists) return [detail.lead, ...prev];
