@@ -33,3 +33,26 @@
   --admin-hover-bg: #0f233f;
   --admin-toast-bg: #0f294a;
 }
+
+/* ==========================================================================
+   Global Hidden Scrollbars (Cross-Browser)
+   Hides visible scrollbar bars while maintaining full scroll functionality
+   ========================================================================== */
+
+/* Hide scrollbar for Chrome, Safari, Edge and Opera */
+.no-scrollbar::-webkit-scrollbar,
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar,
+html,
+body,
+* {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
