@@ -200,12 +200,13 @@ export async function resilientPatchRecord(
     return null;
   }
 
-  const allKnownTables: Array<'leads' | 'inquiries' | 'hotels'> = ['inquiries', 'hotels', 'leads'];
   const tables: Array<'leads' | 'inquiries' | 'hotels'> = Array.isArray(tablesOrTarget)
-    ? [targetTable, ...tablesOrTarget.filter((t) => t !== targetTable)]
+    ? tablesOrTarget
     : tablesOrTarget
-    ? [tablesOrTarget, ...allKnownTables.filter((t) => t !== tablesOrTarget)]
-    : [targetTable, ...allKnownTables.filter((t) => t !== targetTable)];
+    ? [tablesOrTarget]
+    : targetTable === 'hotels'
+    ? ['hotels']
+    : ['inquiries', 'leads'];
 
   const explicitHeaders = getSupabaseHeaders();
   const candidateIds = getCandidateLeadIds(cleanId);
@@ -2198,13 +2199,13 @@ export const api = {
       let qInq = supabase
         .from('inquiries')
         .select('*')
-        .or('is_deleted.is.null,is_deleted.eq.false')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
 
       let qLeads = supabase
         .from('leads')
         .select('*')
-        .or('is_deleted.is.null,is_deleted.eq.false')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
 
       if (userId) {
@@ -2459,9 +2460,7 @@ export const api = {
         payload.phone = ph;
         payload.whatsapp_number = ph;
       }
-      if ((updates as any).metadata !== undefined) {
-        payload.metadata = (updates as any).metadata;
-      }
+      delete payload.metadata;
 
       const data = await resilientPatchRecord(targetTable, cleanId, payload);
 
@@ -2497,56 +2496,23 @@ export const api = {
       return false;
     }
     const cleanId = String(id).trim();
-
     const nowIso = new Date().toISOString();
     const who = deletedBy || 'Administrator';
-    const softDeletePayload: Record<string, any> = {
-      is_deleted: true,
-      deleted_at: nowIso,
-      deleted_by: who,
-      updated_at: nowIso,
-    };
+    const recordId = cleanId;
 
     // 1. Soft Delete Implementation:
-    // Update Supabase inquiries & leads tables:
-    // Only send fields that exist in the database schema ('is_deleted', 'deleted_at', 'deleted_by')
-    const recordId = cleanId;
-    const { error: inqErr } = await supabase
+    // Strictly target the 'inquiries' table only.
+    // Strip out non-existent fields like 'updated_at', 'metadata', or 'deleted_by'.
+    // Only send fields verified to exist in the database schema:
+    const { error } = await supabase
       .from('inquiries')
       .update({
         is_deleted: true,
         deleted_at: nowIso,
-        deleted_by: who,
       })
       .eq('id', recordId);
-    if (inqErr) console.error('Soft delete error on inquiries:', inqErr);
 
-    const { error: leadsErr } = await supabase
-      .from('leads')
-      .update({
-        is_deleted: true,
-        deleted_at: nowIso,
-        deleted_by: who,
-      })
-      .eq('id', recordId);
-    if (leadsErr) console.error('Soft delete error on leads:', leadsErr);
-
-    const candidateIds = getCandidateLeadIds(cleanId);
-    for (const cid of candidateIds) {
-      if (cid !== recordId) {
-        try {
-          await supabase.from('leads').update(softDeletePayload).eq('id', cid);
-        } catch {}
-        try {
-          await supabase.from('inquiries').update(softDeletePayload).eq('id', cid);
-        } catch {}
-      }
-
-      try {
-        await resilientPatchRecord('leads', cid, softDeletePayload);
-        await resilientPatchRecord('inquiries', cid, softDeletePayload);
-      } catch {}
-    }
+    if (error) console.error("Soft delete error on inquiries:", error);
 
     // 2. Local storage update
     localStore.deleteInquiry(cleanId, who);
@@ -2576,7 +2542,54 @@ export const api = {
   },
 
   async deleteLead(id: string, deletedBy: string = 'Administrator'): Promise<boolean> {
-    return this.deleteInquiry(id, deletedBy);
+    if (!isValidEntityId(id)) {
+      console.warn('[deleteLead] Stripped malformed request with invalid id:', id);
+      return false;
+    }
+    const cleanId = String(id).trim();
+    const nowIso = new Date().toISOString();
+    const who = deletedBy || 'Administrator';
+    const recordId = cleanId;
+
+    // 1. Soft Delete Implementation:
+    // Strictly target the 'leads' table only.
+    // Strip out non-existent fields like 'updated_at', 'metadata', or 'deleted_by'.
+    // Only send fields verified to exist in the database schema:
+    const { error } = await supabase
+      .from('leads')
+      .update({
+        is_deleted: true,
+        deleted_at: nowIso,
+      })
+      .eq('id', recordId);
+
+    if (error) console.error("Soft delete error on leads:", error);
+
+    // 2. Local storage update
+    localStore.deleteInquiry(cleanId, who);
+
+    // 3. Dispatch real-time events across all tabs/windows
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tirth-lead-changed', {
+          detail: {
+            action: 'delete',
+            leadId: cleanId,
+            lead: { id: cleanId, isDeleted: true, deletedAt: nowIso, deletedBy: who },
+          },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('tirth-inquiry-changed', {
+          detail: {
+            action: 'delete',
+            inquiryId: cleanId,
+            inquiry: { id: cleanId, isDeleted: true, deletedAt: nowIso, deletedBy: who },
+          },
+        })
+      );
+    }
+    return true;
   },
 
   async getDeletedInquiries(): Promise<Inquiry[]> {
@@ -3374,15 +3387,15 @@ export const api = {
     const who = deletedBy || 'Administrator';
     const nowIso = new Date().toISOString();
     try {
-      // Soft delete: Only send columns that exist in the database schema ('is_deleted', 'deleted_at', 'deleted_by')
-      await supabase
+      // Soft delete: Only send columns verified to exist in the database schema ('is_deleted', 'deleted_at')
+      const { error } = await supabase
         .from('hotels')
         .update({
           is_deleted: true,
           deleted_at: nowIso,
-          deleted_by: who,
         })
         .eq('id', cleanId);
+      if (error) console.error("Soft delete error on hotels:", error);
     } catch (err) {
       console.warn('[Supabase deleteHotel] Supabase delete error:', err);
     }

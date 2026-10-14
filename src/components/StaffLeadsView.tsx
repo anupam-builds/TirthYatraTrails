@@ -51,8 +51,8 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
     setLoading(true);
     console.log('🔍 [StaffLeads] Querying assigned leads for staffId:', staffId);
     try {
-      let qLeads = supabase.from('leads').select('*').eq('assigned_staff_id', staffId).or('is_deleted.is.null,is_deleted.eq.false').order('created_at', { ascending: false });
-      let qInq = supabase.from('inquiries').select('*').eq('assigned_staff_id', staffId).or('is_deleted.is.null,is_deleted.eq.false').order('created_at', { ascending: false });
+      let qLeads = supabase.from('leads').select('*').eq('assigned_staff_id', staffId).eq('is_deleted', false).order('created_at', { ascending: false });
+      let qInq = supabase.from('inquiries').select('*').eq('assigned_staff_id', staffId).eq('is_deleted', false).order('created_at', { ascending: false });
       let [leadsRes, inqRes] = await Promise.allSettled([qLeads, qInq]);
 
       if (

@@ -533,30 +533,29 @@ export const AdminInquiries: React.FC = () => {
           return null;
         });
 
-        // 2. Perform soft-delete directly on Supabase on inquiries & leads tables:
-        // Only send fields that exist in the database schema ('is_deleted', 'deleted_at', 'deleted_by')
+        // 2. Perform soft-delete directly on Supabase on target table only:
+        // When deleting an inquiry or lead (whose ID starts with 'inq-...'), do not blindly broadcast or iterate update patches to unrelated tables like hotels. Ensure deleteInquiry only targets the inquiries table, and deleteLead only targets the leads table.
+        // Strip out any fields like 'updated_at', 'metadata', or 'deleted_by' from delete/soft-delete payloads.
         const recordId = cleanId;
-        const deletePayload = { 
-          is_deleted: true, 
-          deleted_at: nowIso,
-          deleted_by: who,
-        };
-        const { error: inqError } = await supabase
-          .from('inquiries')
-          .update(deletePayload)
+        const isLead = recordId.startsWith('lead-') || (inq as any)?.type === 'lead';
+        const targetTable = isLead ? 'leads' : 'inquiries';
+
+        const { error } = await supabase
+          .from(targetTable)
+          .update({ 
+            is_deleted: true, 
+            deleted_at: nowIso,
+          })
           .eq('id', recordId);
 
-        if (inqError) console.error("Soft delete error on inquiries:", inqError);
-
-        const { error: leadsError } = await supabase
-          .from('leads')
-          .update(deletePayload)
-          .eq('id', recordId);
-
-        if (leadsError) console.error("Soft delete error on leads:", leadsError);
+        if (error) console.error(`Soft delete error on ${targetTable}:`, error);
 
         // 3. Complete soft-delete via API service (syncs localStore & broadcasts real-time events)
-        await api.deleteInquiry(recordId, who);
+        if (isLead) {
+          await api.deleteLead(recordId, who);
+        } else {
+          await api.deleteInquiry(recordId, who);
+        }
 
         // 4. Keep trash bin fully synchronized with Supabase
         await loadDeletedInquiries();
