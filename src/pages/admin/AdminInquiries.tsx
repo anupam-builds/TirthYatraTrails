@@ -588,21 +588,55 @@ export const AdminInquiries: React.FC = () => {
       const chosenStaff = staffList.find((s) => s.id === chosenStaffId);
       const staffName = chosenStaff ? chosenStaff.name : (staffList[0]?.name || 'Staff Member');
 
+      const isLead = cleanId.startsWith('lead-') || (inq as any)?.type === 'lead';
+      const targetTable = isLead ? 'leads' : 'inquiries';
+
+      // 1. Direct Supabase update: set is_deleted back to false and clear deletion timestamps
+      const { error } = await supabase
+        .from(targetTable)
+        .update({
+          is_deleted: false,
+          deleted_at: null,
+          deleted_by: null,
+        })
+        .eq('id', cleanId);
+
+      if (error) console.error("Restore error:", error);
+
+      // 2. Perform restore through API service
       const restored = await api.restoreInquiry(cleanId, chosenStaffId, staffName);
+
+      // 3. State Management & UI Refresh:
+      // Instantly remove from the trash bin state array and append back to the active leads list state
       setDeletedInquiries((prev) => prev.filter((i) => i.id !== cleanId && !matchLeadId(i, cleanId)));
       setInquiries((prev) => [restored, ...prev.filter((i) => i.id !== cleanId && !matchLeadId(i, cleanId))]);
 
+      // 4. Trigger fresh re-fetch of both active and trash datasets so the UI updates immediately without needing a hard browser refresh
+      await Promise.allSettled([
+        refetchInquiries(),
+        loadDeletedInquiries(),
+      ]);
+
       setActionMessage({
         type: 'success',
-        text: `Lead ${getLeadId(restored)} successfully restored and assigned to ${restored.assignedStaffName || staffName}!`,
+        text: `Lead ${getLeadId(restored)} successfully restored and returned to active leads!`,
       });
       setTimeout(() => setActionMessage(null), 4500);
     } catch (err: any) {
+      console.error('Failed to restore inquiry:', err);
+      // Fallback: Re-fetch datasets so active/trash UI reflects current state
+      await Promise.allSettled([
+        refetchInquiries(),
+        loadDeletedInquiries(),
+      ]);
       alert(err.message || 'Failed to restore inquiry');
     } finally {
       setRestoringId(null);
     }
   };
+
+  const restoreInquiry = handleRestore;
+  const restoreLead = handleRestore;
 
   const handlePermanentDelete = async (id: string) => {
     if (!isValidEntityId(id)) {

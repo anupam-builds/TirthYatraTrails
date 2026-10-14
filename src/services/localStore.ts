@@ -1063,18 +1063,31 @@ export const localStore = {
   restoreInquiry(id: string, staffId?: string, staffName?: string): Inquiry {
     const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
     const idx = inquiries.findIndex((i) => String(i.id) === String(id) || String(i.leadId) === String(id));
-    if (idx === -1) throw new Error('Inquiry not found');
-
-    const inq = inquiries[idx];
-    inq.isDeleted = false;
-    inq.deletedAt = undefined;
-    inq.deletedBy = undefined;
-    if (staffId) {
-      inq.assignedStaffId = staffId;
+    let inq: Inquiry;
+    if (idx !== -1) {
+      inq = inquiries[idx];
+      inq.isDeleted = false;
+      inq.deletedAt = undefined;
+      inq.deletedBy = undefined;
+      if (staffId) {
+        inq.assignedStaffId = staffId;
+        const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
+        inq.assignedStaffName = staffName || (rawStaff.find((s) => s.id === staffId)?.name || 'Staff');
+      }
+      setStored(STORAGE_KEYS.INQUIRIES, inquiries);
+    } else {
       const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
-      inq.assignedStaffName = staffName || (rawStaff.find((s) => s.id === staffId)?.name || 'Staff');
+      inq = {
+        id,
+        isDeleted: false,
+        status: 'NEW',
+        assignedStaffId: staffId || undefined,
+        assignedStaffName: staffName || (staffId ? (rawStaff.find((s) => s.id === staffId)?.name || 'Staff') : undefined),
+        createdAt: new Date().toISOString(),
+      } as Inquiry;
+      inquiries.unshift(inq);
+      setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     }
-    setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     return inq;
   },
 

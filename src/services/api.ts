@@ -2663,50 +2663,86 @@ export const api = {
       throw new Error('Valid lead ID is required for restoration');
     }
     const cleanId = String(id).trim();
-    const nowIso = new Date().toISOString();
+    const recordId = cleanId;
+    const isLead = recordId.startsWith('lead-');
+    const primaryTable = isLead ? 'leads' : 'inquiries';
+    const fallbackTable = isLead ? 'inquiries' : 'leads';
 
+    // 1. Supabase restore update query: set is_deleted back to false and clear deletion timestamps
     const restorePayload: Record<string, any> = {
       is_deleted: false,
       deleted_at: null,
       deleted_by: null,
-      updated_at: nowIso,
     };
     if (sId) {
       restorePayload.assigned_staff_id = sId;
-      restorePayload.assigned_staff_name = sName || null;
     }
 
-    // 1. Restore Action: Update the lead's is_deleted flag back to false in Supabase
-    const candidateIds = getCandidateLeadIds(cleanId);
-    for (const cid of candidateIds) {
-      try {
-        await supabase.from('leads').update(restorePayload).eq('id', cid);
-      } catch (err) {
-        console.warn(`[restoreInquiry] Supabase leads restore update failed for id ${cid}:`, err);
-      }
-      try {
-        await supabase.from('inquiries').update(restorePayload).eq('id', cid);
-      } catch (err) {
-        console.warn(`[restoreInquiry] Supabase inquiries restore update failed for id ${cid}:`, err);
-      }
+    let { error } = await supabase
+      .from(primaryTable)
+      .update(restorePayload)
+      .eq('id', recordId);
 
-      try {
-        await resilientPatchRecord('leads', cid, restorePayload);
-        await resilientPatchRecord('inquiries', cid, restorePayload);
-      } catch {}
+    if (error) {
+      console.error(`Restore error on ${primaryTable}:`, error);
+      // Fallback to alternate table in case record is located there
+      const altRes = await supabase
+        .from(fallbackTable)
+        .update(restorePayload)
+        .eq('id', recordId);
+      if (altRes.error) {
+        console.error(`Restore error on ${fallbackTable}:`, altRes.error);
+      }
     }
 
-    // 2. Update local storage
-    const restored = localStore.restoreInquiry(cleanId, sId, sName);
+    // 2. Fetch fresh record from Supabase or construct from localStore
+    let restored: Inquiry;
+    try {
+      const { data } = await supabase
+        .from(primaryTable)
+        .select('*')
+        .eq('id', recordId)
+        .maybeSingle();
 
-    // 4. Broadcast and dispatch events
+      if (data) {
+        restored = mapInquiryRow(data);
+      } else {
+        const { data: altData } = await supabase
+          .from(fallbackTable)
+          .select('*')
+          .eq('id', recordId)
+          .maybeSingle();
+        restored = altData ? mapInquiryRow(altData) : localStore.restoreInquiry(cleanId, sId, sName);
+      }
+    } catch {
+      restored = localStore.restoreInquiry(cleanId, sId, sName);
+    }
+
+    // Synchronize local storage state
+    try {
+      localStore.restoreInquiry(cleanId, sId, sName);
+    } catch {}
+
+    // 3. Broadcast and dispatch real-time events across all tabs/windows
     broadcastInquiryUpdated(restored, { newStatus: restored.status, staffName: restored.assignedStaffName });
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-lead-changed', { detail: { action: 'restore', lead: restored } }));
-      window.dispatchEvent(new CustomEvent('tirth-inquiry-changed', { detail: { action: 'restore', inquiry: restored } }));
+      window.dispatchEvent(
+        new CustomEvent('tirth-lead-changed', {
+          detail: { action: 'restore', lead: restored, leadId: cleanId },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('tirth-inquiry-changed', {
+          detail: { action: 'restore', inquiry: restored, inquiryId: cleanId },
+        })
+      );
     }
 
     return restored;
+  },
+
+  async restoreLead(id: string, sId?: string, sName?: string): Promise<Inquiry> {
+    return this.restoreInquiry(id, sId, sName);
   },
 
   async permanentlyDeleteInquiry(id: string): Promise<boolean> {
