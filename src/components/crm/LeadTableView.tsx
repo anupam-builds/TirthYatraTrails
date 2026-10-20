@@ -309,33 +309,39 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       />
 
       {/* 1. SUMMARY METRICS CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-2.5">
         {/* Total Enquiries */}
         <div
           onClick={() => {
             setStatusFilter('ALL');
             if (isAdmin) setStaffFilter('ALL');
           }}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'ALL' && staffFilter === 'ALL'
               ? 'bg-orange-50 border-orange-300 dark:bg-orange-950/40 dark:border-orange-700 ring-2 ring-orange-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-orange-200'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 leading-tight break-words">
-              {isStaffMode ? 'My Assigned Leads' : 'Total Leads'}
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span
+              className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 leading-tight truncate"
+              title={isStaffMode ? 'My Assigned Leads' : 'Total Leads'}
+            >
+              {isStaffMode ? 'My Leads' : 'Total Leads'}
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400">
-              <MessageSquare className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400">
+              <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono leading-none tracking-tight">
               {totalCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              {isStaffMode ? 'assigned to desk' : 'leads registered'}
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title={isStaffMode ? 'assigned desk' : 'registered'}
+            >
+              {isStaffMode ? 'assigned desk' : 'registered'}
             </span>
           </div>
         </div>
@@ -343,26 +349,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* New Leads */}
         <div
           onClick={() => setStatusFilter('NEW')}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'NEW'
               ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700 ring-2 ring-amber-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-amber-200'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-amber-700 dark:text-amber-400 leading-tight break-words">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[11px] sm:text-xs font-bold text-amber-700 dark:text-amber-400 leading-tight truncate">
               New Leads
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <Sparkles className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-amber-700 dark:text-amber-300 font-mono leading-none tracking-tight">
               {newCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              awaiting contact
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title="awaiting contact"
+            >
+              awaiting
             </span>
           </div>
         </div>
@@ -370,26 +379,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Contacted */}
         <div
           onClick={() => setStatusFilter('CONTACTED')}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'CONTACTED'
               ? 'bg-blue-50 border-blue-300 dark:bg-blue-950/40 dark:border-blue-700 ring-2 ring-blue-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-blue-200'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-blue-600 dark:text-blue-400 leading-tight break-words">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[11px] sm:text-xs font-bold text-blue-600 dark:text-blue-400 leading-tight truncate">
               Contacted
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400">
-              <Clock className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-blue-700 dark:text-blue-300 font-mono leading-none tracking-tight">
               {contactedCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              active consultations
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title="active consults"
+            >
+              active consults
             </span>
           </div>
         </div>
@@ -397,26 +409,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Confirmed Bookings */}
         <div
           onClick={() => setStatusFilter('CONFIRMED')}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'CONFIRMED'
               ? 'bg-emerald-50 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-700 ring-2 ring-emerald-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-emerald-200'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 leading-tight break-words">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[11px] sm:text-xs font-bold text-emerald-700 dark:text-emerald-400 leading-tight truncate">
               Confirmed
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono leading-none tracking-tight">
               {confirmedCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              bookings confirmed
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title="confirmed bookings"
+            >
+              confirmed
             </span>
           </div>
         </div>
@@ -424,26 +439,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Trip - Itinerary Ready & Finalized for Travel */}
         <div
           onClick={() => setStatusFilter('TRIP')}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'TRIP' || statusFilter === 'Trip'
               ? 'bg-purple-50 border-purple-300 dark:bg-purple-950/40 dark:border-purple-700 ring-2 ring-purple-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-purple-200'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-purple-700 dark:text-purple-400 leading-tight break-words">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[11px] sm:text-xs font-bold text-purple-700 dark:text-purple-400 leading-tight truncate">
               Trip
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center text-purple-600 dark:text-purple-400">
-              <Compass className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Compass className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-purple-700 dark:text-purple-300 font-mono leading-none tracking-tight">
               {tripCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              ready for travel
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title="travel ready"
+            >
+              travel ready
             </span>
           </div>
         </div>
@@ -451,26 +469,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Cancelled */}
         <div
           onClick={() => setStatusFilter('CANCELLED')}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'CANCELLED' || statusFilter === 'Cancelled'
               ? 'bg-red-50 border-red-300 dark:bg-red-950/40 dark:border-red-700 ring-2 ring-red-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-red-200'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-red-700 dark:text-red-400 leading-tight break-words">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[11px] sm:text-xs font-bold text-red-700 dark:text-red-400 leading-tight truncate">
               Cancelled
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center text-red-600 dark:text-red-400">
-              <XCircle className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center text-red-600 dark:text-red-400">
+              <XCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-red-700 dark:text-red-300 font-mono leading-none tracking-tight">
               {cancelledCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              void / cancelled
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title="cancelled"
+            >
+              cancelled
             </span>
           </div>
         </div>
@@ -478,26 +499,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Postponed */}
         <div
           onClick={() => setStatusFilter('POSTPONED')}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'POSTPONED' || statusFilter === 'Postponed'
               ? 'bg-orange-50 border-orange-300 dark:bg-orange-950/40 dark:border-orange-700 ring-2 ring-orange-500/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-orange-200'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-orange-700 dark:text-orange-400 leading-tight break-words">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[11px] sm:text-xs font-bold text-orange-700 dark:text-orange-400 leading-tight truncate">
               Postponed
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400">
-              <CalendarClock className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400">
+              <CalendarClock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-orange-700 dark:text-orange-300 font-mono leading-none tracking-tight">
               {postponedCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              dates deferred
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title="deferred dates"
+            >
+              deferred
             </span>
           </div>
         </div>
@@ -505,26 +529,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         {/* Closed */}
         <div
           onClick={() => setStatusFilter('CLOSED')}
-          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
+          className={`px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs min-w-0 flex flex-col justify-between ${
             statusFilter === 'CLOSED'
               ? 'bg-slate-100 border-slate-300 dark:bg-slate-800 dark:border-slate-700 ring-2 ring-slate-400/20'
               : 'bg-white dark:bg-[#0d1d33] border-slate-200 dark:border-slate-800 hover:border-slate-300'
           }`}
         >
-          <div className="flex items-start justify-between gap-1.5 min-w-0">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-tight break-words">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 leading-tight truncate">
               Closed
             </span>
-            <div className="w-7 h-7 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+              <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </div>
           </div>
-          <div className="mt-2.5 sm:mt-3 flex flex-col min-w-0">
+          <div className="mt-2 flex flex-col min-w-0">
             <span className="text-xl sm:text-2xl font-black text-slate-700 dark:text-slate-300 font-mono leading-none tracking-tight">
               {closedCount}
             </span>
-            <span className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-400 break-words leading-snug">
-              finalized records
+            <span
+              className="mt-1 text-[10px] sm:text-[10.5px] font-medium text-slate-400 dark:text-slate-400 tracking-tight truncate"
+              title="finalized"
+            >
+              finalized
             </span>
           </div>
         </div>

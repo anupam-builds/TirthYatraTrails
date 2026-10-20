@@ -3,20 +3,22 @@ import React, { useEffect, useState } from 'react';
 /**
  * FlyingPilgrim component:
  * Renders a subtle, stylized, reverent flying pilgrim (Hanuman Ji / devotee)
- * that glides once gracefully across the customer landing page and app
- * on initial page load (on mount) in a fluid, continuous sweeping arc.
+ * that glides smoothly and continuously across the screen without breaks or stuttering
+ * on initial page load (on mount).
  *
- * Full-page overlay (fixed inset-0 pointer-events-none z-50) with unhurried 7s glide
- * and cubic-bezier(0.25, 1, 0.5, 1) easing.
+ * - GPU-accelerated translate3d with cubic-bezier(0.4, 0, 0.2, 1)
+ * - Decoupled continuous sinusoidal wave for natural floating up-and-down motion
+ * - Full-page overlay (fixed inset-0 pointer-events-none z-50)
+ * - Unhurried 7-second duration with clean fade-out and unmount
  */
 export const FlyingPilgrim: React.FC = () => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    // Automatically unmount from the DOM once the 7.0s flight animation finishes
+    // Automatically unmount from the DOM once the flight animation completes
     const timer = setTimeout(() => {
       setIsVisible(false);
-    }, 7300);
+    }, 7200);
 
     return () => clearTimeout(timer);
   }, []);
@@ -29,59 +31,54 @@ export const FlyingPilgrim: React.FC = () => {
       className="fixed inset-0 pointer-events-none select-none z-50 overflow-hidden"
     >
       <style>{`
-        /* Continuous sweeping arc with natural banking from top-left to bottom-right */
-        @keyframes pilgrimGlideArc {
+        /* 1. Main Continuous GPU Flight Path across full viewport */
+        @keyframes pilgrimFlightSweep {
           0% {
-            transform: translate3d(-140px, 8vh, 0) rotate(-4deg) scale(0.75);
+            transform: translate3d(-160px, 16vh, 0);
             opacity: 0;
           }
-          12% {
-            transform: translate3d(14vw, 16vh, 0) rotate(2deg) scale(0.92);
-            opacity: 0.95;
-          }
-          32% {
-            transform: translate3d(36vw, 30vh, 0) rotate(5deg) scale(1);
+          6% {
             opacity: 1;
           }
-          56% {
-            transform: translate3d(60vw, 46vh, 0) rotate(3deg) scale(0.98);
+          88% {
             opacity: 1;
-          }
-          78% {
-            transform: translate3d(80vw, 64vh, 0) rotate(-1deg) scale(0.92);
-            opacity: 0.85;
-          }
-          92% {
-            transform: translate3d(94vw, 76vh, 0) rotate(-4deg) scale(0.84);
-            opacity: 0.35;
           }
           100% {
-            transform: translate3d(calc(100vw + 60px), 88vh, 0) rotate(-7deg) scale(0.76);
+            transform: translate3d(calc(100vw + 60px), 62vh, 0);
             opacity: 0;
           }
         }
 
-        /* Subtle vertical float and banking during flight */
-        @keyframes pilgrimBankWave {
-          0%, 100% {
+        /* 2. Decoupled Continuous Sinusoidal Wave & Gentle Banking */
+        @keyframes pilgrimFloatingWave {
+          0% {
+            transform: translateY(0px) rotate(2deg);
+          }
+          25% {
+            transform: translateY(-20px) rotate(5deg);
+          }
+          50% {
             transform: translateY(0px) rotate(0deg);
           }
-          50% {
-            transform: translateY(-8px) rotate(-2deg);
+          75% {
+            transform: translateY(16px) rotate(-3deg);
+          }
+          100% {
+            transform: translateY(0px) rotate(2deg);
           }
         }
 
-        /* Reverent warm orange brand glow pulse */
+        /* 3. Reverent Orange Brand Accent Aura Glow */
         @keyframes pilgrimAuraGlow {
           0%, 100% {
-            filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.7)) drop-shadow(0 0 28px rgba(245, 158, 11, 0.45));
+            filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.75)) drop-shadow(0 0 28px rgba(245, 158, 11, 0.45));
           }
           50% {
-            filter: drop-shadow(0 0 20px rgba(249, 115, 22, 0.9)) drop-shadow(0 0 36px rgba(251, 191, 36, 0.6));
+            filter: drop-shadow(0 0 22px rgba(249, 115, 22, 0.95)) drop-shadow(0 0 38px rgba(251, 191, 36, 0.6));
           }
         }
 
-        /* Gentle trailing sparkle stars */
+        /* 4. Trailing Stardust Sparkles */
         @keyframes sparkleFade {
           0%, 100% {
             opacity: 0.35;
@@ -93,13 +90,13 @@ export const FlyingPilgrim: React.FC = () => {
           }
         }
 
-        .pilgrim-sweeping-arc {
-          animation: pilgrimGlideArc 7s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        .pilgrim-sweep-wrapper {
+          animation: pilgrimFlightSweep 7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
           will-change: transform, opacity;
         }
 
-        .pilgrim-bank-container {
-          animation: pilgrimBankWave 2.2s ease-in-out infinite;
+        .pilgrim-wave-wrapper {
+          animation: pilgrimFloatingWave 2.3s ease-in-out infinite;
           will-change: transform;
         }
 
@@ -112,9 +109,10 @@ export const FlyingPilgrim: React.FC = () => {
         }
       `}</style>
 
-      {/* Sweeping Arc Motion Container */}
-      <div className="absolute top-0 left-0 pilgrim-sweeping-arc">
-        <div className="pilgrim-bank-container">
+      {/* Primary Sweeping Flight Wrapper (X & Y linear sweep) */}
+      <div className="absolute top-0 left-0 pilgrim-sweep-wrapper">
+        {/* Secondary Sine-Wave Floating & Banking Wrapper */}
+        <div className="pilgrim-wave-wrapper">
           <div className="relative pilgrim-aura-glow">
             {/* Stylized Indian Pilgrim / Hanuman Ji SVG Vector Illustration */}
             <svg
