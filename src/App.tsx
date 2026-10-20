@@ -6,6 +6,7 @@ import { CitiesProvider } from './context/CitiesContext.js';
 import { CustomerNavbar } from './components/layout/Navbar.js';
 import { CustomerFooter } from './components/layout/Footer.js';
 import { WhatsAppFloatingButton } from './components/common/WhatsAppFloatingButton.js';
+import { FlyingPilgrim } from './components/common/FlyingPilgrim.js';
 
 // Customer Pages
 import { HomePage } from './pages/HomePage.js';
@@ -180,6 +181,7 @@ export default function App() {
           <RouterProvider>
             <AppContent />
             <WhatsAppFloatingButton />
+            <FlyingPilgrim />
           </RouterProvider>
         </CitiesProvider>
       </AuthProvider>
