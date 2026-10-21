@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
+import { supabase } from '../lib/supabase.js';
 import { Package } from '../types.js';
 import { BaseInput, BaseSelect } from '../components/FormField.js';
 import { useDynamicPackageCategories } from '../components/PackagesView.js';
@@ -57,11 +58,35 @@ export const PackagesPage: React.FC = () => {
 
     if (typeof window !== 'undefined') {
       window.addEventListener('tirth-package-changed', handlePackageRefresh);
+      window.addEventListener('storage', handlePackageRefresh);
+      window.addEventListener('focus', handlePackageRefresh);
     }
+
+    // Real-time Supabase Channel
+    const channelName = 'public:content-sync-channel';
+    const channel = supabase.channel(channelName);
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, () => {
+        handlePackageRefresh();
+      })
+      .on('broadcast', { event: 'package_deleted' }, () => {
+        handlePackageRefresh();
+      })
+      .on('broadcast', { event: 'package_updated' }, () => {
+        handlePackageRefresh();
+      })
+      .on('broadcast', { event: 'package_created' }, () => {
+        handlePackageRefresh();
+      })
+      .subscribe();
+
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('tirth-package-changed', handlePackageRefresh);
+        window.removeEventListener('storage', handlePackageRefresh);
+        window.removeEventListener('focus', handlePackageRefresh);
       }
+      supabase.removeChannel(channel);
     };
   }, []);
 

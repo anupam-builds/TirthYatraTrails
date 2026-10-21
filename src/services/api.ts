@@ -125,6 +125,24 @@ export function isValidEntityId(id: unknown): id is string | number {
 }
 
 /**
+ * Cross-device Realtime Broadcast Channel: Immediately pushes events across all connected browser tabs & laptops
+ */
+export function broadcastContentSync(event: string, payload: Record<string, any>) {
+  try {
+    const channel = supabase.channel('public:content-sync-channel');
+    channel.send({
+      type: 'broadcast',
+      event,
+      payload,
+    }).catch((err) => {
+      console.debug('[broadcastContentSync] Channel broadcast notice:', err);
+    });
+  } catch (err) {
+    console.debug('[broadcastContentSync] Exception broadcasting:', err);
+  }
+}
+
+/**
  * Resolves candidate IDs for a lead/inquiry to handle exact record IDs and localStore mappings.
  * Strictly returns validated IDs to target primary key column 'id'.
  */
@@ -1672,13 +1690,17 @@ export const api = {
         error = fallbackRes.error;
       }
 
-      if (!error && data && data.length) {
+      if (!error && Array.isArray(data)) {
+        const deletedHotelIds = localStore.getDeletedHotelIds();
         let list = data
-          .filter((h) => !h.is_deleted && !(h as any).isDeleted)
+          .filter((h) => !h.is_deleted && !(h as any).isDeleted && !deletedHotelIds.includes((h.id || '').toLowerCase().trim()))
           .map(mapHotelRow);
         if (query) {
-          const lower = query.toLowerCase();
+          const lower = query.toLowerCase().trim();
           list = list.filter((h) => h.name.toLowerCase().includes(lower) || h.cityName?.toLowerCase().includes(lower));
+        }
+        if (!cityId && !query) {
+          localStore.setHotels(list);
         }
         return list;
       }
@@ -1715,11 +1737,17 @@ export const api = {
         q = q.eq('category', category);
       }
       const res = await q;
-      if (!res.error && res.data && res.data.length) {
-        let list = res.data.map(mapPackageRow);
+      if (!res.error && Array.isArray(res.data)) {
+        const deletedPkgIds = localStore.getDeletedPackageIds();
+        let list = res.data
+          .filter((p: any) => !p.is_deleted && !(p as any).isDeleted && !deletedPkgIds.includes((p.id || '').toLowerCase().trim()))
+          .map(mapPackageRow);
         if (query) {
-          const lower = query.toLowerCase();
+          const lower = query.toLowerCase().trim();
           list = list.filter((p) => p.title.toLowerCase().includes(lower) || p.location.toLowerCase().includes(lower));
+        }
+        if (!category && !query) {
+          localStore.setPackages(list);
         }
         return list;
       }
@@ -3115,6 +3143,7 @@ export const api = {
         if (row) {
           const mapped = mapHotelRow(row);
           localStore.createHotel(mapped);
+          broadcastContentSync('hotel_created', { hotel: mapped, id: mapped.id });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: mapped } }));
           }
@@ -3134,6 +3163,7 @@ export const api = {
       if (!error && data) {
         const mapped = mapHotelRow(data);
         localStore.createHotel(mapped);
+        broadcastContentSync('hotel_created', { hotel: mapped, id: mapped.id });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: mapped } }));
         }
@@ -3151,6 +3181,7 @@ export const api = {
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapHotelRow(restRes.data[0]);
         localStore.createHotel(mapped);
+        broadcastContentSync('hotel_created', { hotel: mapped, id: mapped.id });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: mapped } }));
         }
@@ -3162,6 +3193,7 @@ export const api = {
 
     const fallbackId = (insertPayload as any).id || (id && !isTempId ? id : `htl-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
     const saved = localStore.createHotel({ ...hotel, ...insertPayload, id: fallbackId } as Hotel);
+    broadcastContentSync('hotel_created', { hotel: saved, id: fallbackId });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'create', hotel: saved } }));
     }
@@ -3323,6 +3355,7 @@ export const api = {
         const mapped = mapHotelRow(data);
         localStore.updateHotel(hotelId, mapped);
         syncHotelInventory(hotelId);
+        broadcastContentSync('hotel_updated', { hotel: mapped, id: hotelId });
         fetch(`/api/hotels/${encodeURIComponent(hotelId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -3354,6 +3387,7 @@ export const api = {
           const mapped = mapHotelRow(row);
           localStore.updateHotel(hotelId, mapped);
           syncHotelInventory(hotelId);
+          broadcastContentSync('hotel_updated', { hotel: mapped, id: hotelId });
           fetch(`/api/hotels/${encodeURIComponent(hotelId)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -3379,6 +3413,7 @@ export const api = {
       if (serverRes.ok) {
         const serverHotel = await serverRes.json();
         const saved = localStore.updateHotel(hotelId, serverHotel);
+        broadcastContentSync('hotel_updated', { hotel: saved, id: hotelId });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: saved } }));
         }
@@ -3408,6 +3443,7 @@ export const api = {
     } as Hotel;
 
     const saved = localStore.updateHotel(hotelId, fallbackHotel);
+    broadcastContentSync('hotel_updated', { hotel: saved, id: hotelId });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'update', hotel: saved } }));
     }
@@ -3422,8 +3458,13 @@ export const api = {
     const cleanId = String(id).trim();
     const who = deletedBy || 'Administrator';
     const nowIso = new Date().toISOString();
+    const explicitHeaders = getSupabaseHeaders();
+
+    // 1. Immediately delete from localStore and add tombstone blacklist
+    localStore.deleteHotel(cleanId);
+
+    // 2. Soft delete via Supabase SDK
     try {
-      // Soft delete: Only send columns verified to exist in the database schema ('is_deleted', 'deleted_at')
       const { error } = await supabase
         .from('hotels')
         .update({
@@ -3431,13 +3472,40 @@ export const api = {
           deleted_at: nowIso,
         })
         .eq('id', cleanId);
-      if (error) console.error("Soft delete error on hotels:", error);
+      if (error) console.error('Soft delete error on hotels:', error);
     } catch (err) {
       console.warn('[Supabase deleteHotel] Supabase delete error:', err);
     }
-    localStore.deleteHotel(cleanId);
+
+    // 3. Fallback PostgREST PATCH for soft delete
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/hotels?id=eq.${encodeURIComponent(cleanId)}`, {
+        method: 'PATCH',
+        headers: explicitHeaders,
+        body: JSON.stringify({ is_deleted: true, deleted_at: nowIso }),
+      });
+    } catch {}
+
+    // 4. Secondary hard-delete attempt via direct PostgREST DELETE
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/hotels?id=eq.${encodeURIComponent(cleanId)}`, {
+        method: 'DELETE',
+        headers: explicitHeaders,
+      });
+    } catch {}
+
+    // 5. Broadcast deletion across Supabase Realtime channel to notify all open browser sessions
+    try {
+      const channel = supabase.channel('public:content-sync-channel');
+      channel.send({
+        type: 'broadcast',
+        event: 'hotel_deleted',
+        payload: { id: cleanId },
+      }).catch(() => {});
+    } catch {}
+
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', hotelId: cleanId } }));
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', hotelId: cleanId, target: cleanId } }));
     }
     return true;
   },
@@ -3514,6 +3582,7 @@ export const api = {
         if (row) {
           const mapped = mapPackageRow(row);
           localStore.createPackage(mapped);
+          broadcastContentSync('package_created', { package: mapped, id: mapped.id });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
           }
@@ -3524,6 +3593,7 @@ export const api = {
         if (isStatementTimeoutError(errText)) {
           console.warn(`[Supabase createPackage] Statement timeout (code 57014) intercepted on PostgREST POST. Safeguarding local state.`);
           const fallbackMapped = localStore.createPackage({ ...pkg, ...insertPayload, id: (insertPayload as any).id || `pkg-${Date.now()}` } as Package);
+          broadcastContentSync('package_created', { package: fallbackMapped, id: fallbackMapped.id });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
           }
@@ -3535,6 +3605,7 @@ export const api = {
       if (isStatementTimeoutError(fetchErr)) {
         console.warn(`[Supabase createPackage] Statement timeout caught in fetch. Preserving local package.`);
         const fallbackMapped = localStore.createPackage({ ...pkg, ...insertPayload, id: (insertPayload as any).id || `pkg-${Date.now()}` } as Package);
+        broadcastContentSync('package_created', { package: fallbackMapped, id: fallbackMapped.id });
         return fallbackMapped;
       }
       console.warn('Direct fetch createPackage network error:', fetchErr);
@@ -3546,6 +3617,7 @@ export const api = {
       if (!error && data) {
         const mapped = mapPackageRow(data);
         localStore.createPackage(mapped);
+        broadcastContentSync('package_created', { package: mapped, id: mapped.id });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
         }
@@ -3563,6 +3635,7 @@ export const api = {
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapPackageRow(restRes.data[0]);
         localStore.createPackage(mapped);
+        broadcastContentSync('package_created', { package: mapped, id: mapped.id });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
         }
@@ -3574,6 +3647,7 @@ export const api = {
 
     const fallbackId = String((insertPayload as any).id || (id && !isTempId ? id : `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`));
     const saved = localStore.createPackage({ ...pkg, ...insertPayload, id: fallbackId } as Package);
+    broadcastContentSync('package_created', { package: saved, id: fallbackId });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: saved }));
     }
@@ -3662,6 +3736,7 @@ export const api = {
           patchMatched = true;
           const mapped = mapPackageRow(row);
           localStore.updatePackage(rawId, mapped);
+          broadcastContentSync('package_updated', { package: mapped, id: rawId });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
           }
@@ -3676,6 +3751,7 @@ export const api = {
         if (isStatementTimeoutError(errText)) {
           console.debug(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${rawId}. Safeguarding local state.`);
           const fallbackMapped = localStore.updatePackage(rawId, pkg);
+          broadcastContentSync('package_updated', { package: fallbackMapped, id: rawId });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
           }
@@ -3687,6 +3763,7 @@ export const api = {
       if (isStatementTimeoutError(fetchErr)) {
         console.debug(`[Supabase updatePackage] Statement timeout caught in fetch. Preserving local package.`);
         const fallbackMapped = localStore.updatePackage(rawId, pkg);
+        broadcastContentSync('package_updated', { package: fallbackMapped, id: rawId });
         return fallbackMapped;
       }
       console.debug('Direct fetch updatePackage network notice:', fetchErr);
@@ -3708,6 +3785,7 @@ export const api = {
         if (!upsertErr && upsertData) {
           const mapped = mapPackageRow(upsertData);
           localStore.updatePackage(rawId, mapped);
+          broadcastContentSync('package_updated', { package: mapped, id: rawId });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
           }
@@ -3730,6 +3808,7 @@ export const api = {
           if (upsertRow) {
             const mapped = mapPackageRow(upsertRow);
             localStore.updatePackage(rawId, mapped);
+            broadcastContentSync('package_updated', { package: mapped, id: rawId });
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
             }
@@ -3740,6 +3819,7 @@ export const api = {
         if (isStatementTimeoutError(upsertCatchErr)) {
           console.debug('[Supabase updatePackage] Statement timeout caught during upsert fallback. Safeguarding local state.');
           const fallbackMapped = localStore.updatePackage(rawId, pkg);
+          broadcastContentSync('package_updated', { package: fallbackMapped, id: rawId });
           return fallbackMapped;
         }
         console.debug('[Supabase updatePackage] Upsert fallback notice:', upsertCatchErr);
@@ -3752,6 +3832,7 @@ export const api = {
         const inserted = await this.createPackage({ ...pkg, ...insertOnlyPayload });
         if (inserted) {
           localStore.updatePackage(rawId, inserted);
+          broadcastContentSync('package_updated', { package: inserted, id: rawId });
           return inserted;
         }
       } catch (insertErr) {
@@ -3761,6 +3842,7 @@ export const api = {
 
     // 3. Fallback to local storage update so package is never lost
     const updated = localStore.updatePackage(rawId, pkg);
+    broadcastContentSync('package_updated', { package: updated, id: rawId });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: updated }));
     }
@@ -3776,9 +3858,12 @@ export const api = {
 
     if (!id) return false;
 
+    // 1. Immediately delete from localStore and add tombstone blacklist
+    localStore.deletePackage(id);
+
     const explicitHeaders = getSupabaseHeaders();
 
-    // 1. Direct PostgREST DELETE call safely targeting only /rest/v1/packages?id=eq.${id}
+    // 2. Direct PostgREST DELETE call safely targeting only /rest/v1/packages?id=eq.${id}
     try {
       const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(id)}`;
       const response = await fetch(restUrl, {
@@ -3794,16 +3879,33 @@ export const api = {
       console.warn('Direct fetch deletePackage network error:', fetchErr);
     }
 
-    // 2. Secondary supabase SDK call targeting only packages
+    // 3. Secondary supabase SDK call targeting only packages
     try {
       await supabase.from('packages').delete().eq('id', id);
     } catch (err) {
       console.warn('deletePackage Supabase SDK error:', err);
     }
 
-    localStore.deletePackage(id);
+    // 4. Also mark soft-delete flag in case database table enforces soft deletes
+    try {
+      await supabase
+        .from('packages')
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq('id', id);
+    } catch {}
+
+    // 5. Broadcast deletion across Supabase Realtime channel to notify all open browser sessions
+    try {
+      const channel = supabase.channel('public:content-sync-channel');
+      channel.send({
+        type: 'broadcast',
+        event: 'package_deleted',
+        payload: { id },
+      }).catch(() => {});
+    } catch {}
+
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { id } }));
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'delete', id, target: id } }));
     }
     return true;
   },

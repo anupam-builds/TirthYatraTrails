@@ -103,6 +103,36 @@ export const AdminPackages: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    const handlePackageChange = (e?: Event) => {
+      if (e instanceof CustomEvent && e.detail?.action === 'delete') {
+        const delId = String(e.detail.id || e.detail.target || '');
+        if (delId) {
+          setPackages((prev) => prev.filter((p) => p.id !== delId && (p.title || '').toLowerCase() !== delId.toLowerCase()));
+          return;
+        }
+      }
+      loadData();
+    };
+
+    window.addEventListener('tirth-package-changed', handlePackageChange);
+    window.addEventListener('storage', handlePackageChange);
+
+    const handleFocus = () => {
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('tirth-package-changed', handlePackageChange);
+      window.removeEventListener('storage', handlePackageChange);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [selectedCategory, searchQuery]);
 
   // Real-time multi-admin synchronization via static channel
@@ -115,14 +145,52 @@ export const AdminPackages: React.FC = () => {
       const raw = payload.new || payload.old;
       if (!raw) return;
 
+      const isDeleted =
+        eventType === 'DELETE' ||
+        Boolean(raw.is_deleted === true || raw.is_deleted === 'true' || raw.is_deleted === 1) ||
+        Boolean(raw.isDeleted === true || raw.isDeleted === 'true');
+
       const mapped = mapPackageRow(raw);
-      setPackages((prev) => reconcileRealtimeList(prev, eventType, mapped));
-      setLastSyncEvent(`Realtime ${eventType}: "${mapped.title || mapped.id}" synced`);
+
+      if (isDeleted) {
+        const idToRemove = String(raw.id || mapped.id);
+        setPackages((prev) => prev.filter((p) => p.id !== idToRemove));
+        setLastSyncEvent(`Realtime DELETE: "${mapped.title || idToRemove}" removed`);
+      } else {
+        setPackages((prev) => reconcileRealtimeList(prev, eventType, mapped));
+        setLastSyncEvent(`Realtime ${eventType}: "${mapped.title || mapped.id}" synced`);
+      }
       setTimeout(() => setLastSyncEvent(null), 4000);
+      loadData();
     };
 
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, handlePayload)
+      .on('broadcast', { event: 'package_deleted' }, ({ payload }: any) => {
+        const deletedId = String(payload?.id || '');
+        if (deletedId) {
+          setPackages((prev) => prev.filter((p) => p.id !== deletedId));
+          setLastSyncEvent(`Realtime DELETE: "${deletedId}" removed`);
+          setTimeout(() => setLastSyncEvent(null), 4000);
+        }
+        loadData();
+      })
+      .on('broadcast', { event: 'package_updated' }, ({ payload }: any) => {
+        if (payload?.package) {
+          setPackages((prev) => reconcileRealtimeList(prev, 'UPDATE', payload.package));
+          setLastSyncEvent(`Realtime UPDATE: "${payload.package.title || payload.package.id}" synced`);
+          setTimeout(() => setLastSyncEvent(null), 4000);
+        }
+        loadData();
+      })
+      .on('broadcast', { event: 'package_created' }, ({ payload }: any) => {
+        if (payload?.package) {
+          setPackages((prev) => reconcileRealtimeList(prev, 'INSERT', payload.package));
+          setLastSyncEvent(`Realtime INSERT: "${payload.package.title || payload.package.id}" synced`);
+          setTimeout(() => setLastSyncEvent(null), 4000);
+        }
+        loadData();
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setIsRealtimeActive(true);

@@ -74,10 +74,19 @@ export const AdminHotels: React.FC = () => {
     loadData();
 
     const handleDataChange = (e?: Event) => {
-      if (e instanceof CustomEvent && e.detail?.action === 'update' && e.detail?.hotel) {
-        const updatedHotel = e.detail.hotel;
-        setHotels((prev) => prev.map((item) => (item.id === updatedHotel.id ? updatedHotel : item)));
-        return;
+      if (e instanceof CustomEvent) {
+        if (e.detail?.action === 'delete') {
+          const delId = String(e.detail.hotelId || e.detail.target || '');
+          if (delId) {
+            setHotels((prev) => prev.filter((item) => item.id !== delId && (item.name || '').toLowerCase() !== delId.toLowerCase()));
+            return;
+          }
+        }
+        if (e.detail?.action === 'update' && e.detail?.hotel) {
+          const updatedHotel = e.detail.hotel;
+          setHotels((prev) => prev.map((item) => (item.id === updatedHotel.id ? updatedHotel : item)));
+          return;
+        }
       }
       loadData();
     };
@@ -85,10 +94,21 @@ export const AdminHotels: React.FC = () => {
     window.addEventListener('tirth-city-changed', handleDataChange);
     window.addEventListener('storage', handleDataChange);
 
+    const handleFocus = () => {
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       window.removeEventListener('tirth-hotel-changed', handleDataChange);
       window.removeEventListener('tirth-city-changed', handleDataChange);
       window.removeEventListener('storage', handleDataChange);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [selectedCityId, searchQuery]);
 
@@ -100,22 +120,43 @@ export const AdminHotels: React.FC = () => {
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, (payload: any) => {
         const eventType = payload.eventType || payload.event || 'UPDATE';
-        if (eventType === 'DELETE') {
-          const id = String(payload.old?.id || payload.new?.id);
+        const raw = payload.new || payload.old;
+        if (!raw) return;
+
+        const isDeleted =
+          eventType === 'DELETE' ||
+          Boolean(raw.is_deleted === true || raw.is_deleted === 'true' || raw.is_deleted === 1) ||
+          Boolean(raw.isDeleted === true || raw.isDeleted === 'true');
+
+        if (isDeleted) {
+          const id = String(payload.old?.id || payload.new?.id || raw.id);
           setHotels((prev) => prev.filter((h) => h.id !== id));
-        } else if (eventType === 'UPDATE') {
-          const raw = payload.new || payload.old;
-          if (raw) {
-            const mapped = mapHotelRow(raw);
-            setHotels((prev) => prev.map((item) => (item.id === mapped.id ? mapped : item)));
-          }
-        } else {
-          const raw = payload.new || payload.old;
-          if (raw) {
-            const mapped = mapHotelRow(raw);
-            setHotels((prev) => reconcileRealtimeList(prev, eventType, mapped));
-          }
+          loadData();
+          return;
         }
+
+        const mapped = mapHotelRow(raw);
+        setHotels((prev) => reconcileRealtimeList(prev, eventType, mapped));
+        loadData();
+      })
+      .on('broadcast', { event: 'hotel_deleted' }, ({ payload }: any) => {
+        const deletedId = String(payload?.id || '');
+        if (deletedId) {
+          setHotels((prev) => prev.filter((h) => h.id !== deletedId));
+        }
+        loadData();
+      })
+      .on('broadcast', { event: 'hotel_updated' }, ({ payload }: any) => {
+        if (payload?.hotel) {
+          setHotels((prev) => reconcileRealtimeList(prev, 'UPDATE', payload.hotel));
+        }
+        loadData();
+      })
+      .on('broadcast', { event: 'hotel_created' }, ({ payload }: any) => {
+        if (payload?.hotel) {
+          setHotels((prev) => reconcileRealtimeList(prev, 'INSERT', payload.hotel));
+        }
+        loadData();
       })
       .subscribe();
 

@@ -25,6 +25,10 @@ const STORAGE_KEYS = {
   CUSTOM_CATEGORIES: 'tyt_local_package_categories',
   DELETED_CITIES: 'tyt_deleted_cities',
   DELETED_HUBS: 'tyt_deleted_hubs',
+  DELETED_HOTELS: 'tyt_deleted_hotels',
+  DELETED_PACKAGES: 'tyt_deleted_packages',
+  HOTELS_INITIALIZED: 'tyt_hotels_initialized',
+  PACKAGES_INITIALIZED: 'tyt_packages_initialized',
 };
 
 const INITIAL_HUBS: TransitHub[] = [
@@ -117,6 +121,82 @@ export const localStore = {
     const clean = id.toLowerCase().trim();
     const current = this.getDeletedHubIds().filter((d) => d !== clean);
     setStored(STORAGE_KEYS.DELETED_HUBS, current);
+  },
+
+  getDeletedHotelIds(): string[] {
+    return getStored<string[]>(STORAGE_KEYS.DELETED_HOTELS, []);
+  },
+  addDeletedHotelId(id: string): void {
+    if (!id) return;
+    const current = this.getDeletedHotelIds();
+    const clean = id.toLowerCase().trim();
+    if (!current.includes(clean)) {
+      current.push(clean);
+      setStored(STORAGE_KEYS.DELETED_HOTELS, current);
+    }
+  },
+  removeDeletedHotelId(id: string): void {
+    if (!id) return;
+    const clean = id.toLowerCase().trim();
+    const current = this.getDeletedHotelIds().filter((d) => d !== clean && d !== clean.replace(/^htl-/, ''));
+    setStored(STORAGE_KEYS.DELETED_HOTELS, current);
+  },
+
+  setHotels(freshHotels: Hotel[]): void {
+    setStored(STORAGE_KEYS.HOTELS_INITIALIZED, 'true');
+    const deletedHotelIds = this.getDeletedHotelIds();
+    const cleanList = (freshHotels || []).filter((h) => {
+      if (!h || h.isDeleted || (h as any).is_deleted) return false;
+      const hId = (h.id || '').toLowerCase().trim();
+      const hName = (h.name || '').toLowerCase().trim();
+      return (
+        !deletedHotelIds.includes(hId) &&
+        !deletedHotelIds.includes(hName) &&
+        !deletedHotelIds.includes(hId.replace(/^htl-/, ''))
+      );
+    });
+    setStored(STORAGE_KEYS.HOTELS, cleanList);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'sync', count: cleanList.length } }));
+    }
+  },
+
+  getDeletedPackageIds(): string[] {
+    return getStored<string[]>(STORAGE_KEYS.DELETED_PACKAGES, []);
+  },
+  addDeletedPackageId(id: string): void {
+    if (!id) return;
+    const current = this.getDeletedPackageIds();
+    const clean = id.toLowerCase().trim();
+    if (!current.includes(clean)) {
+      current.push(clean);
+      setStored(STORAGE_KEYS.DELETED_PACKAGES, current);
+    }
+  },
+  removeDeletedPackageId(id: string): void {
+    if (!id) return;
+    const clean = id.toLowerCase().trim();
+    const current = this.getDeletedPackageIds().filter((d) => d !== clean && d !== clean.replace(/^(pkg-|package-)/, ''));
+    setStored(STORAGE_KEYS.DELETED_PACKAGES, current);
+  },
+
+  setPackages(freshPackages: Package[]): void {
+    setStored(STORAGE_KEYS.PACKAGES_INITIALIZED, 'true');
+    const deletedPkgIds = this.getDeletedPackageIds();
+    const cleanList = (freshPackages || []).filter((p) => {
+      if (!p || (p as any).isDeleted || (p as any).is_deleted) return false;
+      const pId = (p.id || '').toLowerCase().trim();
+      const pTitle = (p.title || '').toLowerCase().trim();
+      return (
+        !deletedPkgIds.includes(pId) &&
+        !deletedPkgIds.includes(pTitle) &&
+        !deletedPkgIds.includes(pId.replace(/^(pkg-|package-)/, ''))
+      );
+    });
+    setStored(STORAGE_KEYS.PACKAGES, cleanList);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'sync', count: cleanList.length } }));
+    }
   },
 
   setCities(freshCities: City[]): void {
@@ -340,18 +420,40 @@ export const localStore = {
   // Hotels
   getHotels(cityId?: string, query?: string): Hotel[] {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.HOTELS) : null;
+    const isInitialized = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.HOTELS_INITIALIZED) : null;
+    const deletedHotelIds = this.getDeletedHotelIds();
     let list: Hotel[];
     if (raw === null) {
-      setStored(STORAGE_KEYS.HOTELS, INITIAL_HOTELS);
-      list = [...INITIAL_HOTELS];
+      if (!isInitialized) {
+        setStored(STORAGE_KEYS.HOTELS_INITIALIZED, 'true');
+        list = INITIAL_HOTELS.filter((h) => {
+          const hId = (h.id || '').toLowerCase().trim();
+          const hName = (h.name || '').toLowerCase().trim();
+          return !deletedHotelIds.includes(hId) && !deletedHotelIds.includes(hName);
+        });
+        setStored(STORAGE_KEYS.HOTELS, list);
+      } else {
+        list = [];
+        setStored(STORAGE_KEYS.HOTELS, []);
+      }
     } else {
       try {
         list = JSON.parse(raw);
+        if (!Array.isArray(list)) list = [];
       } catch {
-        list = [...INITIAL_HOTELS];
+        list = [];
       }
     }
-    list = list.filter((h) => !h.isDeleted && !(h as any).is_deleted);
+    list = list.filter((h) => {
+      if (!h || h.isDeleted || (h as any).is_deleted) return false;
+      const hId = (h.id || '').toLowerCase().trim();
+      const hName = (h.name || '').toLowerCase().trim();
+      return (
+        !deletedHotelIds.includes(hId) &&
+        !deletedHotelIds.includes(hName) &&
+        !deletedHotelIds.includes(hId.replace(/^htl-/, ''))
+      );
+    });
     if (cityId) {
       const cLower = cityId.toLowerCase().trim();
       list = list.filter((h) =>
@@ -381,9 +483,17 @@ export const localStore = {
 
   createHotel(hotelData: Partial<Hotel>): Hotel {
     const hotels = this.getHotels();
+    const newId = hotelData.id || `htl-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newName = hotelData.name || 'Sacred Hotel';
+
+    // Remove from tombstone blacklist if newly created
+    this.removeDeletedHotelId(newId);
+    this.removeDeletedHotelId(newName);
+    setStored(STORAGE_KEYS.HOTELS_INITIALIZED, 'true');
+
     const newHotel: Hotel = {
-      id: hotelData.id || `htl-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name: hotelData.name || 'Sacred Hotel',
+      id: newId,
+      name: newName,
       cityId: hotelData.cityId || 'city-varanasi',
       cityName: hotelData.cityName || 'Varanasi',
       starRating: Number(hotelData.starRating) || 4,
@@ -439,24 +549,37 @@ export const localStore = {
     try {
       decoded = decodeURIComponent(raw);
     } catch {}
-    const target = decoded.toLowerCase();
+    const target = decoded.toLowerCase().trim();
 
-    const hotels = this.getHotels().filter((h) => {
-      const hId = (h.id || '').toLowerCase();
-      const hName = (h.name || '').toLowerCase();
+    // 1. Record in tombstone blacklist so initial mock/seed data NEVER resurrects it
+    this.addDeletedHotelId(target);
+    this.addDeletedHotelId(target.replace(/^htl-/, ''));
+    if (!target.startsWith('htl-')) {
+      this.addDeletedHotelId(`htl-${target}`);
+    }
+
+    // 2. Mark initialized so it never re-seeds from mock data
+    setStored(STORAGE_KEYS.HOTELS_INITIALIZED, 'true');
+
+    // 3. Filter from stored hotels
+    const storedHotels = getStored<Hotel[]>(STORAGE_KEYS.HOTELS, []);
+    const remainingHotels = storedHotels.filter((h) => {
+      const hId = (h.id || '').toLowerCase().trim();
+      const hName = (h.name || '').toLowerCase().trim();
       const matches =
         hId === target ||
         hName === target ||
         hId === `htl-${target}` ||
         `htl-${hId}` === target ||
+        hId.replace(/^htl-/, '') === target.replace(/^htl-/, '') ||
         target.includes(hId) ||
         (target.length > 4 && hName.includes(target)) ||
         (hName.length > 4 && target.includes(hName));
       return !matches;
     });
-    setStored(STORAGE_KEYS.HOTELS, hotels);
+    setStored(STORAGE_KEYS.HOTELS, remainingHotels);
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', target } }));
+      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', target, hotelId: target } }));
     }
     return true;
   },
@@ -464,17 +587,40 @@ export const localStore = {
   // Packages
   getPackages(category?: string, query?: string): Package[] {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.PACKAGES) : null;
+    const isInitialized = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.PACKAGES_INITIALIZED) : null;
+    const deletedPkgIds = this.getDeletedPackageIds();
     let list: Package[];
     if (raw === null) {
-      setStored(STORAGE_KEYS.PACKAGES, INITIAL_PACKAGES);
-      list = [...INITIAL_PACKAGES];
+      if (!isInitialized) {
+        setStored(STORAGE_KEYS.PACKAGES_INITIALIZED, 'true');
+        list = INITIAL_PACKAGES.filter((p) => {
+          const pId = (p.id || '').toLowerCase().trim();
+          const pTitle = (p.title || '').toLowerCase().trim();
+          return !deletedPkgIds.includes(pId) && !deletedPkgIds.includes(pTitle);
+        });
+        setStored(STORAGE_KEYS.PACKAGES, list);
+      } else {
+        list = [];
+        setStored(STORAGE_KEYS.PACKAGES, []);
+      }
     } else {
       try {
         list = JSON.parse(raw);
+        if (!Array.isArray(list)) list = [];
       } catch {
-        list = [...INITIAL_PACKAGES];
+        list = [];
       }
     }
+    list = list.filter((p) => {
+      if (!p || (p as any).isDeleted || (p as any).is_deleted) return false;
+      const pId = (p.id || '').toLowerCase().trim();
+      const pTitle = (p.title || '').toLowerCase().trim();
+      return (
+        !deletedPkgIds.includes(pId) &&
+        !deletedPkgIds.includes(pTitle) &&
+        !deletedPkgIds.includes(pId.replace(/^(pkg-|package-)/, ''))
+      );
+    });
     if (category && category !== 'All' && category !== 'All Packages') {
       list = list.filter(
         (p) =>
@@ -510,9 +656,17 @@ export const localStore = {
 
   createPackage(pkgData: Partial<Package>): Package {
     const packages = this.getPackages();
+    const newId = pkgData.id || `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newTitle = pkgData.title || 'Sacred Pilgrimage Yatra';
+
+    // Remove from tombstone blacklist if newly created
+    this.removeDeletedPackageId(newId);
+    this.removeDeletedPackageId(newTitle);
+    setStored(STORAGE_KEYS.PACKAGES_INITIALIZED, 'true');
+
     const newPkg: Package = {
-      id: pkgData.id || `pkg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      title: pkgData.title || 'Sacred Pilgrimage Yatra',
+      id: newId,
+      title: newTitle,
       location: pkgData.location || 'Sacred Dhams',
       duration: pkgData.duration || '3 Nights 4 Days',
       bookedRank: pkgData.bookedRank || 'Popular Yatra',
@@ -537,6 +691,9 @@ export const localStore = {
     if (newPkg.category) {
       this.addCustomCategory(newPkg.category);
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'create', pkg: newPkg } }));
+    }
     return newPkg;
   },
 
@@ -546,11 +703,6 @@ export const localStore = {
     const cleanIdLower = cleanId.toLowerCase();
     const updatesId = updates.id ? String(updates.id).trim() : '';
 
-    // Refined matching:
-    // 1. Exact ID match (id or updates.id)
-    // 2. Case-insensitive ID match
-    // 3. Prefix-stripped ID match (e.g. 'pkg-bali' matches 'bali' or vice-versa)
-    // 4. Exact or case-insensitive title match
     let idx = packages.findIndex((p) => p.id === cleanId || (updatesId && p.id === updatesId) || p.id === id);
     if (idx === -1) {
       idx = packages.findIndex(
@@ -623,22 +775,38 @@ export const localStore = {
     try {
       decoded = decodeURIComponent(raw);
     } catch {}
-    const target = decoded.toLowerCase();
+    const target = decoded.toLowerCase().trim();
 
-    const packages = this.getPackages().filter((p) => {
-      const pId = (p.id || '').toLowerCase();
-      const pTitle = (p.title || '').toLowerCase();
+    // 1. Record in tombstone blacklist so initial mock/seed data NEVER resurrects it
+    this.addDeletedPackageId(target);
+    this.addDeletedPackageId(target.replace(/^(pkg-|package-)/, ''));
+    if (!target.startsWith('pkg-')) {
+      this.addDeletedPackageId(`pkg-${target}`);
+    }
+
+    // 2. Mark initialized so it never re-seeds from mock data
+    setStored(STORAGE_KEYS.PACKAGES_INITIALIZED, 'true');
+
+    // 3. Filter from stored packages
+    const storedPackages = getStored<Package[]>(STORAGE_KEYS.PACKAGES, []);
+    const remainingPackages = storedPackages.filter((p) => {
+      const pId = (p.id || '').toLowerCase().trim();
+      const pTitle = (p.title || '').toLowerCase().trim();
       const matches =
         pId === target ||
         pTitle === target ||
         pId === `pkg-${target}` ||
         `pkg-${pId}` === target ||
+        pId.replace(/^(pkg-|package-)/, '') === target.replace(/^(pkg-|package-)/, '') ||
         target.includes(pId) ||
         (target.length > 4 && pTitle.includes(target)) ||
         (pTitle.length > 4 && target.includes(pTitle));
       return !matches;
     });
-    setStored(STORAGE_KEYS.PACKAGES, packages);
+    setStored(STORAGE_KEYS.PACKAGES, remainingPackages);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'delete', target, id: target } }));
+    }
     return true;
   },
 

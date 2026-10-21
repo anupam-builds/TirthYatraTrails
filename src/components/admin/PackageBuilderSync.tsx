@@ -72,7 +72,19 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
       const raw = payload.new || payload.old;
       if (!raw) return;
 
+      const isDeleted =
+        eventType === 'DELETE' ||
+        Boolean(raw.is_deleted === true || raw.is_deleted === 'true' || raw.is_deleted === 1) ||
+        Boolean(raw.isDeleted === true || raw.isDeleted === 'true');
+
       const remotePackage = mapPackageRow(raw);
+
+      if (isDeleted) {
+        const idToRemove = String(raw.id || remotePackage.id);
+        setPackages((prevList) => prevList.filter((p) => p.id !== idToRemove));
+        setActivePackage((current) => (current && (current.id === idToRemove || current.id === remotePackage.id) ? null : current));
+        return;
+      }
 
       // Reconcile package list in-place
       setPackages((prevList) => reconcileRealtimeList(prevList, eventType, remotePackage));
@@ -98,10 +110,70 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
 
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, handlePayload)
+      .on('broadcast', { event: 'package_deleted' }, ({ payload }: any) => {
+        const deletedId = String(payload?.id || '');
+        if (deletedId) {
+          setPackages((prevList) => prevList.filter((p) => p.id !== deletedId));
+          setActivePackage((current) => (current && current.id === deletedId ? null : current));
+        }
+        loadPackages();
+      })
+      .on('broadcast', { event: 'package_updated' }, ({ payload }: any) => {
+        const pkg = payload?.package;
+        if (pkg) {
+          setPackages((prevList) => reconcileRealtimeList(prevList, 'UPDATE', pkg));
+          setActivePackage((current) => {
+            if (!current || current.id !== pkg.id) return current;
+            setLastRemoteEdit({
+              operator: 'Colleague Operator',
+              action: `Price: ₹${Number(pkg.startingPrice).toLocaleString('en-IN')}`,
+              timestamp: new Date().toLocaleTimeString(),
+            });
+            setTimeout(() => setLastRemoteEdit(null), 6000);
+            return { ...current, ...pkg };
+          });
+        }
+        loadPackages();
+      })
+      .on('broadcast', { event: 'package_created' }, ({ payload }: any) => {
+        const pkg = payload?.package;
+        if (pkg) {
+          setPackages((prevList) => reconcileRealtimeList(prevList, 'INSERT', pkg));
+        }
+        loadPackages();
+      })
       .subscribe();
+
+    const handleLocalPackageChange = (e?: Event) => {
+      if (e instanceof CustomEvent && e.detail?.action === 'delete') {
+        const delId = String(e.detail.id || e.detail.target || '');
+        if (delId) {
+          setPackages((prevList) => prevList.filter((p) => p.id !== delId && (p.title || '').toLowerCase() !== delId.toLowerCase()));
+          setActivePackage((current) => (current && (current.id === delId || (current.title || '').toLowerCase() === delId.toLowerCase()) ? null : current));
+          return;
+        }
+      }
+      loadPackages();
+    };
+
+    window.addEventListener('tirth-package-changed', handleLocalPackageChange);
+    window.addEventListener('storage', handleLocalPackageChange);
+
+    const handleFocus = () => {
+      loadPackages();
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadPackages();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener('tirth-package-changed', handleLocalPackageChange);
+      window.removeEventListener('storage', handleLocalPackageChange);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 

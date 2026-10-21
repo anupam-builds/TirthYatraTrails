@@ -24,7 +24,12 @@ export function reconcileRealtimeList<T extends Record<string, any>>(
   if (!incomingRecord) return safeList;
   const targetId = String(incomingRecord[idKey] ?? '');
 
-  if (eventType === 'DELETE') {
+  const isDeleted =
+    eventType === 'DELETE' ||
+    Boolean((incomingRecord as any).is_deleted === true || (incomingRecord as any).is_deleted === 'true' || (incomingRecord as any).is_deleted === 1) ||
+    Boolean((incomingRecord as any).isDeleted === true || (incomingRecord as any).isDeleted === 'true');
+
+  if (isDeleted) {
     return safeList.filter((item) => item && String(item[idKey]) !== targetId);
   }
 
@@ -116,6 +121,43 @@ function registerChannelListener(
         }
       }
     );
+
+    // Cross-device broadcast listeners for instant client-to-client push
+    const singular = table.endsWith('s') ? table.slice(0, -1) : table;
+    reg.channel
+      .on('broadcast', { event: `${singular}_created` }, ({ payload }: any) => {
+        const record = payload?.[singular] || payload?.record || payload;
+        const handlers = reg?.subscribers.get(table);
+        if (handlers && handlers.size > 0 && record) {
+          handlers.forEach((fn) => {
+            try {
+              fn({ eventType: 'INSERT', newRecord: record, oldRecord: null, table });
+            } catch {}
+          });
+        }
+      })
+      .on('broadcast', { event: `${singular}_updated` }, ({ payload }: any) => {
+        const record = payload?.[singular] || payload?.record || payload;
+        const handlers = reg?.subscribers.get(table);
+        if (handlers && handlers.size > 0 && record) {
+          handlers.forEach((fn) => {
+            try {
+              fn({ eventType: 'UPDATE', newRecord: record, oldRecord: null, table });
+            } catch {}
+          });
+        }
+      })
+      .on('broadcast', { event: `${singular}_deleted` }, ({ payload }: any) => {
+        const targetId = payload?.id || payload?.target;
+        const handlers = reg?.subscribers.get(table);
+        if (handlers && handlers.size > 0 && targetId) {
+          handlers.forEach((fn) => {
+            try {
+              fn({ eventType: 'DELETE', newRecord: null, oldRecord: { id: targetId }, table });
+            } catch {}
+          });
+        }
+      });
   }
 
   reg.subscribers.get(table)!.add(handler);
@@ -211,12 +253,30 @@ export function useRealtimeSync<T extends Record<string, any>>({
     }
   }, [autoFetch, table]);
 
-  // Initial load
+  // Initial load and tab focus auto-sync
   useEffect(() => {
     if (enabled && autoFetch) {
       refetch();
     }
-  }, [enabled, refetch]);
+
+    const handleFocus = () => {
+      if (enabled && autoFetch) {
+        refetch();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && enabled && autoFetch) {
+        refetch();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [enabled, refetch, autoFetch]);
 
   // Realtime subscription registration
   useEffect(() => {
@@ -244,6 +304,24 @@ export function useRealtimeSync<T extends Record<string, any>>({
 
         const raw = newRecord || oldRecord;
         if (!raw) return;
+
+        const isSoftDeleted = Boolean(
+          raw.is_deleted === true ||
+          raw.is_deleted === 'true' ||
+          raw.is_deleted === 1 ||
+          raw.isDeleted === true ||
+          raw.isDeleted === 'true'
+        );
+
+        if (isSoftDeleted) {
+          const targetId = String(raw[currentOpts.idKey] || raw.id || '');
+          if (targetId) {
+            setData((prev) => prev.filter((item) => String(item[currentOpts.idKey]) !== targetId));
+            currentOpts.onDelete?.(targetId, sourceTable);
+            currentOpts.onChange?.({ type: 'DELETE', record: { [currentOpts.idKey]: targetId } as any, table: sourceTable });
+          }
+          return;
+        }
 
         const mappedRecord = currentOpts.mapRow(raw);
 

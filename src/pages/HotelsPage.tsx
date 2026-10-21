@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { useCitiesMaster } from '../context/CitiesContext.js';
 import { api } from '../services/api.js';
+import { supabase } from '../lib/supabase.js';
 import { City, Hotel } from '../types.js';
 import { HeroSearchBar } from '../components/common/HeroSearchBar.js';
 import { CityCoverageSection } from '../components/CityCoverageSection.js';
@@ -131,10 +132,40 @@ export const HotelsPage: React.FC = () => {
     window.addEventListener('tirth-city-changed', handleDataChange);
     window.addEventListener('storage', handleDataChange);
 
+    const handleFocus = () => {
+      loadData();
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Supabase Real-time Channel for cross-device updates
+    const channelName = 'public:content-sync-channel';
+    const channel = supabase.channel(channelName);
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => {
+        loadData();
+      })
+      .on('broadcast', { event: 'hotel_deleted' }, () => {
+        loadData();
+      })
+      .on('broadcast', { event: 'hotel_updated' }, () => {
+        loadData();
+      })
+      .on('broadcast', { event: 'hotel_created' }, () => {
+        loadData();
+      })
+      .subscribe();
+
     return () => {
       window.removeEventListener('tirth-hotel-changed', handleDataChange);
       window.removeEventListener('tirth-city-changed', handleDataChange);
       window.removeEventListener('storage', handleDataChange);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      supabase.removeChannel(channel);
     };
   }, [selectedCityId, searchQuery]);
 
