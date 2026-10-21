@@ -93,25 +93,13 @@ export const AdminPackages: React.FC = () => {
   const [hotelsLevel, setHotelsLevel] = useState('3 & 4 Star Deluxe Stays');
   const [transfers, setTransfers] = useState('Private AC Coach / Helicopter Support');
 
+  // Helper to suggest standard day/night duration string from day count
   const calculateDuration = (daysCount: number): string => {
     if (daysCount <= 0) return '1 Day / Same Day Return';
     if (daysCount === 1) return '1 Day / Same Day Return';
     const nights = Math.max(1, daysCount - 1);
     return `${daysCount} Days / ${nights} Night${nights > 1 ? 's' : ''}`;
   };
-
-  // Auto-calculate Duration whenever itinerary items change in the package editor
-  useEffect(() => {
-    if (isModalOpen && itineraryDays.length > 0) {
-      const autoDur = calculateDuration(itineraryDays.length);
-      setDuration(autoDur);
-      setQuickSummaryItems((prev) =>
-        prev.map((item) =>
-          item.label.toLowerCase() === 'duration' ? { ...item, value: autoDur } : item
-        )
-      );
-    }
-  }, [itineraryDays.length, isModalOpen]);
 
   useEffect(() => {
     loadData();
@@ -261,7 +249,7 @@ export const AdminPackages: React.FC = () => {
     setTitle(p.title);
     setCategory(p.category);
     setIsCustomCategoryMode(false);
-    setDuration(calculateDuration(p.itinerary && p.itinerary.length > 0 ? p.itinerary.length : 3));
+    setDuration(p.duration || calculateDuration(p.itinerary && p.itinerary.length > 0 ? p.itinerary.length : 3));
     setLocation(p.location);
     setStartingPrice(p.startingPrice);
     setBookedRank(p.bookedRank || '');
@@ -535,17 +523,22 @@ export const AdminPackages: React.FC = () => {
 
     const cleanedInclusions = inclusions.map((s) => s.trim()).filter(Boolean);
     const cleanedExclusions = exclusions.map((s) => s.trim()).filter(Boolean);
+    const finalDuration = duration.trim() || 'Custom Duration';
     const cleanedQuickSummary = quickSummaryItems
       .map((item) => ({
         label: item.label.trim(),
-        value: item.value.trim(),
+        value: item.label.trim().toLowerCase() === 'duration' ? finalDuration : item.value.trim(),
       }))
       .filter((item) => item.label || item.value);
+
+    if (finalDuration && !cleanedQuickSummary.some((i) => i.label.toLowerCase() === 'duration')) {
+      cleanedQuickSummary.unshift({ label: 'Duration', value: finalDuration });
+    }
 
     const packageData: Partial<Package> = {
       title,
       category,
-      duration,
+      duration: finalDuration,
       location,
       startingPrice: Number(startingPrice),
       bookedRank,
@@ -879,18 +872,42 @@ export const AdminPackages: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label htmlFor="package-duration-input" className="block text-slate-700 dark:text-slate-400 font-bold">Duration</label>
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Auto-calculated ({itineraryDays.length} {itineraryDays.length === 1 ? 'Day' : 'Days'})
-                    </span>
+                    {itineraryDays.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const suggested = calculateDuration(itineraryDays.length);
+                          setDuration(suggested);
+                          setQuickSummaryItems((prev) =>
+                            prev.map((item) =>
+                              item.label.toLowerCase() === 'duration' ? { ...item, value: suggested } : item
+                            )
+                          );
+                        }}
+                        title={`Click to auto-fill duration based on ${itineraryDays.length} itinerary days`}
+                        className="text-[10px] font-bold text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 bg-orange-50 dark:bg-orange-950/40 hover:bg-orange-100 dark:hover:bg-orange-900/50 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800/80 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3 h-3 text-orange-500" />
+                        <span>Auto-suggest: {calculateDuration(itineraryDays.length)}</span>
+                      </button>
+                    )}
                   </div>
                   <BaseInput
                     id="package-duration-input"
                     name="package-duration-input"
                     type="text"
-                    readOnly
                     value={duration}
-                    placeholder="Auto-calculated from itinerary days"
-                    className="w-full bg-slate-100 dark:bg-[#071322] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-700 dark:text-slate-300 font-bold cursor-not-allowed select-none"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDuration(val);
+                      setQuickSummaryItems((prev) =>
+                        prev.map((item) =>
+                          item.label.toLowerCase() === 'duration' ? { ...item, value: val } : item
+                        )
+                      );
+                    }}
+                    placeholder="e.g. 9 Days / 8 Nights, 3 Days / 2 Nights, Weekend Gateway"
+                    className="w-full bg-white dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 text-xs sm:text-sm"
                   />
                 </div>
               </div>
