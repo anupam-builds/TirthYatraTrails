@@ -88,6 +88,30 @@ export const AdminPackages: React.FC = () => {
   const [newInclusionText, setNewInclusionText] = useState('');
   const [newExclusionText, setNewExclusionText] = useState('');
   const [quickSummaryItems, setQuickSummaryItems] = useState<FormQuickSummaryItem[]>([]);
+  const [packageType, setPackageType] = useState('All-Inclusive Guided Yatra');
+  const [experienceLevel, setExperienceLevel] = useState('Comfortable • Senior Friendly');
+  const [hotelsLevel, setHotelsLevel] = useState('3 & 4 Star Deluxe Stays');
+  const [transfers, setTransfers] = useState('Private AC Coach / Helicopter Support');
+
+  const calculateDuration = (daysCount: number): string => {
+    if (daysCount <= 0) return '1 Day / Same Day Return';
+    if (daysCount === 1) return '1 Day / Same Day Return';
+    const nights = Math.max(1, daysCount - 1);
+    return `${daysCount} Days / ${nights} Night${nights > 1 ? 's' : ''}`;
+  };
+
+  // Auto-calculate Duration whenever itinerary items change in the package editor
+  useEffect(() => {
+    if (isModalOpen && itineraryDays.length > 0) {
+      const autoDur = calculateDuration(itineraryDays.length);
+      setDuration(autoDur);
+      setQuickSummaryItems((prev) =>
+        prev.map((item) =>
+          item.label.toLowerCase() === 'duration' ? { ...item, value: autoDur } : item
+        )
+      );
+    }
+  }, [itineraryDays.length, isModalOpen]);
 
   useEffect(() => {
     loadData();
@@ -179,10 +203,14 @@ export const AdminPackages: React.FC = () => {
     setCategory('Char Dham');
     setIsCustomCategoryMode(false);
     setCustomCategoryInput('');
-    setDuration('6 Days / 5 Nights');
+    setDuration(calculateDuration(3));
     setLocation('Sacred Circuit');
     setStartingPrice(24000);
     setBookedRank('Popular Divine Yatra');
+    setPackageType('All-Inclusive Guided Yatra');
+    setExperienceLevel('Comfortable • Senior Friendly');
+    setHotelsLevel('3 & 4 Star Deluxe Stays');
+    setTransfers('Private AC Coach / Helicopter Support');
     const defaultImg = 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80';
     setImageUrl(defaultImg);
     setPackageImages([defaultImg]);
@@ -233,11 +261,14 @@ export const AdminPackages: React.FC = () => {
     setTitle(p.title);
     setCategory(p.category);
     setIsCustomCategoryMode(false);
-    setCustomCategoryInput('');
-    setDuration(p.duration);
+    setDuration(calculateDuration(p.itinerary && p.itinerary.length > 0 ? p.itinerary.length : 3));
     setLocation(p.location);
     setStartingPrice(p.startingPrice);
     setBookedRank(p.bookedRank || '');
+    setPackageType(p.packageType || 'All-Inclusive Guided Yatra');
+    setExperienceLevel(p.experienceLevel || 'Comfortable • Senior Friendly');
+    setHotelsLevel(p.hotelsLevel || '3 & 4 Star Deluxe Stays');
+    setTransfers(p.transfers || 'Private AC Coach / Helicopter Support');
     const existing = (p.galleryImages && p.galleryImages.length > 0)
       ? p.galleryImages
       : (p.imageUrl ? [p.imageUrl] : []);
@@ -521,11 +552,10 @@ export const AdminPackages: React.FC = () => {
       imageUrl: primaryCover,
       galleryImages: validImages,
       overview,
-      highlights,
-      packageType: 'All-Inclusive Guided Yatra',
-      experienceLevel: 'Comfortable • Senior Friendly',
-      hotelsLevel: '3 & 4 Star Deluxe Stays',
-      transfers: 'Private AC Coach / Helicopter Support',
+      packageType: packageType.trim() || 'All-Inclusive Guided Yatra',
+      experienceLevel: experienceLevel.trim() || 'Comfortable • Senior Friendly',
+      hotelsLevel: hotelsLevel.trim() || '3 & 4 Star Deluxe Stays',
+      transfers: transfers.trim() || 'Private AC Coach / Helicopter Support',
       itinerary: cleanedItinerary,
       inclusions: cleanedInclusions,
       exclusions: cleanedExclusions,
@@ -847,17 +877,210 @@ export const AdminPackages: React.FC = () => {
                 </div>
 
                 <div>
-                  <label htmlFor="package-duration-input" className="block text-slate-700 dark:text-slate-400 font-bold mb-1">Duration</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="package-duration-input" className="block text-slate-700 dark:text-slate-400 font-bold">Duration</label>
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Auto-calculated ({itineraryDays.length} {itineraryDays.length === 1 ? 'Day' : 'Days'})
+                    </span>
+                  </div>
                   <BaseInput
                     id="package-duration-input"
                     name="package-duration-input"
                     type="text"
-                    required
+                    readOnly
                     value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    placeholder="e.g. 5 Days / 4 Nights"
-                    className="w-full bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="Auto-calculated from itinerary days"
+                    className="w-full bg-slate-100 dark:bg-[#071322] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-700 dark:text-slate-300 font-bold cursor-not-allowed select-none"
                   />
+                </div>
+              </div>
+
+              {/* PACKAGE SPECIFICATIONS (Editable Quick Info Bar Specs) */}
+              <div className="bg-slate-50 dark:bg-[#071322]/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400">
+                    <Sparkles className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                      Package Specifications (Customer Quick Info Bar)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Edit key specifications displayed in the prominent quick info bar of the public package details page.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* 1. Package Type */}
+                  <div>
+                    <label htmlFor="package-type-input" className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1">
+                      Package Type
+                    </label>
+                    <BaseInput
+                      id="package-type-input"
+                      name="package-type-input"
+                      type="text"
+                      list="package-type-presets"
+                      required
+                      value={packageType}
+                      onChange={(e) => setPackageType(e.target.value)}
+                      placeholder="e.g. All-Inclusive Guided Yatra"
+                      className="w-full bg-white dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
+                    />
+                    <datalist id="package-type-presets">
+                      <option value="All-Inclusive Guided Yatra" />
+                      <option value="Custom Package" />
+                      <option value="VIP Helicopter Yatra" />
+                      <option value="Spiritual & Cultural Circuit" />
+                      <option value="Group Departure Yatra" />
+                      <option value="Luxury Pilgrimage Tour" />
+                    </datalist>
+                    {/* Quick Presets */}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {['All-Inclusive Guided Yatra', 'Custom Package', 'VIP Helicopter Yatra'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setPackageType(preset)}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                            packageType === preset
+                              ? 'bg-orange-500 text-white border-orange-500 font-bold'
+                              : 'bg-white dark:bg-[#0d1d33] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-orange-300'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. Experience Level */}
+                  <div>
+                    <label htmlFor="package-experience-input" className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1">
+                      Experience Level
+                    </label>
+                    <BaseInput
+                      id="package-experience-input"
+                      name="package-experience-input"
+                      type="text"
+                      list="package-experience-presets"
+                      required
+                      value={experienceLevel}
+                      onChange={(e) => setExperienceLevel(e.target.value)}
+                      placeholder="e.g. Comfortable • Senior Friendly"
+                      className="w-full bg-white dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
+                    />
+                    <datalist id="package-experience-presets">
+                      <option value="Comfortable • Senior Friendly" />
+                      <option value="Moderate Adventure" />
+                      <option value="Easy Pilgrimage • Family Friendly" />
+                      <option value="VIP Helicopter & Palki Support" />
+                      <option value="Challenging Himalayan Trek" />
+                    </datalist>
+                    {/* Quick Presets */}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {['Comfortable • Senior Friendly', 'Moderate Adventure', 'VIP Helicopter & Palki Support'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setExperienceLevel(preset)}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                            experienceLevel === preset
+                              ? 'bg-orange-500 text-white border-orange-500 font-bold'
+                              : 'bg-white dark:bg-[#0d1d33] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-orange-300'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 3. Stays & Meals */}
+                  <div>
+                    <label htmlFor="package-hotels-level-input" className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1">
+                      Stays &amp; Meals
+                    </label>
+                    <BaseInput
+                      id="package-hotels-level-input"
+                      name="package-hotels-level-input"
+                      type="text"
+                      list="package-hotels-presets"
+                      required
+                      value={hotelsLevel}
+                      onChange={(e) => setHotelsLevel(e.target.value)}
+                      placeholder="e.g. 3 & 4 Star Deluxe Stays"
+                      className="w-full bg-white dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
+                    />
+                    <datalist id="package-hotels-presets">
+                      <option value="3 & 4 Star Deluxe Stays" />
+                      <option value="5 Star Luxury & Heritage Stays" />
+                      <option value="Deluxe Ashram & Verified Hotels" />
+                      <option value="Deluxe Camps & Swiss Tents" />
+                      <option value="Standard Clean Pilgrim Lodges" />
+                    </datalist>
+                    {/* Quick Presets */}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {['3 & 4 Star Deluxe Stays', '5 Star Luxury & Heritage Stays', 'Deluxe Ashram & Verified Hotels'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setHotelsLevel(preset)}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                            hotelsLevel === preset
+                              ? 'bg-orange-500 text-white border-orange-500 font-bold'
+                              : 'bg-white dark:bg-[#0d1d33] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-orange-300'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 4. Transfers */}
+                  <div>
+                    <label htmlFor="package-transfers-input" className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1">
+                      Transfers
+                    </label>
+                    <BaseInput
+                      id="package-transfers-input"
+                      name="package-transfers-input"
+                      type="text"
+                      list="package-transfers-presets"
+                      required
+                      value={transfers}
+                      onChange={(e) => setTransfers(e.target.value)}
+                      placeholder="e.g. Private AC Coach / Helicopter Support"
+                      className="w-full bg-white dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
+                    />
+                    <datalist id="package-transfers-presets">
+                      <option value="Private AC Coach / Helicopter Support" />
+                      <option value="Dedicated Private AC SUV (Innova/Crysta)" />
+                      <option value="Direct Helicopter Shuttle & Priority Darshan" />
+                      <option value="AC Tempo Traveller for Group" />
+                      <option value="Private AC Sedan (Dzire / Etios)" />
+                      <option value="Flights + AC Road Transfers Included" />
+                    </datalist>
+                    {/* Quick Presets */}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {['Private AC Coach / Helicopter Support', 'Dedicated Private AC SUV (Innova/Crysta)', 'Direct Helicopter Shuttle & Priority Darshan'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setTransfers(preset)}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                            transfers === preset
+                              ? 'bg-orange-500 text-white border-orange-500 font-bold'
+                              : 'bg-white dark:bg-[#0d1d33] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-orange-300'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
