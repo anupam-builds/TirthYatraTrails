@@ -87,9 +87,9 @@ export const ReminderAlertBanner: React.FC<ReminderAlertBannerProps> = ({
   const currentLead = activeDueLeads[currentLeadIndex] || activeDueLeads[0];
   if (!currentLead) return null;
 
-  const leadDisplayId = (currentLead as any).leadId && /^TTT\d{8}$/i.test((currentLead as any).leadId)
-    ? (currentLead as any).leadId
-    : formatLeadId(currentLead.id);
+  const leadDisplayId =
+    ((currentLead as any).lead_id && /^TTT\d+$/i.test(String((currentLead as any).lead_id).trim()) ? String((currentLead as any).lead_id).trim().toUpperCase() : '') ||
+    ((currentLead as any).leadId && /^TTT\d+$/i.test((currentLead as any).leadId) ? (currentLead as any).leadId : formatLeadId(currentLead.id));
 
   const customerName = currentLead.customerName || currentLead.fullName || 'Pilgrim Devotee';
   const reminderNote = currentLead.reminder_note || (currentLead as any).reminderNote || currentLead.metadata?.reminder_note || currentLead.title || 'Follow-up consultation';
@@ -128,7 +128,7 @@ export const ReminderAlertBanner: React.FC<ReminderAlertBannerProps> = ({
   };
 
   const handleOpenWhatsApp = () => {
-    const waData = generateCustomerWhatsAppLink(currentLead, currentStaffName);
+    const waData = generateCustomerWhatsAppLink({ ...currentLead, lead_id: leadDisplayId, leadId: leadDisplayId }, currentStaffName, leadDisplayId);
     if (!waData) {
       alert(`No valid phone or WhatsApp number is on record for ${customerName}.`);
       return;

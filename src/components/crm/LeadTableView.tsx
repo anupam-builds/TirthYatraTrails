@@ -192,10 +192,16 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   };
 
   // Direct WhatsApp chat handler targeting the customer's specific phone number
-  const handleOpenWhatsApp = (inq: Inquiry) => {
-    const waData = generateCustomerWhatsAppLink(inq, currentStaffName);
+  const handleOpenWhatsApp = (inq: Inquiry, visualLeadId?: string) => {
+    const activeLead = inq as any;
+    const currentLeadId =
+      visualLeadId ||
+      (activeLead.lead_id && /^TTT\d+$/i.test(String(activeLead.lead_id).trim()) ? String(activeLead.lead_id).trim().toUpperCase() : '') ||
+      (activeLead.leadId && /^TTT\d+$/i.test(String(activeLead.leadId).trim()) ? String(activeLead.leadId).trim().toUpperCase() : '') ||
+      (inq.id ? leadSeqIdMap.get(String(inq.id)) : undefined);
+    const waData = generateCustomerWhatsAppLink({ ...inq, lead_id: currentLeadId, leadId: currentLeadId }, currentStaffName, currentLeadId);
     if (!waData) {
-      alert(`No valid phone or WhatsApp number found for ${inq.customerName || inq.fullName || 'this customer'}.`);
+      alert(`No valid phone or WhatsApp number found for ${activeLead.customer_name || inq.customerName || inq.fullName || 'this customer'}.`);
       return;
     }
 
@@ -724,8 +730,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                 filteredInquiries.map((inq, index) => {
                   const lead = inq as any;
                   const currentAssignedId = lead.assigned_staff_id || lead.assignedStaffId || inq.assignedStaffId || '--Unassigned--';
-                  // Priority: Look up globally sequenced ID (TTT00000001, etc.), fallback to sequential position index, or raw format
-                  const seqLeadId = leadSeqIdMap.get(String(inq.id)) || formatSequentialLeadId(index + 1);
+                  // Priority: Look up explicit lead_id or leadId, then globally sequenced ID (TTT00000001, etc.), fallback to sequential position index
+                  const seqLeadId =
+                    (lead.lead_id && /^TTT\d+$/i.test(String(lead.lead_id).trim()) ? String(lead.lead_id).trim().toUpperCase() : '') ||
+                    (lead.leadId && /^TTT\d+$/i.test(String(lead.leadId).trim()) ? String(lead.leadId).trim().toUpperCase() : '') ||
+                    (lead.id && /^TTT\d+$/i.test(String(lead.id).trim()) ? String(lead.id).trim().toUpperCase() : '') ||
+                    leadSeqIdMap.get(String(inq.id)) ||
+                    formatSequentialLeadId(index + 1);
                   const rawLeadId = formatLeadId(lead.id);
                   const paxStr = formatPaxCount(inq);
                   const statusCfg = CRM_STATUS_CONFIG[inq.status as InquiryStatus] || CRM_STATUS_CONFIG.NEW;
@@ -750,7 +761,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     inq.whatsappNumber ||
                     '';
                   const hasPhone = Boolean(phoneCandidate && phoneCandidate !== 'No phone');
-                  const waData = generateCustomerWhatsAppLink(inq, currentStaffName);
+                  const waData = generateCustomerWhatsAppLink({ ...inq, lead_id: seqLeadId, leadId: seqLeadId }, currentStaffName, seqLeadId);
                   const leadEndDate = inq.endDate || lead.end_date || lead.endDate || inq.end_date || lead.metadata?.end_date;
                   const leadDurationDays = inq.durationDays ?? lead.duration_days ?? lead.durationDays ?? inq.duration_days ?? lead.metadata?.duration_days;
                   const leadBudget = inq.budget || lead.budget || lead.metadata?.budget;
@@ -909,7 +920,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   rel="noopener noreferrer"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleOpenWhatsApp(inq);
+                                    handleOpenWhatsApp(inq, seqLeadId);
                                   }}
                                   title={`Outbound WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
@@ -1124,7 +1135,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 rel="noopener noreferrer"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleOpenWhatsApp(inq);
+                                  handleOpenWhatsApp(inq, seqLeadId);
                                 }}
                                 title={`Outbound WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-950/60 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600 dark:hover:text-white border border-emerald-300 dark:border-emerald-800 transition-all cursor-pointer shadow-2xs shrink-0"
@@ -1199,7 +1210,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 rel="noopener noreferrer"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleOpenWhatsApp(inq);
+                                  handleOpenWhatsApp(inq, seqLeadId);
                                 }}
                                 title={`Direct WhatsApp chat with customer ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
                                 className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"

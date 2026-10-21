@@ -51,7 +51,9 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
   if (!isOpen || !lead) return null;
 
   const rawInq = lead as any;
-  const leadDisplayId = rawInq.leadId && /^TTT\d{8}$/i.test(rawInq.leadId) ? rawInq.leadId : formatLeadId(lead.id);
+  const leadDisplayId =
+    (rawInq.lead_id && /^TTT\d+$/i.test(String(rawInq.lead_id).trim()) ? String(rawInq.lead_id).trim().toUpperCase() : '') ||
+    (rawInq.leadId && /^TTT\d+$/i.test(rawInq.leadId) ? rawInq.leadId : formatLeadId(lead.id));
   const customerName = lead.customerName || lead.fullName || 'Pilgrim Devotee';
   const customerPhone = (lead as any).whatsapp_number || lead.phone || lead.customerPhone || '';
   const currentReminderTs = lead.reminder_at || lead.reminderAt || (lead as any).metadata?.reminder_at;
@@ -129,7 +131,7 @@ export const QuickReminderModal: React.FC<QuickReminderModalProps> = ({
   };
 
   const handleOpenWhatsApp = () => {
-    const waData = generateCustomerWhatsAppLink(lead);
+    const waData = generateCustomerWhatsAppLink({ ...lead, lead_id: leadDisplayId, leadId: leadDisplayId }, undefined, leadDisplayId);
     if (waData?.url) {
       window.open(waData.url, '_blank', 'noopener,noreferrer');
     }

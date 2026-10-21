@@ -5,7 +5,7 @@ import { ADMIN_ROUTES } from '../../constants/routes.js';
 import { api, updateLeadOrInquiryStatus } from '../../services/api.js';
 import { City, Hotel, Package, Inquiry, InquiryStatus } from '../../types.js';
 import { subscribeToNewInquiries } from '../../services/soundNotification.js';
-import { generateCustomerWhatsAppLink, ADMIN_CRM_STATUS_LIST, CRM_STATUS_CONFIG } from '../../utils/crmUtils.js';
+import { generateCustomerWhatsAppLink, ADMIN_CRM_STATUS_LIST, CRM_STATUS_CONFIG, formatSequentialLeadId } from '../../utils/crmUtils.js';
 import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import { BaseSelect } from '../../components/FormField.js';
 import {
@@ -242,10 +242,16 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleOpenWhatsApp = async (inq: Inquiry) => {
-    const waData = generateCustomerWhatsAppLink(inq, 'Travel Desk Admin');
+  const handleOpenWhatsApp = async (inq: Inquiry, visualLeadId?: string) => {
+    const activeLead = inq as any;
+    const targetLeadId =
+      visualLeadId ||
+      (activeLead.lead_id && /^TTT\d+$/i.test(String(activeLead.lead_id).trim()) ? String(activeLead.lead_id).trim().toUpperCase() : '') ||
+      (activeLead.leadId && /^TTT\d+$/i.test(String(activeLead.leadId).trim()) ? String(activeLead.leadId).trim().toUpperCase() : '') ||
+      (inq.id && /^TTT\d+$/i.test(String(inq.id).trim()) ? String(inq.id).trim().toUpperCase() : undefined);
+    const waData = generateCustomerWhatsAppLink({ ...inq, lead_id: targetLeadId, leadId: targetLeadId }, 'Travel Desk Admin', targetLeadId);
     if (!waData) {
-      alert(`No valid phone or WhatsApp number is on record for ${inq.fullName || inq.customerName || 'this customer'}.`);
+      alert(`No valid phone or WhatsApp number is on record for ${activeLead.customer_name || inq.fullName || inq.customerName || 'this customer'}.`);
       return;
     }
 
@@ -438,9 +444,14 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-                {recentInquiries.map((inq) => {
+                {recentInquiries.map((inq, index) => {
                   const lead = inq as any;
-                  const custName = inq.fullName || inq.customerName || 'Devotee';
+                  const custName = lead.customer_name || inq.fullName || inq.customerName || 'Devotee';
+                  const rowLeadId =
+                    (lead.lead_id && /^TTT\d+$/i.test(String(lead.lead_id).trim()) ? String(lead.lead_id).trim().toUpperCase() : '') ||
+                    (lead.leadId && /^TTT\d+$/i.test(String(lead.leadId).trim()) ? String(lead.leadId).trim().toUpperCase() : '') ||
+                    (lead.id && /^TTT\d+$/i.test(String(lead.id).trim()) ? String(lead.id).trim().toUpperCase() : '') ||
+                    formatSequentialLeadId(index + 1);
                   const custPhone =
                     lead.whatsapp_number ||
                     lead.phone ||
@@ -456,7 +467,7 @@ export const AdminDashboard: React.FC = () => {
                     '';
                   const custEmail = inq.email || inq.customerEmail || '';
                   const selPlan = inq.plan || inq.selectedPlan || 'Standard';
-                  const waData = generateCustomerWhatsAppLink(inq, 'Travel Desk Admin');
+                  const waData = generateCustomerWhatsAppLink({ ...inq, lead_id: rowLeadId, leadId: rowLeadId }, 'Travel Desk Admin', rowLeadId);
 
                   return (
                     <tr key={inq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
@@ -553,7 +564,7 @@ export const AdminDashboard: React.FC = () => {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => handleOpenWhatsApp(inq)}
+                              onClick={() => handleOpenWhatsApp(inq, rowLeadId)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-xs cursor-pointer"
                             >
                               <MessageCircle className="w-3.5 h-3.5" />

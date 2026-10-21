@@ -74,13 +74,18 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
   const accommodationTier = meta?.accommodation_tier || activeLead?.accommodation_tier || activeLead?.accommodationTier || activeLead?.plan || activeLead?.selectedPlan || '3 Star Premium';
   const specialRequests = meta?.special_requests || activeLead?.special_requests || activeLead?.specialRequests || activeLead?.message || 'No special requests specified.';
 
-  const leadDisplayId = activeLead?.leadId && /^TTT\d{8}$/i.test(activeLead.leadId) ? activeLead.leadId : (activeLead?.id ? formatLeadId(activeLead.id) : 'N/A');
+  const leadDisplayId =
+    ((activeLead as any)?.lead_id && /^TTT\d+$/i.test(String((activeLead as any).lead_id).trim()) ? String((activeLead as any).lead_id).trim().toUpperCase() : '') ||
+    (activeLead?.leadId && /^TTT\d+$/i.test(String(activeLead.leadId).trim()) ? String(activeLead.leadId).trim().toUpperCase() : '') ||
+    (activeLead?.id && /^TTT\d+$/i.test(String(activeLead.id).trim()) ? String(activeLead.id).trim().toUpperCase() : '') ||
+    (activeLead?.id ? formatLeadId(activeLead.id) : 'TTT00000001');
 
   const handleOpenWhatsApp = () => {
     const rawPhone = whatsappNum.replace(/\D/g, '');
     if (!rawPhone) return;
     const formattedPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
-    const msg = `Hello ${fullName}, reaching out from Tirth Yatra Trails regarding your inquiry (${leadDisplayId}). How may our pilgrimage desk assist you today?`;
+    const customerName = (activeLead as any)?.customer_name || activeLead?.customerName || fullName || 'Devotee';
+    const msg = `Hello ${customerName}, reaching out from Tirth Yatra Trails regarding your inquiry [Lead ID: ${leadDisplayId}]. How may our pilgrimage desk assist you today?`;
     window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 

@@ -274,6 +274,7 @@ export type InquiryStatus =
 export interface Inquiry {
   id: string;
   leadId?: string; // Unique alphanumeric Lead ID (e.g. "TTT00000001")
+  lead_id?: string;
   userId?: string;
   type: 'HOTEL' | 'PACKAGE';
   referenceId: string;
@@ -283,6 +284,7 @@ export interface Inquiry {
   package_interest?: string;
   fullName: string;
   customerName: string;
+  customer_name?: string;
   email: string;
   customerEmail: string;
   whatsappNumber: string;

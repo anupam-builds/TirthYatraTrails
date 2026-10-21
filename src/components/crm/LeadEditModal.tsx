@@ -124,7 +124,11 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
   }
 
   const rawInq = inquiry as any;
-  const leadId = (rawInq.leadId && /^TTT\d{8}$/i.test(rawInq.leadId)) ? rawInq.leadId : (rawInq.id ? formatLeadId(rawInq.id) : 'TTT00000000');
+  const leadId =
+    (rawInq.lead_id && /^TTT\d+$/i.test(String(rawInq.lead_id).trim()) ? String(rawInq.lead_id).trim().toUpperCase() : '') ||
+    (rawInq.leadId && /^TTT\d+$/i.test(String(rawInq.leadId).trim()) ? String(rawInq.leadId).trim().toUpperCase() : '') ||
+    (rawInq.id && /^TTT\d+$/i.test(String(rawInq.id).trim()) ? String(rawInq.id).trim().toUpperCase() : '') ||
+    (rawInq.id ? formatLeadId(rawInq.id) : 'TTT00000001');
   const isLocked = Boolean(((inquiry as any)?.isLockedForStaff || inquiry?.status === 'CLOSED') && isStaffMode);
   const statusOptions = isStaffMode ? STAFF_CRM_STATUS_LIST : ADMIN_CRM_STATUS_LIST;
 
@@ -175,7 +179,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
   };
 
   const handleOpenWhatsApp = () => {
-    const waData = generateCustomerWhatsAppLink(formData, currentStaffName);
+    const waData = generateCustomerWhatsAppLink({ ...formData, lead_id: leadId, leadId: leadId }, currentStaffName, leadId);
     if (!waData) {
       alert(`No valid phone or WhatsApp number is on record for ${formData.customerName || 'this customer'}.`);
       return;

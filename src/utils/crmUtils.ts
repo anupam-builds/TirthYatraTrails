@@ -326,25 +326,41 @@ export function parseAccommodationTier(tierRaw?: string): AccommodationTierInfo 
  * Returns or generates a deterministic unique alphanumeric Lead ID formatted as TTT00000001.
  */
 export function getLeadId(inquiry: Partial<Inquiry>): string {
-  if (inquiry.leadId && inquiry.leadId.trim().length > 0) {
-    // Migrate any legacy TTX prefix to TTT
-    const raw = inquiry.leadId.startsWith('TTX') ? inquiry.leadId.replace(/^TTX/, 'TTT') : inquiry.leadId;
+  if (!inquiry) return 'TTT00000001';
+  const lead = inquiry as any;
+
+  // 1. Direct lead_id / leadId property (database & API standard)
+  const candidateId = lead.lead_id || lead.leadId || lead.metadata?.lead_id || lead.metadata?.leadId;
+  if (candidateId && typeof candidateId === 'string' && candidateId.trim().length > 0) {
+    const raw = candidateId.trim().startsWith('TTX') ? candidateId.trim().replace(/^TTX/i, 'TTT') : candidateId.trim();
     return formatLeadId(raw);
   }
-  if (!inquiry.id) {
+
+  if (!lead.id) {
     return 'TTT00000001';
   }
-  const idStr = String(inquiry.id);
-  if (idStr.toLowerCase().includes('e+')) {
-    return formatLeadId(idStr);
+
+  const idStr = String(lead.id).trim();
+
+  // If already formatted like TTT00000001 or TTT0000001
+  if (/^TTT\d+$/i.test(idStr)) {
+    return idStr.toUpperCase();
   }
-  // Try extracting numeric portion if id is like inq-101
-  const digitsMatch = idStr.match(/\d+/g);
-  if (digitsMatch) {
-    const rawNumber = parseInt(digitsMatch.join(''), 10);
-    if (!isNaN(rawNumber) && !rawNumber.toString().includes('e+')) {
-      const padded = (rawNumber > 0 ? rawNumber : 1).toString().padStart(8, '0');
-      return `TTT${padded}`;
+
+  // Small integer sequence (e.g. 1 -> TTT00000001)
+  if (/^\d+$/.test(idStr)) {
+    const rawNumber = parseInt(idStr, 10);
+    if (!isNaN(rawNumber) && rawNumber > 0 && rawNumber < 1000000) {
+      return formatSequentialLeadId(rawNumber);
+    }
+  }
+
+  // Small numeric suffix (e.g. inq-1 or lead-42) - only small integers, NOT Date.now() timestamps
+  const smallMatch = idStr.match(/^(?:inq|lead)-(\d{1,6})$/i);
+  if (smallMatch && smallMatch[1]) {
+    const rawNumber = parseInt(smallMatch[1], 10);
+    if (!isNaN(rawNumber) && rawNumber > 0 && rawNumber < 1000000) {
+      return formatSequentialLeadId(rawNumber);
     }
   }
 
@@ -419,9 +435,10 @@ export function cleanPhoneNumberForWhatsApp(phone?: string): string {
 }
 
 export function generateCustomerWhatsAppLink(
-  inquiry: Partial<Inquiry>,
-  staffName?: string
-): { url: string; phone: string; message: string } | null {
+  inquiry: Partial<Inquiry> & Record<string, any>,
+  staffName?: string,
+  explicitLeadId?: string
+): { url: string; phone: string; message: string; leadId: string } | null {
   const lead = inquiry as any;
   const rawPhone =
     lead.whatsapp_number ||
@@ -444,17 +461,35 @@ export function generateCustomerWhatsAppLink(
   if (!cleanedPhone || cleanedPhone.length < 7) return null;
 
   const rawCustomerName =
-    inquiry.customerName ||
-    inquiry.fullName ||
     lead.customer_name ||
     lead.name ||
     lead.full_name ||
+    inquiry.customerName ||
+    inquiry.fullName ||
     lead.metadata?.customer_name ||
     lead.metadata?.name ||
     'Customer';
   const customerName = rawCustomerName.trim();
 
-  const leadId = getLeadId(inquiry);
+  // Precise Lead ID resolution prioritizing:
+  // 1. explicitLeadId (passed directly from the table row / card display)
+  // 2. lead.lead_id (exact database / CRM property, e.g. TTT00000001 or TTT0000001)
+  // 3. lead.leadId
+  // 4. lead.id if it's already a formatted TTT ID (e.g. /^TTT\d+/i)
+  // 5. fallback to getLeadId(inquiry)
+  const resolvedLeadId =
+    (explicitLeadId && String(explicitLeadId).trim()) ||
+    (lead.lead_id && String(lead.lead_id).trim()) ||
+    (lead.leadId && String(lead.leadId).trim()) ||
+    (lead.metadata?.lead_id && String(lead.metadata.lead_id).trim()) ||
+    (lead.metadata?.leadId && String(lead.metadata.leadId).trim()) ||
+    (lead.id && /^TTT\d+$/i.test(String(lead.id).trim()) ? String(lead.id).trim().toUpperCase() : '') ||
+    getLeadId(inquiry);
+
+  const cleanLeadId = resolvedLeadId && resolvedLeadId.startsWith('TTX')
+    ? resolvedLeadId.replace(/^TTX/i, 'TTT')
+    : resolvedLeadId;
+
   const inquiryTopic =
     inquiry.title ||
     (inquiry.type === 'HOTEL'
@@ -463,12 +498,12 @@ export function generateCustomerWhatsAppLink(
       ? 'cab booking'
       : 'pilgrimage package');
   const dateStr = inquiry.checkInDate ? ` for travel on ${formatCrmDate(inquiry.checkInDate)}` : '';
-  const refSuffix = leadId ? ` [Lead ID: ${leadId}]` : '';
+  const refSuffix = cleanLeadId ? ` [Lead ID: ${cleanLeadId}]` : '';
 
   // Outbound message to customer from Tirth Yatra Trails staff
   const message = `Hello ${customerName}, reaching out from Tirth Yatra Trails regarding your inquiry for ${inquiryTopic}${dateStr}${refSuffix}. How may we assist you with your sacred journey?`;
 
   const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(message)}`;
-  return { url, phone: cleanedPhone, message };
+  return { url, phone: cleanedPhone, message, leadId: cleanLeadId };
 }
 
