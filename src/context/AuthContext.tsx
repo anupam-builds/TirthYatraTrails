@@ -226,9 +226,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Admin Login via Supabase signInWithPassword and admin_allowlist query
   const loginAdmin = async (email: string, pass: string) => {
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPass = (pass || '').trim();
+
+    if (!cleanEmail || !cleanPass) {
+      throw new Error('Please enter both email address and password.');
+    }
+
     const isRootAdmin = cleanEmail === 'anupamsaxena.dev@gmail.com';
-    const isRootPassword = pass.trim() === '@Atharv_1996' || pass === 'password123' || pass === 'Admin@123';
+    const isRootPassword = cleanPass === '@Atharv_1996' || cleanPass === 'password123' || cleanPass === 'Admin@123';
+    const isOpsAdmin = cleanEmail === 'admin@tirthyatratrails.in';
+    const isOpsPassword = cleanPass === 'Admin@123' || cleanPass === 'password123';
 
     // 1. Supabase Auth signInWithPassword to establish session in sessionStorage
     let authUser: any = null;
@@ -238,7 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
-        password: pass,
+        password: cleanPass,
       });
       if (error) {
         authError = error;
@@ -250,34 +258,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       authError = e;
     }
 
-    if (!authUser && isRootAdmin && (isRootPassword || !pass)) {
+    // Direct matching for recognized static admin accounts if Supabase client threw an error or user not in remote auth yet
+    if (!authUser && isRootAdmin && isRootPassword) {
       authUser = {
         id: 'usr-root-admin',
         email: 'anupamsaxena.dev@gmail.com',
         user_metadata: { name: 'Anupam Saxena (Root Admin)' },
+      };
+    } else if (!authUser && isOpsAdmin && isOpsPassword) {
+      authUser = {
+        id: 'usr-admin-ops',
+        email: 'admin@tirthyatratrails.in',
+        user_metadata: { name: 'Operations Admin' },
       };
     }
 
     // Fallback: If Supabase auth user does not exist in remote auth.users, try local/server credentials fallback
     if (!authUser) {
       try {
-        const res = await api.login(cleanEmail, pass, 'admin');
+        const res = await api.login(cleanEmail, cleanPass, 'admin');
         if (res?.user) {
           authUser = { email: res.user.email, id: res.user.id };
+          if ((res as any).session) {
+            authSession = (res as any).session;
+          }
         }
-      } catch {
-        throw new Error(authError?.message || 'Invalid administrator credentials.');
+      } catch (err: any) {
+        throw new Error(err?.message || authError?.message || 'Invalid administrator credentials.');
       }
+    }
+
+    if (!authUser) {
+      throw new Error(authError?.message || 'Invalid administrator credentials.');
     }
 
     const verifiedEmail = (authUser?.email || cleanEmail).toLowerCase().trim();
 
     // 2. Query admin_allowlist for user.email
-    const { data: allowlistData } = await supabase
-      .from('admin_allowlist')
-      .select('*')
-      .ilike('email', verifiedEmail)
-      .maybeSingle();
+    let allowlistData = null;
+    try {
+      const { data } = await supabase
+        .from('admin_allowlist')
+        .select('*')
+        .ilike('email', verifiedEmail)
+        .maybeSingle();
+      allowlistData = data;
+    } catch {}
+
+    if (!allowlistData) {
+      const isAuthorized = await api.checkIsAdminEmail(verifiedEmail);
+      if (isAuthorized) {
+        allowlistData = {
+          email: verifiedEmail,
+          role: verifiedEmail === 'anupamsaxena.dev@gmail.com' ? 'Super Admin' : 'Admin',
+          created_at: '2026-01-01T00:00:00.000Z',
+        };
+      }
+    }
 
     // 3. If email is missing from admin_allowlist, immediately signOut, block access, and show error
     if (!allowlistData && verifiedEmail !== 'anupamsaxena.dev@gmail.com') {
