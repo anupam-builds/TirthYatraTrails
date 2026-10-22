@@ -50,6 +50,7 @@ import {
   Compass,
   XCircle,
   CalendarClock,
+  MoreVertical,
 } from 'lucide-react';
 import { LeadDetailsModal } from '../LeadDetailsModal.js';
 import { CreateLeadModal } from './CreateLeadModal.js';
@@ -103,6 +104,29 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [selectedDetailedLead, setSelectedDetailedLead] = useState<Inquiry | null>(null);
   const [selectedLeadForReminder, setSelectedLeadForReminder] = useState<Inquiry | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [openMenuLeadId, setOpenMenuLeadId] = useState<string | null>(null);
+
+  // Close open 3-dots action menu on click outside or escape key
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.lead-row-menu-container')) {
+        setOpenMenuLeadId(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenMenuLeadId(null);
+      }
+    };
+    if (openMenuLeadId) {
+      document.addEventListener('click', handleOutsideClick);
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('click', handleOutsideClick);
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [openMenuLeadId]);
 
   // Accordion for inline notes
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
@@ -701,31 +725,30 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       </div>
 
       {/* 3. COMPREHENSIVE CRM LEADS TABLE */}
-      <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1050px]">
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#081220] text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <th className="py-3.5 px-4">Lead ID &amp; Date</th>
-                <th className="py-3.5 px-4">Assigned Staff</th>
-                <th className="py-3.5 px-4">Customer Details</th>
-                <th className="py-3.5 px-4">City / Accom. Tier</th>
-                <th className="py-3.5 px-4">Package Interest &amp; Tags</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4">Dates, Duration &amp; Budget</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
+                <th className="py-3 px-3 w-[115px]">Lead ID &amp; Date</th>
+                <th className="py-3 px-3 w-[135px]">Assigned Staff</th>
+                <th className="py-3 px-3 w-[160px]">Customer</th>
+                <th className="py-3 px-3 min-w-[150px]">City / Package</th>
+                <th className="py-3 px-3 w-[120px]">Status</th>
+                <th className="py-3 px-3 w-[135px]">Dates / Duration</th>
+                <th className="py-3 px-3 w-[210px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 animate-pulse">
+                  <td colSpan={7} className="py-12 text-center text-slate-400 animate-pulse">
                     Loading CRM database records...
                   </td>
                 </tr>
               ) : filteredInquiries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-slate-400 space-y-2">
+                  <td colSpan={7} className="py-16 text-center text-slate-400 space-y-2">
                     <MessageSquare className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
                     <p className="font-bold text-slate-700 dark:text-slate-300">
                       {isStaffMode && baseInquiries.length === 0
@@ -773,7 +796,6 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     inq.customerPhone ||
                     inq.whatsappNumber ||
                     '';
-                  const hasPhone = Boolean(phoneCandidate && phoneCandidate !== 'No phone');
                   const waData = generateCustomerWhatsAppLink({ ...inq, lead_id: seqLeadId, leadId: seqLeadId }, currentStaffName, seqLeadId);
                   const leadEndDate = inq.endDate || lead.end_date || lead.endDate || inq.end_date || lead.metadata?.end_date;
                   const leadDurationDays = inq.durationDays ?? lead.duration_days ?? lead.durationDays ?? inq.duration_days ?? lead.metadata?.duration_days;
@@ -783,12 +805,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     <React.Fragment key={inq.id}>
                       <tr className="hover:bg-slate-50/80 dark:hover:bg-[#0a192f]/50 transition-colors group">
                         {/* 1. Lead ID & Date */}
-                        <td className="py-4 px-4 align-top">
-                          <div className="space-y-1">
+                        <td className="py-3 px-3 align-middle">
+                          <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
                                 title={`System UUID: ${lead.id}`}
-                                className="font-mono font-black text-orange-600 dark:text-orange-400 text-xs tracking-tight bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800/80"
+                                className="font-mono font-black text-orange-600 dark:text-orange-400 text-xs tracking-tight bg-orange-50 dark:bg-orange-950/40 px-1.5 py-0.5 rounded-md border border-orange-200 dark:border-orange-800/80"
                               >
                                 {seqLeadId}
                               </span>
@@ -804,14 +826,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 )}
                               </button>
                             </div>
-                            <div className="text-[11px] text-slate-400 dark:text-slate-500 font-medium whitespace-nowrap">
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium whitespace-nowrap">
                               {formatCrmTimestamp(inq.createdAt)}
                             </div>
                           </div>
                         </td>
 
                         {/* 2. Assigned Staff - Editable ONLY by Admin */}
-                        <td className="py-4 px-4 align-top">
+                        <td className="py-3 px-3 align-middle">
                           {isAdmin && onAssignStaff ? (
                             <BaseSelect
                               id={`row-assigned-staff-${lead.id}`}
@@ -822,11 +844,6 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 const rawStaffId = typeof rawVal === 'object' && rawVal !== null
                                   ? ((rawVal as any)?.target?.value || (rawVal as any)?.assignedStaffId || (rawVal as any)?.id || (rawVal as any)?.value || '')
                                   : rawVal;
-                                console.log('🎯 [LeadTableView] Assignment dropdown changed:', {
-                                  leadId: lead.id,
-                                  selectedValue: rawStaffId,
-                                  previousAssigned: currentAssignedId,
-                                });
                                 const cleaned = cleanUnassignedValue(String(rawStaffId || '')) || '';
                                 const staffMember = cleaned ? staffList.find((s) => String(s.id) === String(cleaned)) : null;
                                 const staffName = staffMember ? staffMember.name : '';
@@ -848,10 +865,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
                                 try {
                                   if (onAssignStaff) {
-                                    console.log('🎯 [LeadTableView] Calling onAssignStaff with lead.id:', { leadId: lead.id, staffId: cleaned });
                                     await onAssignStaff(lead.id, String(cleaned));
                                   } else {
-                                    console.log('🎯 [LeadTableView] Calling updateLeadOrInquiryStatus with lead.id:', { leadId: lead.id, status: inq.status, assignedStaffId: cleaned });
                                     const res = await updateLeadOrInquiryStatus({
                                       id: lead.id,
                                       status: inq.status || 'NEW',
@@ -874,13 +889,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                       )
                                     );
                                   }
-                                  console.log('✅ [LeadTableView] Staff assigned successfully for lead:', lead.id, { staffId: cleaned });
                                 } catch (err) {
-                                  console.error('❌ [LeadTableView] Failed assigning staff for lead:', lead.id, err);
+                                  console.error('Failed assigning staff:', err);
                                   setLocalInquiries(inquiries);
                                 }
                               }}
-                              className="text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
+                              className="text-[11px] font-bold rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 max-w-[130px] truncate"
                             >
                               <option value="--Unassigned--">-- Unassigned --</option>
                               {staffList.map((stf) => (
@@ -890,10 +904,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               ))}
                             </BaseSelect>
                           ) : (
-                            <div className="flex items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-                                <UserCheck className="w-3 h-3 text-emerald-500" />
-                                <span>
+                            <div className="flex items-center gap-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 max-w-[130px] truncate">
+                                <UserCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                                <span className="truncate">
                                   {inq.assignedStaffName ||
                                     lead.assigned_staff_name ||
                                     staffList.find((s) => s.id === (currentAssignedId !== '--Unassigned--' ? currentAssignedId : inq.assignedStaffId))?.name ||
@@ -904,88 +918,51 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           )}
                         </td>
 
-                        {/* 3. Customer Details */}
-                        <td className="py-4 px-4 align-top">
-                          <div className="space-y-1">
-                            <div className="font-extrabold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
-                              <span>{inq.customerName || inq.fullName}</span>
+                        {/* 3. Customer Details (Name & Mobile Number ONLY - Compact) */}
+                        <td className="py-3 px-3 align-middle">
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="font-extrabold text-slate-900 dark:text-white text-xs flex items-center gap-1 truncate">
+                              <span className="truncate" title={inq.customerName || inq.fullName}>
+                                {inq.customerName || inq.fullName}
+                              </span>
                               {isLocked && (
                                 <Lock className="w-3 h-3 text-rose-500 shrink-0" title="Locked lead" />
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-mono">
-                              📞 {phoneCandidate || 'No phone'}
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-mono flex items-center gap-1 truncate">
+                              <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{phoneCandidate || 'No phone'}</span>
                             </div>
-                            {inq.customerEmail && (
-                              <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px]">
-                                <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span className="truncate">{inq.customerEmail}</span>
-                              </div>
-                            )}
                           </div>
                         </td>
 
-                        {/* 4. City / Accommodation Tier */}
-                        <td className="py-4 px-4 align-top">
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-semibold text-xs">
+                        {/* 4. City / Package (Concise & Combined) */}
+                        <td className="py-3 px-3 align-middle">
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-1 text-slate-800 dark:text-slate-200 font-bold text-xs truncate">
                               <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
-                              <span className="truncate max-w-[130px]">{inq.userCity || 'City TBD'}</span>
+                              <span className="truncate" title={inq.userCity || 'City TBD'}>
+                                {inq.userCity || 'City TBD'}
+                              </span>
                             </div>
-                            {(() => {
-                              const accomInfo = parseAccommodationTier(inq.accommodationTier || (inq as any).accommodation_tier);
-                              const isBudget = accomInfo.category === 'Budget Hotels';
-                              return (
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center gap-1">
-                                    <span className={`inline-flex items-center text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                                      isBudget
-                                        ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
-                                        : 'bg-purple-100 text-purple-900 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
-                                    }`}>
-                                      {isBudget ? 'Budget' : 'Premium'}
-                                    </span>
-                                    <span className="text-[10px] text-amber-500 font-bold tracking-tighter">
-                                      {accomInfo.starString}
-                                    </span>
-                                  </div>
-                                  <div className="text-[11px] font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                                    {accomInfo.name}
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </td>
-
-                        {/* 5. Package Interest & Tags */}
-                        <td className="py-4 px-4 align-top max-w-[220px]">
-                          <div className="space-y-1.5">
-                            <p className="font-bold text-slate-900 dark:text-white text-xs line-clamp-1" title={inq.title}>
-                              {inq.title}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-1">
-                              {(inq.tags && inq.tags.length > 0 ? inq.tags : [inq.type]).map((tag, idx) => (
-                                <span
-                                  key={idx}
-                                  className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-orange-50 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300 border border-orange-100 dark:border-orange-800/60 whitespace-nowrap"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
+                            <div
+                              className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[200px]"
+                              title={inq.title || inq.referenceName || ''}
+                            >
+                              {inq.title || inq.referenceName || 'Yatra Package'}
                             </div>
                           </div>
                         </td>
 
-                        {/* 7. Status Dropdown (NEW, CONTACTED, CLOSED) */}
-                        <td className="py-4 px-4 align-top">
+                        {/* 5. Status Dropdown */}
+                        <td className="py-3 px-3 align-middle">
                           {isStaffMode && (isLocked || inq.status === 'CLOSED') ? (
                             <div
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 select-none"
-                              title="This lead is Closed and permanently locked for staff. Contact an Administrator to modify."
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 select-none whitespace-nowrap"
+                              title="This lead is Closed and permanently locked for staff."
                             >
-                              <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                              <span>Closed (Locked)</span>
+                              <Lock className="w-3 h-3 text-rose-500 shrink-0" />
+                              <span>Closed</span>
                             </div>
                           ) : (
                             <BaseSelect
@@ -1027,7 +1004,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   setLocalInquiries(inquiries);
                                 }
                               }}
-                              className={`text-xs font-extrabold rounded-xl px-3 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                              className={`text-[11px] font-extrabold rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 ${
                                 statusCfg.badgeClass
                               }`}
                             >
@@ -1040,65 +1017,46 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           )}
                         </td>
 
-                        {/* 8. Dates, Duration & Budget */}
-                        <td className="py-4 px-4 align-top">
-                          <div className="space-y-1.5 text-xs">
-                            <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                              <Calendar className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                        {/* 6. Dates / Duration */}
+                        <td className="py-3 px-3 align-middle">
+                          <div className="space-y-0.5 text-xs whitespace-nowrap">
+                            <div className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
+                              <Calendar className="w-3 h-3 text-orange-500 shrink-0" />
                               <span>{formatCrmDate(inq.checkInDate)}</span>
-                              {leadEndDate && leadEndDate !== 'Flexible / TBD' && (
-                                <span className="text-slate-400 dark:text-slate-500 font-normal">
-                                  → {formatCrmDate(leadEndDate)}
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                              {leadDurationDays ? (
+                                <span>{leadDurationDays}d</span>
+                              ) : inq.tourDuration ? (
+                                <span>{inq.tourDuration}</span>
+                              ) : null}
+                              {paxStr && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span>{paxStr}</span>
+                                </>
+                              )}
+                              {leadBudget && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">{leadBudget}</span>
+                                </>
+                              )}
+                              {inq.reminder_at && (
+                                <span
+                                  title={`Follow-up Reminder: ${getLeadReminderStatus(inq.reminder_at).label}`}
+                                  className="text-amber-500 font-bold ml-0.5"
+                                >
+                                  🔔
                                 </span>
                               )}
-                            </div>
-                            <div className="flex items-center flex-wrap gap-1.5">
-                              {leadDurationDays ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 border border-orange-200 dark:border-orange-800/80">
-                                  <Clock className="w-2.5 h-2.5" />
-                                  <span>{leadDurationDays} Days</span>
-                                </span>
-                              ) : inq.tourDuration ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                  <Clock className="w-2.5 h-2.5" />
-                                  <span>{inq.tourDuration}</span>
-                                </span>
-                              ) : null}
-                              {leadBudget ? (
-                                <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80">
-                                  <span>💰 {leadBudget}</span>
-                                </span>
-                              ) : null}
-
-                              {/* Follow-up Reminder Badge */}
-                              {(() => {
-                                const reminderTs = inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at;
-                                if (!reminderTs) return null;
-                                const remStatus = getLeadReminderStatus(reminderTs);
-                                const remNote = inq.reminder_note || (inq as any).reminderNote || inq.metadata?.reminder_note;
-                                return (
-                                  <div
-                                    className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${
-                                      remStatus.isOverdue
-                                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300 dark:border-rose-800 animate-pulse'
-                                        : remStatus.isDue
-                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300 dark:border-amber-800'
-                                        : 'bg-purple-50 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-800/80'
-                                    }`}
-                                    title={remNote ? `Reminder: ${remNote} (${remStatus.label})` : `Reminder: ${remStatus.label}`}
-                                  >
-                                    <Bell className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
-                                    <span>{remStatus.label}</span>
-                                  </div>
-                                );
-                              })()}
                             </div>
                           </div>
                         </td>
 
-                        {/* 9. Actions */}
-                        <td className="py-4 px-4 align-top text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        {/* 7. Action Buttons (Side-by-Side: Detailed + WhatsApp + 3-Dots Menu) */}
+                        <td className="py-3 px-3 align-middle text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-1.5 relative lead-row-menu-container">
                             {/* Detailed Inspection Drawer */}
                             <button
                               type="button"
@@ -1107,13 +1065,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 else setSelectedDetailedLead({ ...inq, leadId: seqLeadId });
                               }}
                               title="Detailed Yatra Lead Inspection"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100/90 dark:bg-orange-950/70 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white border border-orange-300 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100 hover:bg-orange-600 hover:text-white dark:bg-orange-950/70 dark:hover:bg-orange-600 dark:hover:text-white border border-orange-200 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>Detailed</span>
                             </button>
 
-                            {/* Direct WhatsApp Action Button (Side-by-Side) */}
+                            {/* Direct WhatsApp Action Button */}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1125,123 +1083,141 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   ? `Open WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone}) [Lead: ${seqLeadId}]`
                                   : `Open WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'}`
                               }
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-98 shadow-sm transition-all cursor-pointer shrink-0"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-98 shadow-2xs transition-all cursor-pointer shrink-0"
                             >
                               <MessageCircle className="w-3.5 h-3.5 fill-current" />
                               <span>WhatsApp</span>
                             </button>
 
-                            {/* Hairline divider between primary and secondary actions */}
-                            <span className="w-px h-5 bg-slate-200 dark:bg-slate-700/80 mx-0.5 shrink-0" aria-hidden="true" />
-
-                            {/* Quick Reminder Action Button */}
-                            {isStaffMode && isLocked ? (
+                            {/* 3-Dots Dropdown Menu */}
+                            <div className="relative">
                               <button
                                 type="button"
-                                disabled={true}
-                                title="Reminders are locked for staff on closed leads"
-                                className="p-1.5 rounded-lg border border-transparent text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed select-none"
-                              >
-                                <Bell className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setSelectedLeadForReminder({ ...inq, leadId: seqLeadId })}
-                                title={
-                                  inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
-                                    ? `Reminder Scheduled: ${getLeadReminderStatus(inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at).label} (Click to manage)`
-                                    : 'Schedule Follow-up Reminder'
-                                }
-                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                  inq.reminder_at || (inq as any).reminderAt || inq.metadata?.reminder_at
-                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-2xs'
-                                    : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-transparent hover:border-amber-200 dark:hover:border-amber-900'
-                                }`}
-                              >
-                                <Bell className="w-4 h-4" />
-                              </button>
-                            )}
-
-                            {/* Quick Edit modal */}
-                            {isStaffMode && isLocked ? (
-                              <button
-                                type="button"
-                                onClick={() => alert('You cannot change a closed lead.')}
-                                title="You cannot change a closed lead."
-                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 opacity-50 hover:opacity-100 hover:text-rose-500 cursor-not-allowed transition-all select-none"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  if (isStaffMode && (inq.status === 'CLOSED' || inq.isLockedForStaff)) {
-                                    alert('You cannot change a closed lead.');
-                                    return;
-                                  }
-                                  const editLead = { ...inq, leadId: seqLeadId };
-                                  if (onEditInquiry) onEditInquiry(editLead);
-                                  else if (onEdit) onEdit(editLead);
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuLeadId(openMenuLeadId === lead.id ? null : lead.id);
                                 }}
-                                title="Edit Lead Details"
-                                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-                            )}
-
-
-                            {/* Notes Accordion Toggle */}
-                            {isStaffMode && isLocked ? (
-                              <button
-                                type="button"
-                                disabled={true}
-                                title="Notes are locked for staff on closed leads"
-                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed select-none"
-                              >
-                                <MessageSquare className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => toggleNotes(inq.id)}
-                                title="Staff Notes & Logs"
-                                className={`p-1.5 rounded-lg transition-colors relative ${
-                                  isNotesExpanded
-                                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
-                                    : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                title="More actions (Reminder, Notes, Edit, Delete)"
+                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                  openMenuLeadId === lead.id
+                                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                                 }`}
                               >
-                                <MessageSquare className="w-4 h-4" />
-                                {notesCount > 0 && (
-                                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-600 text-white text-[9px] font-black flex items-center justify-center">
-                                    {notesCount}
-                                  </span>
-                                )}
+                                <MoreVertical className="w-4 h-4" />
                               </button>
-                            )}
 
-                            {/* Admin Unlock if locked */}
-                            {isAdmin && inq.isLockedForStaff && onUnlockInquiry && (
-                              <button
-                                onClick={() => onUnlockInquiry(inq.id)}
-                                title="Reopen & Unlock Lead for Staff"
-                                className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors"
-                              >
-                                <Unlock className="w-4 h-4" />
-                              </button>
-                            )}
+                              {openMenuLeadId === lead.id && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="absolute right-0 top-full mt-1.5 z-50 w-48 rounded-2xl bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-800 shadow-xl py-1 text-left divide-y divide-slate-100 dark:divide-slate-800 text-xs animate-in fade-in slide-in-from-top-1 duration-150"
+                                >
+                                  <div className="py-1">
+                                    {/* Follow-up Reminder */}
+                                    {isStaffMode && isLocked ? (
+                                      <div className="px-3 py-1.5 text-[11px] text-slate-400 cursor-not-allowed">
+                                        Reminders locked (Closed)
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenMenuLeadId(null);
+                                          setSelectedLeadForReminder({ ...inq, leadId: seqLeadId });
+                                        }}
+                                        className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <Bell className={`w-3.5 h-3.5 ${inq.reminder_at ? 'text-amber-500 fill-amber-500/20' : 'text-slate-400'}`} />
+                                          <span>{inq.reminder_at ? 'Manage Reminder' : 'Set Reminder'}</span>
+                                        </div>
+                                        {inq.reminder_at && (
+                                          <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                        )}
+                                      </button>
+                                    )}
 
-                            {/* Delete (Admin only) */}
-                            {isAdmin && onDeleteInquiry && (
-                              <button
-                                onClick={() => onDeleteInquiry(inq.id)}
-                                title="Delete Lead"
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
+                                    {/* Quick Edit Details */}
+                                    {isStaffMode && isLocked ? (
+                                      <div className="px-3 py-1.5 text-[11px] text-slate-400 cursor-not-allowed">
+                                        Edit locked (Closed)
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenMenuLeadId(null);
+                                          if (isStaffMode && (inq.status === 'CLOSED' || inq.isLockedForStaff)) {
+                                            alert('You cannot change a closed lead.');
+                                            return;
+                                          }
+                                          const editLead = { ...inq, leadId: seqLeadId };
+                                          if (onEditInquiry) onEditInquiry(editLead);
+                                          else if (onEdit) onEdit(editLead);
+                                        }}
+                                        className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5 text-slate-400" />
+                                        <span>Edit Details</span>
+                                      </button>
+                                    )}
+
+                                    {/* Staff Notes & Logs */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuLeadId(null);
+                                        toggleNotes(inq.id);
+                                      }}
+                                      className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+                                        <span>Staff Notes</span>
+                                      </div>
+                                      {notesCount > 0 && (
+                                        <span className="px-1.5 py-0.2 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-bold text-[10px]">
+                                          {notesCount}
+                                        </span>
+                                      )}
+                                    </button>
+                                  </div>
+
+                                  {/* Admin Unlock or Delete */}
+                                  {(isAdmin && (inq.isLockedForStaff || onDeleteInquiry)) && (
+                                    <div className="py-1">
+                                      {isAdmin && inq.isLockedForStaff && onUnlockInquiry && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenMenuLeadId(null);
+                                            onUnlockInquiry(inq.id);
+                                          }}
+                                          className="w-full px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <Unlock className="w-3.5 h-3.5" />
+                                          <span>Unlock Lead</span>
+                                        </button>
+                                      )}
+
+                                      {isAdmin && onDeleteInquiry && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenMenuLeadId(null);
+                                            onDeleteInquiry(inq.id);
+                                          }}
+                                          className="w-full px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <span>Delete Lead</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1249,7 +1225,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                       {/* Accordion Expandable Row: Staff Follow-up Notes & Log */}
                       {isNotesExpanded && (
                         <tr className="bg-slate-50/90 dark:bg-[#071322]/80 border-b border-slate-200 dark:border-slate-800">
-                          <td colSpan={8} className="p-4">
+                          <td colSpan={7} className="p-4">
                             <div className="max-w-4xl mx-auto space-y-3">
                               <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
                                 <span className="flex items-center gap-1.5">

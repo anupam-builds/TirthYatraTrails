@@ -1044,12 +1044,6 @@ export const AdminInquiries: React.FC = () => {
                                     📞 {(inq as any).whatsapp_number || inq.phone || (inq as any).metadata?.whatsapp_number || (inq as any).metadata?.phone || inq.customerPhone || inq.whatsappNumber || 'No phone'}
                                   </span>
                                 </div>
-                                {inq.customerEmail && (
-                                  <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[170px]">
-                                    <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                                    <span className="truncate">{inq.customerEmail}</span>
-                                  </div>
-                                )}
                               </div>
                             </td>
 

@@ -481,7 +481,6 @@ export const AdminDashboard: React.FC = () => {
                         <div className="text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
                           📞 {custPhone || 'No phone'}
                         </div>
-                        <div className="text-slate-400 dark:text-slate-500 text-[10px] truncate max-w-[140px]">{custEmail}</div>
                       </td>
                       <td className="py-3.5 px-3 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
                         <div>{inq.title}</div>
