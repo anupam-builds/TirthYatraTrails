@@ -782,22 +782,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <button
                                 onClick={() => handleCopyLeadId(seqLeadId)}
                                 title={`Copy Lead ID (${seqLeadId})`}
-                                className="text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                                className="text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer"
                               >
                                 {copiedId === seqLeadId ? (
                                   <Check className="w-3 h-3 text-emerald-600" />
                                 ) : (
                                   <Copy className="w-3 h-3" />
                                 )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedDetailedLead({ ...inq, leadId: seqLeadId })}
-                                title="Inspect Detailed Lead Profile"
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-100 hover:bg-orange-600 hover:text-white dark:bg-orange-950/60 dark:hover:bg-orange-600 text-orange-700 dark:text-orange-400 text-[10px] font-bold border border-orange-300 dark:border-orange-800/80 transition-all cursor-pointer shadow-2xs"
-                              >
-                                <Eye className="w-3 h-3" />
-                                <span>Detailed</span>
                               </button>
                             </div>
                             <div className="text-[11px] text-slate-400 dark:text-slate-500 font-medium whitespace-nowrap">
