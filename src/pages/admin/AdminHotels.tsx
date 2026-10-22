@@ -70,6 +70,42 @@ export const AdminHotels: React.FC = () => {
     'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80',
   ]);
 
+  const isFetchingRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadData = React.useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    setLoading(true);
+    try {
+      const hList = await api.getHotels(selectedCityId, searchQuery);
+      if (isMountedRef.current) {
+        setHotels(Array.isArray(hList) ? hList : []);
+        if (cities && cities.length > 0 && !cityId) {
+          setCityId(cities[0]?.id || '');
+          setCityName(cities[0]?.name || '');
+        }
+      }
+    } catch (err) {
+      console.error('[AdminHotels] Failed to load hotels:', err);
+      if (isMountedRef.current) {
+        setHotels([]);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+      isFetchingRef.current = false;
+    }
+  }, [selectedCityId, searchQuery, cities, cityId]);
+
   useEffect(() => {
     loadData();
 
@@ -91,26 +127,11 @@ export const AdminHotels: React.FC = () => {
       loadData();
     };
     window.addEventListener('tirth-hotel-changed', handleDataChange);
-    window.addEventListener('tirth-city-changed', handleDataChange);
-    window.addEventListener('storage', handleDataChange);
-
-    const handleFocus = () => {
-      loadData();
-    };
-    window.addEventListener('focus', handleFocus);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') loadData();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('tirth-hotel-changed', handleDataChange);
-      window.removeEventListener('tirth-city-changed', handleDataChange);
-      window.removeEventListener('storage', handleDataChange);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [selectedCityId, searchQuery]);
+  }, [loadData]);
 
   // Real-time multi-admin synchronization via static channel
   useEffect(() => {
@@ -131,32 +152,27 @@ export const AdminHotels: React.FC = () => {
         if (isDeleted) {
           const id = String(payload.old?.id || payload.new?.id || raw.id);
           setHotels((prev) => prev.filter((h) => h.id !== id));
-          loadData();
           return;
         }
 
         const mapped = mapHotelRow(raw);
         setHotels((prev) => reconcileRealtimeList(prev, eventType, mapped));
-        loadData();
       })
       .on('broadcast', { event: 'hotel_deleted' }, ({ payload }: any) => {
         const deletedId = String(payload?.id || '');
         if (deletedId) {
           setHotels((prev) => prev.filter((h) => h.id !== deletedId));
         }
-        loadData();
       })
       .on('broadcast', { event: 'hotel_updated' }, ({ payload }: any) => {
         if (payload?.hotel) {
           setHotels((prev) => reconcileRealtimeList(prev, 'UPDATE', payload.hotel));
         }
-        loadData();
       })
       .on('broadcast', { event: 'hotel_created' }, ({ payload }: any) => {
         if (payload?.hotel) {
           setHotels((prev) => reconcileRealtimeList(prev, 'INSERT', payload.hotel));
         }
-        loadData();
       })
       .subscribe();
 
@@ -164,25 +180,6 @@ export const AdminHotels: React.FC = () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [cList, hList] = await Promise.all([
-        refreshCities(),
-        api.getHotels(selectedCityId, searchQuery),
-      ]);
-      setHotels(hList || []);
-      if ((cList || []).length > 0 && !cityId) {
-        setCityId(cList[0]?.id || '');
-        setCityName(cList[0]?.name || '');
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const handleOpenAdd = () => {
     setEditingHotel(null);
@@ -479,8 +476,8 @@ export const AdminHotels: React.FC = () => {
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-slate-500">
                       <Building className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
-                      <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">No hotels found</p>
-                      <p className="text-xs text-slate-400 mt-1">Try changing your search query or city filter.</p>
+                      <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">No hotels listed yet</p>
+                      <p className="text-xs text-slate-400 mt-1">Try changing your search query or city filter, or add your first hotel listing.</p>
                       <button
                         onClick={handleOpenAdd}
                         className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-bold text-xs cursor-pointer transition-all"

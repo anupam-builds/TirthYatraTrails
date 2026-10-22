@@ -106,68 +106,74 @@ export const HotelsPage: React.FC = () => {
     }
   }, [path, cities]);
 
+  const isFetchingRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
+
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [_, hList, masterHotelList] = await Promise.all([
-          refreshCities(),
-          api.getHotels(selectedCityId, searchQuery),
-          api.getHotels(),
-        ]);
-        setHotels(hList);
-        setAllHotels(masterHotelList);
-      } catch (err) {
-        console.error('Failed to load hotels:', err);
-      } finally {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadData = React.useCallback(async (showLoading = true) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (showLoading) setLoading(true);
+    try {
+      const [hList, masterHotelList] = await Promise.all([
+        api.getHotels(selectedCityId, searchQuery),
+        api.getHotels(),
+      ]);
+      if (isMountedRef.current) {
+        setHotels(Array.isArray(hList) ? hList : []);
+        setAllHotels(Array.isArray(masterHotelList) ? masterHotelList : []);
+      }
+    } catch (err) {
+      console.error('Failed to load hotels:', err);
+      if (isMountedRef.current) {
+        setHotels([]);
+        setAllHotels([]);
+      }
+    } finally {
+      if (isMountedRef.current && showLoading) {
         setLoading(false);
       }
+      isFetchingRef.current = false;
     }
-    loadData();
+  }, [selectedCityId, searchQuery]);
+
+  useEffect(() => {
+    loadData(true);
 
     const handleDataChange = () => {
-      loadData();
+      loadData(false);
     };
     window.addEventListener('tirth-hotel-changed', handleDataChange);
-    window.addEventListener('tirth-city-changed', handleDataChange);
-    window.addEventListener('storage', handleDataChange);
 
-    const handleFocus = () => {
-      loadData();
-    };
-    window.addEventListener('focus', handleFocus);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') loadData();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    // Supabase Real-time Channel for cross-device updates
+    // Supabase Real-time Channel for cross-device updates (background sync without spinner flicker)
     const channelName = 'public:content-sync-channel';
     const channel = supabase.channel(channelName);
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => {
-        loadData();
+        loadData(false);
       })
       .on('broadcast', { event: 'hotel_deleted' }, () => {
-        loadData();
+        loadData(false);
       })
       .on('broadcast', { event: 'hotel_updated' }, () => {
-        loadData();
+        loadData(false);
       })
       .on('broadcast', { event: 'hotel_created' }, () => {
-        loadData();
+        loadData(false);
       })
       .subscribe();
 
     return () => {
       window.removeEventListener('tirth-hotel-changed', handleDataChange);
-      window.removeEventListener('tirth-city-changed', handleDataChange);
-      window.removeEventListener('storage', handleDataChange);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
       supabase.removeChannel(channel);
     };
-  }, [selectedCityId, searchQuery]);
+  }, [loadData]);
 
   const currentCityObj = (cities || []).find(
     (c) =>
@@ -493,7 +499,7 @@ export const HotelsPage: React.FC = () => {
         ) : filteredHotels.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 max-w-lg mx-auto">
             <Building className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-[#0f294a]">No stays found</h3>
+            <h3 className="text-lg font-bold text-[#0f294a]">No hotels listed yet</h3>
             <p className="text-xs text-slate-500 mt-1 mb-4">
               Try adjusting your city filter or search query.
             </p>

@@ -101,8 +101,40 @@ export const AdminPackages: React.FC = () => {
     return `${daysCount} Days / ${nights} Night${nights > 1 ? 's' : ''}`;
   };
 
+  const isFetchingRef = useRef(false);
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
-    loadData();
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadData = React.useCallback(async (showLoading = true) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (showLoading) setLoading(true);
+    try {
+      const list = await api.getPackages(selectedCategory, searchQuery);
+      if (isMountedRef.current) {
+        setPackages(Array.isArray(list) ? list : []);
+      }
+    } catch (err) {
+      console.error('[AdminPackages] Failed to load packages:', err);
+      if (isMountedRef.current) {
+        setPackages([]);
+      }
+    } finally {
+      if (isMountedRef.current && showLoading) {
+        setLoading(false);
+      }
+      isFetchingRef.current = false;
+    }
+  }, [selectedCategory, searchQuery]);
+
+  useEffect(() => {
+    loadData(true);
 
     const handlePackageChange = (e?: Event) => {
       if (e instanceof CustomEvent && e.detail?.action === 'delete') {
@@ -112,28 +144,15 @@ export const AdminPackages: React.FC = () => {
           return;
         }
       }
-      loadData();
+      loadData(false);
     };
 
     window.addEventListener('tirth-package-changed', handlePackageChange);
-    window.addEventListener('storage', handlePackageChange);
-
-    const handleFocus = () => {
-      loadData();
-    };
-    window.addEventListener('focus', handleFocus);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') loadData();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('tirth-package-changed', handlePackageChange);
-      window.removeEventListener('storage', handlePackageChange);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [selectedCategory, searchQuery]);
+  }, [loadData]);
 
   // Real-time multi-admin synchronization via static channel
   useEffect(() => {
@@ -161,7 +180,6 @@ export const AdminPackages: React.FC = () => {
         setLastSyncEvent(`Realtime ${eventType}: "${mapped.title || mapped.id}" synced`);
       }
       setTimeout(() => setLastSyncEvent(null), 4000);
-      loadData();
     };
 
     channel
@@ -173,7 +191,6 @@ export const AdminPackages: React.FC = () => {
           setLastSyncEvent(`Realtime DELETE: "${deletedId}" removed`);
           setTimeout(() => setLastSyncEvent(null), 4000);
         }
-        loadData();
       })
       .on('broadcast', { event: 'package_updated' }, ({ payload }: any) => {
         if (payload?.package) {
@@ -181,7 +198,6 @@ export const AdminPackages: React.FC = () => {
           setLastSyncEvent(`Realtime UPDATE: "${payload.package.title || payload.package.id}" synced`);
           setTimeout(() => setLastSyncEvent(null), 4000);
         }
-        loadData();
       })
       .on('broadcast', { event: 'package_created' }, ({ payload }: any) => {
         if (payload?.package) {
@@ -189,7 +205,6 @@ export const AdminPackages: React.FC = () => {
           setLastSyncEvent(`Realtime INSERT: "${payload.package.title || payload.package.id}" synced`);
           setTimeout(() => setLastSyncEvent(null), 4000);
         }
-        loadData();
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
@@ -201,18 +216,6 @@ export const AdminPackages: React.FC = () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const list = await api.getPackages(selectedCategory, searchQuery);
-      setPackages(list);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   // Dynamic Category Pills/Options derived from packages unioned with defaults & custom saved categories
   const [customCategories, setCustomCategories] = useState<string[]>(() => localStore.getCustomCategories());

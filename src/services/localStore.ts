@@ -156,9 +156,6 @@ export const localStore = {
       );
     });
     setStored(STORAGE_KEYS.HOTELS, cleanList);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'sync', count: cleanList.length } }));
-    }
   },
 
   getDeletedPackageIds(): string[] {
@@ -194,9 +191,6 @@ export const localStore = {
       );
     });
     setStored(STORAGE_KEYS.PACKAGES, cleanList);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'sync', count: cleanList.length } }));
-    }
   },
 
   setCities(freshCities: City[]): void {
