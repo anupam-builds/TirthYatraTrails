@@ -52,10 +52,12 @@ import {
   CalendarClock,
   MoreVertical,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { LeadDetailsModal } from '../LeadDetailsModal.js';
 import { CreateLeadModal } from './CreateLeadModal.js';
 import { ReminderAlertBanner } from './ReminderAlertBanner.js';
 import { QuickReminderModal } from './QuickReminderModal.js';
+import { LeadNotesModal } from './LeadNotesModal.js';
 
 interface LeadTableViewProps {
   inquiries: Inquiry[];
@@ -103,35 +105,47 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedDetailedLead, setSelectedDetailedLead] = useState<Inquiry | null>(null);
   const [selectedLeadForReminder, setSelectedLeadForReminder] = useState<Inquiry | null>(null);
+  const [selectedLeadForNotes, setSelectedLeadForNotes] = useState<Inquiry | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [openMenuLeadId, setOpenMenuLeadId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{
+    lead: Inquiry;
+    seqLeadId: string;
+    top: number;
+    right: number;
+  } | null>(null);
 
-  // Close open 3-dots action menu on click outside or escape key
+  // Close floating popover on click outside, scroll, resize, or escape key
   useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('.lead-row-menu-container')) {
-        setOpenMenuLeadId(null);
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.floating-crm-popover') && !target.closest('.lead-row-menu-btn')) {
+        setMenuAnchor(null);
       }
+    };
+    const handleScrollOrResize = () => {
+      setMenuAnchor(null);
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setOpenMenuLeadId(null);
+        setMenuAnchor(null);
       }
     };
-    if (openMenuLeadId) {
-      document.addEventListener('click', handleOutsideClick);
+
+    if (menuAnchor) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('touchstart', handleOutsideClick);
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      window.addEventListener('resize', handleScrollOrResize);
       document.addEventListener('keydown', handleKeyDown);
       return () => {
-        document.removeEventListener('click', handleOutsideClick);
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('touchstart', handleOutsideClick);
+        window.removeEventListener('scroll', handleScrollOrResize, true);
+        window.removeEventListener('resize', handleScrollOrResize);
         document.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [openMenuLeadId]);
-
-  // Accordion for inline notes
-  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
-  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
-  const [submittingNote, setSubmittingNote] = useState<Record<string, boolean>>({});
+  }, [menuAnchor]);
 
   // Local state for optimistic updates and immediate persistence
   const [localInquiries, setLocalInquiries] = useState<Inquiry[]>(inquiries);
@@ -194,25 +208,6 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     navigator.clipboard.writeText(leadId);
     setCopiedId(leadId);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const toggleNotes = (id: string) => {
-    setExpandedNotes((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const handleSendNote = async (id: string) => {
-    const text = (noteInputs[id] || '').trim();
-    if (!text || !onAddNote) return;
-
-    setSubmittingNote((prev) => ({ ...prev, [id]: true }));
-    try {
-      await onAddNote(id, text);
-      setNoteInputs((prev) => ({ ...prev, [id]: '' }));
-    } catch (err: any) {
-      alert(err.message || 'Failed to post note');
-    } finally {
-      setSubmittingNote((prev) => ({ ...prev, [id]: false }));
-    }
   };
 
   // Direct WhatsApp chat handler targeting the customer's specific phone number with Lead ID
@@ -777,7 +772,6 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                   const paxStr = formatPaxCount(inq);
                   const statusCfg = CRM_STATUS_CONFIG[inq.status as InquiryStatus] || CRM_STATUS_CONFIG.NEW;
                   const isLocked = Boolean(inq.isLockedForStaff || inq.status === 'CLOSED');
-                  const isNotesExpanded = expandedNotes[inq.id] || false;
                   const notesCount = inq.followUpNotes?.length || 0;
                   const phoneCandidate =
                     lead.whatsapp_number ||
@@ -1089,217 +1083,35 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <span>WhatsApp</span>
                             </button>
 
-                            {/* 3-Dots Dropdown Menu */}
-                            <div className="relative">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOpenMenuLeadId(openMenuLeadId === lead.id ? null : lead.id);
-                                }}
-                                title="More actions (Reminder, Notes, Edit, Delete)"
-                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                  openMenuLeadId === lead.id
-                                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600'
-                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border-transparent hover:border-slate-200 dark:hover:border-slate-700'
-                                }`}
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
-
-                              {openMenuLeadId === lead.id && (
-                                <div
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="absolute right-0 top-full mt-1.5 z-50 w-48 rounded-2xl bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-800 shadow-xl py-1 text-left divide-y divide-slate-100 dark:divide-slate-800 text-xs animate-in fade-in slide-in-from-top-1 duration-150"
-                                >
-                                  <div className="py-1">
-                                    {/* Follow-up Reminder */}
-                                    {isStaffMode && isLocked ? (
-                                      <div className="px-3 py-1.5 text-[11px] text-slate-400 cursor-not-allowed">
-                                        Reminders locked (Closed)
-                                      </div>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setOpenMenuLeadId(null);
-                                          setSelectedLeadForReminder({ ...inq, leadId: seqLeadId });
-                                        }}
-                                        className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          <Bell className={`w-3.5 h-3.5 ${inq.reminder_at ? 'text-amber-500 fill-amber-500/20' : 'text-slate-400'}`} />
-                                          <span>{inq.reminder_at ? 'Manage Reminder' : 'Set Reminder'}</span>
-                                        </div>
-                                        {inq.reminder_at && (
-                                          <span className="w-2 h-2 rounded-full bg-amber-500" />
-                                        )}
-                                      </button>
-                                    )}
-
-                                    {/* Quick Edit Details */}
-                                    {isStaffMode && isLocked ? (
-                                      <div className="px-3 py-1.5 text-[11px] text-slate-400 cursor-not-allowed">
-                                        Edit locked (Closed)
-                                      </div>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setOpenMenuLeadId(null);
-                                          if (isStaffMode && (inq.status === 'CLOSED' || inq.isLockedForStaff)) {
-                                            alert('You cannot change a closed lead.');
-                                            return;
-                                          }
-                                          const editLead = { ...inq, leadId: seqLeadId };
-                                          if (onEditInquiry) onEditInquiry(editLead);
-                                          else if (onEdit) onEdit(editLead);
-                                        }}
-                                        className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center gap-2 transition-colors cursor-pointer"
-                                      >
-                                        <Edit3 className="w-3.5 h-3.5 text-slate-400" />
-                                        <span>Edit Details</span>
-                                      </button>
-                                    )}
-
-                                    {/* Staff Notes & Logs */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setOpenMenuLeadId(null);
-                                        toggleNotes(inq.id);
-                                      }}
-                                      className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-                                        <span>Staff Notes</span>
-                                      </div>
-                                      {notesCount > 0 && (
-                                        <span className="px-1.5 py-0.2 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-bold text-[10px]">
-                                          {notesCount}
-                                        </span>
-                                      )}
-                                    </button>
-                                  </div>
-
-                                  {/* Admin Unlock or Delete */}
-                                  {(isAdmin && (inq.isLockedForStaff || onDeleteInquiry)) && (
-                                    <div className="py-1">
-                                      {isAdmin && inq.isLockedForStaff && onUnlockInquiry && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setOpenMenuLeadId(null);
-                                            onUnlockInquiry(inq.id);
-                                          }}
-                                          className="w-full px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 flex items-center gap-2 transition-colors cursor-pointer"
-                                        >
-                                          <Unlock className="w-3.5 h-3.5" />
-                                          <span>Unlock Lead</span>
-                                        </button>
-                                      )}
-
-                                      {isAdmin && onDeleteInquiry && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setOpenMenuLeadId(null);
-                                            onDeleteInquiry(inq.id);
-                                          }}
-                                          className="w-full px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2 transition-colors cursor-pointer"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                          <span>Delete Lead</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                            {/* 3-Dots Floating Dropdown Trigger Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                if (menuAnchor && menuAnchor.lead.id === lead.id) {
+                                  setMenuAnchor(null);
+                                } else {
+                                  setMenuAnchor({
+                                    lead: inq,
+                                    seqLeadId,
+                                    top: rect.bottom + 6,
+                                    right: window.innerWidth - rect.right,
+                                  });
+                                }
+                              }}
+                              title="Actions (Set Reminder, Edit Note, Delete)"
+                              className={`lead-row-menu-btn p-1.5 rounded-lg border transition-all cursor-pointer shrink-0 ${
+                                menuAnchor && menuAnchor.lead.id === lead.id
+                                  ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600'
+                                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border-transparent hover:border-slate-200 dark:hover:border-slate-700'
+                              }`}
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>
-
-                      {/* Accordion Expandable Row: Staff Follow-up Notes & Log */}
-                      {isNotesExpanded && (
-                        <tr className="bg-slate-50/90 dark:bg-[#071322]/80 border-b border-slate-200 dark:border-slate-800">
-                          <td colSpan={7} className="p-4">
-                            <div className="max-w-4xl mx-auto space-y-3">
-                              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                                <span className="flex items-center gap-1.5">
-                                  <Clock className="w-3.5 h-3.5 text-orange-500" />
-                                  <span>Internal Follow-up Notes for Lead {seqLeadId}</span>
-                                </span>
-                                {inq.specialRequests && (
-                                  <span className="text-[11px] font-normal text-slate-500 italic">
-                                    Special Request: "{inq.specialRequests}"
-                                  </span>
-                                )}
-                              </div>
-
-                              {inq.followUpNotes && inq.followUpNotes.length > 0 ? (
-                                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                                  {inq.followUpNotes.map((note) => (
-                                    <div
-                                      key={note.id}
-                                      className="p-2.5 rounded-xl bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 text-xs space-y-0.5"
-                                    >
-                                      <div className="flex items-center justify-between text-[10px] text-slate-400">
-                                        <span className="font-bold text-slate-700 dark:text-slate-300">
-                                          {note.authorName} ({note.authorRole})
-                                        </span>
-                                        <span>{formatCrmTimestamp(note.createdAt)}</span>
-                                      </div>
-                                      <p className="text-slate-800 dark:text-slate-200">{note.text}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-xs text-slate-400 italic">No notes logged yet.</p>
-                              )}
-
-                              {isStaffMode && isLocked ? (
-                                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs font-semibold flex items-center gap-2">
-                                  <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                  <span>This lead is closed and locked. Modifying or logging new notes is disabled for staff.</span>
-                                </div>
-                              ) : (
-                                onAddNote && (
-                                  <div className="flex items-center gap-2">
-                                    <BaseInput
-                                      id={`lead-quick-note-input-${inq.id}`}
-                                      name={`lead-quick-note-input-${inq.id}`}
-                                      type="text"
-                                      placeholder="Add quick follow-up note (e.g. Called devotee; sent customized quotation)..."
-                                      value={noteInputs[inq.id] || ''}
-                                      onChange={(e) =>
-                                        setNoteInputs({ ...noteInputs, [inq.id]: e.target.value })
-                                      }
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          handleSendNote(inq.id);
-                                        }
-                                      }}
-                                      className="flex-1 px-3 py-2 bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-900 dark:text-white"
-                                    />
-                                    <button
-                                      onClick={() => handleSendNote(inq.id)}
-                                      disabled={submittingNote[inq.id] || !noteInputs[inq.id]?.trim()}
-                                      className="px-3.5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0 cursor-pointer"
-                                    >
-                                      <Send className="w-3 h-3" />
-                                      <span>Log Note</span>
-                                    </button>
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
                     </React.Fragment>
                   );
                 })
@@ -1308,6 +1120,131 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Floating 3-Dots Action Popover (Detached from row DOM flow - zero row expansion) */}
+      {menuAnchor &&
+        createPortal(
+          <div
+            role="menu"
+            style={{
+              position: 'fixed',
+              top: `${menuAnchor.top}px`,
+              right: `${menuAnchor.right}px`,
+              zIndex: 9999,
+            }}
+            className="floating-crm-popover w-48 rounded-2xl bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-left divide-y divide-slate-100 dark:divide-slate-800 text-xs animate-in fade-in zoom-in-95 duration-100 select-none"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="py-1">
+              {/* 1. Set / Manage Reminder */}
+              {isStaffMode && (menuAnchor.lead.isLockedForStaff || menuAnchor.lead.status === 'CLOSED') ? (
+                <div className="px-3 py-1.5 text-[11px] text-slate-400 cursor-not-allowed">
+                  Reminders locked (Closed)
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetLead = { ...menuAnchor.lead, leadId: menuAnchor.seqLeadId };
+                    setMenuAnchor(null);
+                    setSelectedLeadForReminder(targetLead);
+                  }}
+                  className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Bell
+                      className={`w-3.5 h-3.5 ${
+                        menuAnchor.lead.reminder_at ? 'text-amber-500 fill-amber-500/20' : 'text-slate-400'
+                      }`}
+                    />
+                    <span>{menuAnchor.lead.reminder_at ? 'Manage Reminder' : 'Set Reminder'}</span>
+                  </div>
+                  {menuAnchor.lead.reminder_at && (
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  )}
+                </button>
+              )}
+
+              {/* 2. Edit Note */}
+              <button
+                type="button"
+                onClick={() => {
+                  const targetLead = { ...menuAnchor.lead, leadId: menuAnchor.seqLeadId };
+                  setMenuAnchor(null);
+                  setSelectedLeadForNotes(targetLead);
+                }}
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center justify-between transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Edit Note</span>
+                </div>
+                {(menuAnchor.lead.followUpNotes?.length || 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-bold text-[10px]">
+                    {menuAnchor.lead.followUpNotes?.length}
+                  </span>
+                )}
+              </button>
+
+              {/* 3. Edit Details */}
+              {isStaffMode && (menuAnchor.lead.isLockedForStaff || menuAnchor.lead.status === 'CLOSED') ? (
+                <div className="px-3 py-1.5 text-[11px] text-slate-400 cursor-not-allowed">
+                  Edit locked (Closed)
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetLead = { ...menuAnchor.lead, leadId: menuAnchor.seqLeadId };
+                    setMenuAnchor(null);
+                    if (onEditInquiry) onEditInquiry(targetLead);
+                    else if (onEdit) onEdit(targetLead);
+                  }}
+                  className="w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Edit Details</span>
+                </button>
+              )}
+            </div>
+
+            {/* Admin Unlock or Delete */}
+            {(isAdmin && (menuAnchor.lead.isLockedForStaff || onDeleteInquiry)) && (
+              <div className="py-1">
+                {isAdmin && menuAnchor.lead.isLockedForStaff && onUnlockInquiry && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const leadId = menuAnchor.lead.id;
+                      setMenuAnchor(null);
+                      onUnlockInquiry(leadId);
+                    }}
+                    className="w-full px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Unlock className="w-3.5 h-3.5" />
+                    <span>Unlock Lead</span>
+                  </button>
+                )}
+
+                {isAdmin && onDeleteInquiry && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const leadId = menuAnchor.lead.id;
+                      setMenuAnchor(null);
+                      onDeleteInquiry(leadId);
+                    }}
+                    className="w-full px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
 
       {/* Slide-over Detailed Drawer / Modal */}
       <LeadDetailsModal
@@ -1358,6 +1295,45 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                 ? { ...item, ...updates, ...updated }
                 : item
             )
+          );
+        }}
+      />
+
+      {/* Dedicated Lead Notes Modal */}
+      <LeadNotesModal
+        lead={selectedLeadForNotes}
+        isOpen={Boolean(selectedLeadForNotes)}
+        onClose={() => setSelectedLeadForNotes(null)}
+        isStaffMode={isStaffMode}
+        currentStaffName={currentStaffName}
+        onAddNote={async (id, text) => {
+          if (onAddNote) {
+            await onAddNote(id, text);
+          }
+          const newNote = {
+            id: `note-${Date.now()}`,
+            authorName: currentStaffName || (isAdmin ? 'Administrator' : 'Staff'),
+            authorRole: isAdmin ? 'ADMIN' : 'STAFF',
+            text,
+            createdAt: new Date().toISOString(),
+          };
+          setLocalInquiries((prev) =>
+            prev.map((item) =>
+              String(item.id) === String(id)
+                ? {
+                    ...item,
+                    followUpNotes: [...(item.followUpNotes || []), newNote as any],
+                  }
+                : item
+            )
+          );
+          setSelectedLeadForNotes((prev) =>
+            prev && String(prev.id) === String(id)
+              ? {
+                  ...prev,
+                  followUpNotes: [...(prev.followUpNotes || []), newNote as any],
+                }
+              : prev
           );
         }}
       />
