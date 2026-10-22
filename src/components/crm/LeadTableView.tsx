@@ -110,7 +110,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [menuAnchor, setMenuAnchor] = useState<{
     lead: Inquiry;
     seqLeadId: string;
+    openUpwards: boolean;
     top: number;
+    bottom: number;
     right: number;
   } | null>(null);
 
@@ -1092,11 +1094,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 if (menuAnchor && menuAnchor.lead.id === lead.id) {
                                   setMenuAnchor(null);
                                 } else {
+                                  const spaceBelow = window.innerHeight - rect.bottom;
+                                  const spaceAbove = rect.top;
+                                  // Open upwards above the button by default or whenever space allows
+                                  const openUpwards = spaceAbove >= 180 || spaceBelow < 200;
+
                                   setMenuAnchor({
                                     lead: inq,
                                     seqLeadId,
+                                    openUpwards,
                                     top: rect.bottom + 6,
-                                    right: window.innerWidth - rect.right,
+                                    bottom: Math.max(12, window.innerHeight - rect.top + 6),
+                                    right: Math.max(12, window.innerWidth - rect.right),
                                   });
                                 }
                               }}
@@ -1121,18 +1130,31 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         </div>
       </div>
 
-      {/* Floating 3-Dots Action Popover (Detached from row DOM flow - zero row expansion) */}
+      {/* Floating 3-Dots Action Popover (Pops open upwards above the 3-dots button) */}
       {menuAnchor &&
         createPortal(
           <div
             role="menu"
-            style={{
-              position: 'fixed',
-              top: `${menuAnchor.top}px`,
-              right: `${menuAnchor.right}px`,
-              zIndex: 9999,
-            }}
-            className="floating-crm-popover w-48 rounded-2xl bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-left divide-y divide-slate-100 dark:divide-slate-800 text-xs animate-in fade-in zoom-in-95 duration-100 select-none"
+            style={
+              menuAnchor.openUpwards
+                ? {
+                    position: 'fixed',
+                    bottom: `${menuAnchor.bottom}px`,
+                    right: `${menuAnchor.right}px`,
+                    zIndex: 9999,
+                  }
+                : {
+                    position: 'fixed',
+                    top: `${menuAnchor.top}px`,
+                    right: `${menuAnchor.right}px`,
+                    zIndex: 9999,
+                  }
+            }
+            className={`floating-crm-popover w-48 rounded-2xl bg-white dark:bg-[#0c1a2e] border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-left divide-y divide-slate-100 dark:divide-slate-800 text-xs animate-in fade-in select-none ${
+              menuAnchor.openUpwards
+                ? 'slide-in-from-bottom-2 origin-bottom-right'
+                : 'slide-in-from-top-2 origin-top-right'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="py-1">
