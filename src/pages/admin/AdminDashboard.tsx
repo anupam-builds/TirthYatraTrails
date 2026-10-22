@@ -478,24 +478,8 @@ export const AdminDashboard: React.FC = () => {
                         {custName}
                       </td>
                       <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
-                          <span>
-                            📞 {custPhone || 'No phone'}
-                          </span>
-                          {waData && (
-                            <a
-                              href={waData.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => {
-                                if (inq.status === 'NEW') handleUpdateStatus(inq.id, 'CONTACTED');
-                              }}
-                              title={`WhatsApp ${custName} (+${waData.phone})`}
-                              className="p-1 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-colors"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                            </a>
-                          )}
+                        <div className="text-slate-800 dark:text-slate-300 font-mono font-medium text-xs">
+                          📞 {custPhone || 'No phone'}
                         </div>
                         <div className="text-slate-400 dark:text-slate-500 text-[10px] truncate max-w-[140px]">{custEmail}</div>
                       </td>

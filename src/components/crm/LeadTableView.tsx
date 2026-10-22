@@ -900,26 +900,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <Lock className="w-3 h-3 text-rose-500 shrink-0" title="Locked lead" />
                               )}
                             </div>
-                            <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-mono">
-                              <span>
-                                📞 {phoneCandidate || 'No phone'}
-                              </span>
-                              {waData ? (
-                                <a
-                                  href={waData.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenWhatsApp(inq, seqLeadId);
-                                  }}
-                                  title={`Outbound WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold transition-all cursor-pointer shadow-2xs shrink-0"
-                                >
-                                  <MessageCircle className="w-3 h-3 fill-current" />
-                                  <span>WhatsApp</span>
-                                </a>
-                              ) : null}
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-mono">
+                              📞 {phoneCandidate || 'No phone'}
                             </div>
                             {inq.customerEmail && (
                               <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px]">
@@ -1118,7 +1100,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <span>Detailed</span>
                             </button>
 
-                            {/* Outbound WhatsApp Direct to Customer */}
+                            {/* Primary Action 2: Outbound WhatsApp Direct to Customer (Side-by-Side) */}
                             {waData ? (
                               <a
                                 href={waData.url}
@@ -1134,7 +1116,20 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <MessageCircle className="w-3.5 h-3.5 fill-current" />
                                 <span>WhatsApp</span>
                               </a>
-                            ) : null}
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                title={`No phone number on record for ${inq.customerName || inq.fullName || 'Customer'}`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed select-none shrink-0"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                <span>WhatsApp</span>
+                              </button>
+                            )}
+
+                            {/* Hairline divider between primary and secondary actions */}
+                            <span className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5 shrink-0" aria-hidden="true" />
 
                             {/* Quick Reminder Action Button */}
                             {isStaffMode && isLocked ? (
@@ -1193,31 +1188,6 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               </button>
                             )}
 
-                            {/* WhatsApp Direct Outbound to Customer */}
-                            {waData ? (
-                              <a
-                                href={waData.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenWhatsApp(inq, seqLeadId);
-                                }}
-                                title={`Direct WhatsApp chat with customer ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
-                                className="p-1.5 rounded-lg text-emerald-600 hover:text-white hover:bg-emerald-600 dark:text-emerald-400 dark:hover:text-white dark:hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 transition-colors cursor-pointer"
-                              >
-                                <MessageCircle className="w-4 h-4 fill-current" />
-                              </a>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled
-                                title={`No phone number on record for ${inq.customerName || inq.fullName || 'Customer'}`}
-                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-700 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed select-none"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                            )}
 
                             {/* Notes Accordion Toggle */}
                             {isStaffMode && isLocked ? (
