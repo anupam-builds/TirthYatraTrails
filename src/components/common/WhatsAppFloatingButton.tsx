@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { MessageCircle, X } from 'lucide-react';
+import { useRouter } from '../../context/RouterContext.js';
+import { SECURE_ADMIN_PORTAL_PATH } from '../../constants/routes.js';
 import {
   WHATSAPP_BUSINESS_PHONE,
   WHATSAPP_DEFAULT_MESSAGE,
@@ -7,6 +9,20 @@ import {
 } from '../../utils/whatsapp.js';
 
 export const WhatsAppFloatingButton: React.FC = () => {
+  const { path } = useRouter();
+  const cleanPath = (path.split('?')[0].split('#')[0].replace(/\/+$/, '')) || '/';
+
+  // Completely hide floating WhatsApp widget in admin panel and staff portal
+  if (
+    cleanPath.startsWith(SECURE_ADMIN_PORTAL_PATH) ||
+    cleanPath.startsWith('/portal') ||
+    cleanPath.startsWith('/management') ||
+    cleanPath.startsWith('/admin') ||
+    cleanPath.startsWith('/staff')
+  ) {
+    return null;
+  }
+
   const [showTooltip, setShowTooltip] = useState(false);
   const whatsappUrl = getWhatsAppUrl(WHATSAPP_DEFAULT_MESSAGE);
 

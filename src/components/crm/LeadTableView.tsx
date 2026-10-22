@@ -191,29 +191,42 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     }
   };
 
-  // Direct WhatsApp chat handler targeting the customer's specific phone number
-  const handleOpenWhatsApp = (inq: Inquiry, visualLeadId?: string) => {
+  // Direct WhatsApp chat handler targeting the customer's specific phone number with Lead ID
+  const handleDirectWhatsAppClick = (inq: Inquiry, visualLeadId?: string) => {
     const activeLead = inq as any;
     const currentLeadId =
       visualLeadId ||
       (activeLead.lead_id && /^TTT\d+$/i.test(String(activeLead.lead_id).trim()) ? String(activeLead.lead_id).trim().toUpperCase() : '') ||
       (activeLead.leadId && /^TTT\d+$/i.test(String(activeLead.leadId).trim()) ? String(activeLead.leadId).trim().toUpperCase() : '') ||
-      (inq.id ? leadSeqIdMap.get(String(inq.id)) : undefined);
-    const waData = generateCustomerWhatsAppLink({ ...inq, lead_id: currentLeadId, leadId: currentLeadId }, currentStaffName, currentLeadId);
-    if (!waData) {
-      alert(`No valid phone or WhatsApp number found for ${activeLead.customer_name || inq.customerName || inq.fullName || 'this customer'}.`);
-      return;
-    }
+      (inq.id ? leadSeqIdMap.get(String(inq.id)) : undefined) ||
+      'TTT00000001';
 
-    // Automatically advance NEW leads to CONTACTED in background
-    if (!inq.status || inq.status === 'NEW') {
-      const exactId = (inq as any).id || inq.id;
-      if (onUpdateStatus) {
-        onUpdateStatus(exactId, 'CONTACTED').catch(() => {});
-      } else {
-        updateLeadOrInquiryStatus({ id: exactId, status: 'CONTACTED' }).catch(() => {});
+    let wa = generateCustomerWhatsAppLink({ ...inq, lead_id: currentLeadId, leadId: currentLeadId }, currentStaffName, currentLeadId);
+    if (!wa || !wa.url) {
+      const promptPhone = window.prompt(`No valid phone found for ${inq.customerName || inq.fullName || 'this customer'}. Please enter WhatsApp phone number:`, '');
+      if (promptPhone && promptPhone.trim()) {
+        wa = generateCustomerWhatsAppLink({ ...inq, phone: promptPhone.trim(), lead_id: currentLeadId, leadId: currentLeadId }, currentStaffName, currentLeadId);
       }
     }
+
+    if (wa && wa.url) {
+      window.open(wa.url, '_blank', 'noopener,noreferrer');
+      // Automatically advance NEW leads to CONTACTED in background
+      if (!inq.status || inq.status === 'NEW') {
+        const exactId = (inq as any).id || inq.id;
+        if (onUpdateStatus) {
+          onUpdateStatus(exactId, 'CONTACTED').catch(() => {});
+        } else {
+          updateLeadOrInquiryStatus({ id: exactId, status: 'CONTACTED' }).catch(() => {});
+        }
+      }
+    } else {
+      alert(`No valid phone number found for ${activeLead.customer_name || inq.customerName || inq.fullName || 'this customer'}.`);
+    }
+  };
+
+  const handleOpenWhatsApp = (inq: Inquiry, visualLeadId?: string) => {
+    handleDirectWhatsAppClick(inq, visualLeadId);
   };
 
   // Compute chronological sequential IDs (oldest -> TTT00000001, TTT00000002, ...)
@@ -1094,42 +1107,32 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 else setSelectedDetailedLead({ ...inq, leadId: seqLeadId });
                               }}
                               title="Detailed Yatra Lead Inspection"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100/80 dark:bg-orange-950/60 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white border border-orange-300 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100/90 dark:bg-orange-950/70 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white border border-orange-300 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>Detailed</span>
                             </button>
 
-                            {/* Primary Action 2: Outbound WhatsApp Direct to Customer (Side-by-Side) */}
-                            {waData ? (
-                              <a
-                                href={waData.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenWhatsApp(inq, seqLeadId);
-                                }}
-                                title={`Outbound WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone})`}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-950/60 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600 dark:hover:text-white border border-emerald-300 dark:border-emerald-800 transition-all cursor-pointer shadow-2xs shrink-0"
-                              >
-                                <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                                <span>WhatsApp</span>
-                              </a>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled
-                                title={`No phone number on record for ${inq.customerName || inq.fullName || 'Customer'}`}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed select-none shrink-0"
-                              >
-                                <MessageCircle className="w-3.5 h-3.5" />
-                                <span>WhatsApp</span>
-                              </button>
-                            )}
+                            {/* Direct WhatsApp Action Button (Side-by-Side) */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDirectWhatsAppClick(inq, seqLeadId);
+                              }}
+                              title={
+                                waData
+                                  ? `Open WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone}) [Lead: ${seqLeadId}]`
+                                  : `Open WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'}`
+                              }
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-98 shadow-sm transition-all cursor-pointer shrink-0"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                              <span>WhatsApp</span>
+                            </button>
 
                             {/* Hairline divider between primary and secondary actions */}
-                            <span className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5 shrink-0" aria-hidden="true" />
+                            <span className="w-px h-5 bg-slate-200 dark:bg-slate-700/80 mx-0.5 shrink-0" aria-hidden="true" />
 
                             {/* Quick Reminder Action Button */}
                             {isStaffMode && isLocked ? (

@@ -446,14 +446,22 @@ export function generateCustomerWhatsAppLink(
     lead.whatsapp ||
     lead.mobile ||
     lead.contact ||
+    lead.contact_number ||
+    lead.contactNumber ||
     lead.customer_phone ||
     lead.customerPhone ||
+    lead.customer_contact ||
+    lead.customerContact ||
     lead.phone_number ||
     lead.phoneNumber ||
+    lead.user_phone ||
+    lead.userPhone ||
     lead.metadata?.whatsapp_number ||
     lead.metadata?.phone ||
     lead.metadata?.customer_phone ||
     lead.metadata?.mobile ||
+    lead.metadata?.contact ||
+    lead.metadata?.contact_number ||
     inquiry.customerPhone ||
     inquiry.whatsappNumber ||
     '';
