@@ -342,45 +342,6 @@ export const AdminLoginPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Quick Fill Credentials Buttons */}
-                <div className="p-2.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-1.5">
-                  <span className="text-[10px] uppercase font-bold text-neutral-400 block">
-                    Quick Fill Credentials:
-                  </span>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmail('anupamsaxena.dev@gmail.com');
-                        setPassword('@Atharv_1996');
-                        setError('');
-                      }}
-                      className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer border ${
-                        email === 'anupamsaxena.dev@gmail.com'
-                          ? 'bg-amber-950/80 text-amber-300 font-bold border-amber-600/70'
-                          : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-750 hover:text-white border-neutral-700'
-                      }`}
-                    >
-                      Root Admin (Anupam)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmail('admin@tirthyatratrails.in');
-                        setPassword('Admin@123');
-                        setError('');
-                      }}
-                      className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer border ${
-                        email === 'admin@tirthyatratrails.in'
-                          ? 'bg-amber-950/80 text-amber-300 font-bold border-amber-600/70'
-                          : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-750 hover:text-white border-neutral-700'
-                      }`}
-                    >
-                      Secondary Admin
-                    </button>
-                  </div>
-                </div>
-
                 {/* Straightforward Login Button */}
                 <button
                   id="btn-admin-login"
