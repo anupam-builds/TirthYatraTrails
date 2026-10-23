@@ -33,6 +33,24 @@ interface AuthContextType {
   logoutStaff: () => void;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMsg = 'Operation timed out'): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(timeoutMsg));
+    }, ms);
+
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -67,6 +85,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Restore Admin Session with strict role re-verification (clears on window close via sessionStorage)
   useEffect(() => {
+    let isCancelled = false;
+
     async function initAdmin() {
       const clearAdminToken = () => {
         if (typeof window !== 'undefined') {
@@ -76,40 +96,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       try {
-        const stored = await api.getMe('tyt_admin_token');
-        if (stored && stored.role === 'ADMIN') {
-          // Strict database-backed re-assertion of admin privileges
-          const isValidAdmin = await api.verifyAdminSession(stored);
-          if (isValidAdmin) {
-            if (!stored.access_token || isJwtExpired(stored.access_token)) {
-              try {
-                const freshToken = await ensureActiveSupabaseSession();
-                if (freshToken) {
-                  stored.access_token = freshToken;
-                  if (typeof window !== 'undefined') {
-                    sessionStorage.setItem('tyt_admin_token', btoa(JSON.stringify(stored)));
-                  }
+        // Enforce strict 3.5s timeout on the entire admin session verification process
+        await withTimeout(
+          (async () => {
+            const stored = await api.getMe('tyt_admin_token');
+            if (stored && stored.role === 'ADMIN') {
+              // Strict database-backed re-assertion of admin privileges
+              const isValidAdmin = await api.verifyAdminSession(stored);
+              if (isValidAdmin) {
+                if (!stored.access_token || isJwtExpired(stored.access_token)) {
+                  try {
+                    const freshToken = await withTimeout(
+                      ensureActiveSupabaseSession(2000),
+                      2000,
+                      'Supabase session refresh timed out'
+                    );
+                    if (freshToken) {
+                      stored.access_token = freshToken;
+                      if (typeof window !== 'undefined') {
+                        sessionStorage.setItem('tyt_admin_token', btoa(JSON.stringify(stored)));
+                      }
+                    }
+                  } catch {}
                 }
-              } catch {}
+                if (!isCancelled) {
+                  setAdminUser(stored);
+                }
+              } else {
+                console.warn('[AuthContext] Admin privileges revoked or not found in database. Terminating session.');
+                clearAdminToken();
+                if (!isCancelled) {
+                  setAdminUser(null);
+                }
+              }
+            } else {
+              clearAdminToken();
+              if (!isCancelled) {
+                setAdminUser(null);
+              }
             }
-            setAdminUser(stored);
-          } else {
-            console.warn('[AuthContext] Admin privileges revoked or not found in database. Terminating session.');
-            clearAdminToken();
-            setAdminUser(null);
-          }
-        } else {
-          clearAdminToken();
+          })(),
+          3500,
+          'Admin session verification timed out'
+        );
+      } catch (err: any) {
+        console.warn('[AuthContext] Admin session verification error or timeout:', err?.message || err);
+        clearAdminToken();
+        if (!isCancelled) {
           setAdminUser(null);
         }
-      } catch {
-        clearAdminToken();
-        setAdminUser(null);
       } finally {
-        setIsAdminLoading(false);
+        if (!isCancelled) {
+          setIsAdminLoading(false);
+        }
       }
     }
+
     initAdmin();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   // Restore Staff Session (clears on window close via sessionStorage)

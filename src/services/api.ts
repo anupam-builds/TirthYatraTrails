@@ -1119,66 +1119,76 @@ export const api = {
       return true;
     }
 
-    // 2. Query admin_allowlist table
-    try {
-      const { data: allowData } = await supabase
-        .from('admin_allowlist')
-        .select('id, email, role')
-        .ilike('email', cleanEmail)
-        .maybeSingle();
+    const checkDatabaseRoles = async (): Promise<boolean> => {
+      // 2. Query admin_allowlist table
+      try {
+        const { data: allowData } = await supabase
+          .from('admin_allowlist')
+          .select('id, email, role')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
 
-      if (allowData && allowData.email) {
+        if (allowData && allowData.email) {
+          return true;
+        }
+      } catch {}
+
+      // 3. Query users table for role === 'ADMIN'
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, email, role')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (userData && (userData.role === 'ADMIN' || (userData as any).is_admin)) {
+          return true;
+        }
+      } catch {}
+
+      // 4. Query staff_members table for role === 'ADMIN' or designation
+      try {
+        const { data: staffData } = await supabase
+          .from('staff_members')
+          .select('id, email, role, designation')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (staffData && (staffData.role === 'ADMIN' || staffData.designation?.toLowerCase().includes('admin'))) {
+          return true;
+        }
+      } catch {}
+
+      // 5. Query profiles table
+      try {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('id, email, role, is_admin')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (profileData && (profileData.role === 'ADMIN' || profileData.role === 'admin' || profileData.is_admin)) {
+          return true;
+        }
+      } catch {}
+
+      // 6. Fallback localStore check
+      const localStaff = localStore.getStaffMembers?.() || [];
+      const foundStaff = localStaff.find((s: any) => s.email?.toLowerCase() === cleanEmail) as any;
+      if (foundStaff && (foundStaff.role === 'ADMIN' || foundStaff.designation?.toLowerCase().includes('admin'))) {
         return true;
       }
-    } catch {}
 
-    // 3. Query users table for role === 'ADMIN'
+      return false;
+    };
+
     try {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, email, role')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (userData && (userData.role === 'ADMIN' || (userData as any).is_admin)) {
-        return true;
-      }
-    } catch {}
-
-    // 3. Query staff_members table for role === 'ADMIN' or designation
-    try {
-      const { data: staffData } = await supabase
-        .from('staff_members')
-        .select('id, email, role, designation')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (staffData && (staffData.role === 'ADMIN' || staffData.designation?.toLowerCase().includes('admin'))) {
-        return true;
-      }
-    } catch {}
-
-    // 4. Query profiles table
-    try {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('id, email, role, is_admin')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (profileData && (profileData.role === 'ADMIN' || profileData.role === 'admin' || profileData.is_admin)) {
-        return true;
-      }
-    } catch {}
-
-    // 5. Fallback localStore check
-    const localStaff = localStore.getStaffMembers?.() || [];
-    const foundStaff = localStaff.find((s: any) => s.email?.toLowerCase() === cleanEmail) as any;
-    if (foundStaff && (foundStaff.role === 'ADMIN' || foundStaff.designation?.toLowerCase().includes('admin'))) {
-      return true;
+      // Strict 2.5s timeout prevents hanging session verification
+      const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500));
+      return await Promise.race([checkDatabaseRoles(), timeoutPromise]);
+    } catch {
+      return false;
     }
-
-    return false;
   },
 
   /**

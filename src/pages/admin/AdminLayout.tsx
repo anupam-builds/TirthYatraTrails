@@ -107,16 +107,45 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
     }
   };
 
+  // Strict timeout fallback for "Verifying Admin Session..." to guarantee UI never gets stuck
+  useEffect(() => {
+    if (!isAdminLoading) return;
+
+    const timer = setTimeout(() => {
+      console.warn('[AdminLayout] Admin session verification timeout exceeded. Redirecting to login.');
+      logoutAdmin();
+      navigate(ADMIN_ROUTES.login);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [isAdminLoading, logoutAdmin, navigate]);
+
   // Route change / mount re-verification of admin privileges
   useEffect(() => {
     if (!isAdminLoading && adminUser) {
-      api.verifyAdminSession(adminUser).then((isValid) => {
-        if (!isValid) {
-          console.warn('[AdminLayout] Security Guard: Unauthorized admin access. Revoking session.');
-          logoutAdmin();
-          navigate(ADMIN_ROUTES.login);
+      let isMounted = true;
+
+      const verify = async () => {
+        try {
+          const timeoutPromise = new Promise<boolean>((_, reject) =>
+            setTimeout(() => reject(new Error('Session verification timeout')), 3000)
+          );
+          const isValid = await Promise.race([api.verifyAdminSession(adminUser), timeoutPromise]);
+          if (!isValid && isMounted) {
+            console.warn('[AdminLayout] Security Guard: Unauthorized admin access. Revoking session.');
+            logoutAdmin();
+            navigate(ADMIN_ROUTES.login);
+          }
+        } catch (err) {
+          console.warn('[AdminLayout] Admin privilege check notice:', err);
         }
-      }).catch(() => {});
+      };
+
+      verify();
+
+      return () => {
+        isMounted = false;
+      };
     }
   }, [activeTab, adminUser, isAdminLoading, logoutAdmin, navigate]);
 

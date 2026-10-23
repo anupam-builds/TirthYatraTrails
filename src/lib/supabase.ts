@@ -148,22 +148,30 @@ let isSyncingSession = false;
  * Ensures an active, valid Supabase session is present in sessionStorage and supabase client
  * when a staff or admin user is logged in. Prevents sending anonymous requests.
  */
-export async function ensureActiveSupabaseSession(): Promise<string | null> {
+export async function ensureActiveSupabaseSession(timeoutMs = 2000): Promise<string | null> {
   if (typeof window === 'undefined') return null;
 
   const existingToken = getActiveSessionToken();
   if (existingToken) return existingToken;
 
-  // Pure Client-Side Auth: Try retrieving or refreshing session directly via supabase.auth
+  // Pure Client-Side Auth: Try retrieving or refreshing session directly via supabase.auth with strict timeout
   try {
-    const { data: getSess } = await supabase.auth.getSession();
-    if (getSess?.session?.access_token && isValidJwt(getSess.session.access_token)) {
-      return getSess.session.access_token;
-    }
-    const { data: refSess } = await supabase.auth.refreshSession();
-    if (refSess?.session?.access_token && isValidJwt(refSess.session.access_token)) {
-      return refSess.session.access_token;
-    }
+    const sessionPromise = (async () => {
+      try {
+        const { data: getSess } = await supabase.auth.getSession();
+        if (getSess?.session?.access_token && isValidJwt(getSess.session.access_token)) {
+          return getSess.session.access_token;
+        }
+        const { data: refSess } = await supabase.auth.refreshSession();
+        if (refSess?.session?.access_token && isValidJwt(refSess.session.access_token)) {
+          return refSess.session.access_token;
+        }
+      } catch {}
+      return null;
+    })();
+
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+    return await Promise.race([sessionPromise, timeoutPromise]);
   } catch {}
 
   return null;
