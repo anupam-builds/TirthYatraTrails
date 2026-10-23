@@ -3112,96 +3112,50 @@ export const api = {
   async getStaffLogs() { return localStore.getStaffLogs(); },
   async resetStaffPassword(id: string, newPassword: string) { return this.updateStaffMember(id, { password: newPassword }); },
 
-  async deleteStaffMember(idOrStaff: string | { id: string; email?: string }, optionalEmail?: string): Promise<boolean> {
-    const staffId = typeof idOrStaff === 'string' ? idOrStaff.trim() : (idOrStaff?.id || '').trim();
-    let email = (optionalEmail || (typeof idOrStaff === 'object' ? idOrStaff?.email : '') || '').trim().toLowerCase();
+  async deleteStaffMember(staffId: any, staffEmail?: any) {
+    const id = typeof staffId === 'object' && staffId !== null ? staffId.id : staffId;
+    const email = staffEmail || (typeof staffId === 'object' && staffId !== null ? staffId.email : undefined);
 
-    // If email is not passed, attempt to resolve it from localStore or cached roster
-    if (!email && staffId) {
-      if (staffId.includes('@')) {
-        email = staffId.toLowerCase();
-      } else {
-        try {
-          const staff = localStore.getStaffMembers().find(
-            (s) => s.id === staffId || s.email.toLowerCase() === staffId.toLowerCase()
-          );
-          if (staff?.email) email = staff.email.trim().toLowerCase();
-        } catch {}
-      }
-    }
-
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const isUuid = UUID_REGEX.test(staffId);
-
-    // 1. Direct Supabase Deletion (No external /api/admin/staff fetch to prevent missing endpoint errors)
-    // Delete from staff_members
-    if (staffId) {
-      try {
-        await supabase.from('staff_members').delete().eq('id', staffId);
-      } catch (e) {
-        console.warn('[deleteStaffMember] Supabase staff_members delete id notice:', e);
-      }
-    }
-
-    if (email) {
-      try {
-        await supabase.from('staff_members').delete().eq('email', email);
-      } catch (e) {
-        console.warn('[deleteStaffMember] Supabase staff_members delete email notice:', e);
-      }
-    }
-
-    // Delete directly from admin_allowlist using Supabase client
-    if (staffId) {
-      try {
-        const { error } = await supabase
-          .from('admin_allowlist')
-          .delete()
-          .eq('id', staffId);
-        if (error) {
-          console.warn('[deleteStaffMember] Supabase admin_allowlist delete id warning:', error);
-        }
-      } catch (e) {
-        console.warn('[deleteStaffMember] Supabase admin_allowlist delete id notice:', e);
-      }
-    }
-
-    if (email) {
-      try {
-        await supabase.from('admin_allowlist').delete().eq('email', email);
-      } catch (e) {
-        console.warn('[deleteStaffMember] Supabase admin_allowlist delete email notice:', e);
-      }
-    }
-
-    // Delete from staff_sessions targeting solely the valid staff_id key
-    if (staffId) {
-      try {
-        const { error } = await supabase
+    try {
+      // 1. Delete active sessions associated with this staff member (using staff_id)
+      if (id) {
+        const { error: sessionError } = await supabase
           .from('staff_sessions')
           .delete()
-          .eq('staff_id', staffId);
-        if (error) console.warn('[deleteStaffMember] staff_sessions delete warning:', error);
-      } catch (e) {
-        console.warn('[deleteStaffMember] Supabase staff_sessions delete staff_id notice:', e);
+          .eq('staff_id', id);
+        
+        if (sessionError) {
+          console.warn('[deleteStaffMember] staff_sessions cleanup warning:', sessionError.message);
+        }
+      }
+
+      // 2. Delete the staff member from the main admin/allowlist table using their primary id
+      const { error: deleteError } = await supabase
+        .from('admin_allowlist') // Or your primary staff table name
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      // 3. Refresh local state / UI list
+      // (Call your state setter or fetch function here to update the UI instantly)
+      if (id) {
+        localStore.deleteStaffMember(id, email);
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+      }
+      console.log('Staff member successfully deleted');
+      return true;
+    } catch (err: any) {
+      console.error('Failed to delete staff member:', err?.message || err);
+      if (typeof window !== 'undefined') {
+        alert('Could not delete staff member. Please check console for details.');
       }
     }
-
-    // 2. Delete from local persistence store
-    if (staffId) {
-      localStore.deleteStaffMember(staffId, email);
-    }
-    if (email) {
-      localStore.deleteStaffMember(email, email);
-    }
-
-    // 3. Dispatch cross-component roster change events
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-      window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
-    }
-
-    return true;
   },
 
   async uploadImage(fileOrDataUrl: File | string, folder: string = 'packages'): Promise<string> {
@@ -5871,3 +5825,5 @@ export function generateWhatsAppLink(details: any) {
   const text = encodeURIComponent(lines.join('\n'));
   return `https://wa.me/${travelDeskNumber}?text=${text}`;
 }
+
+export const deleteStaffMember = api.deleteStaffMember;
