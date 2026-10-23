@@ -520,20 +520,25 @@ export const StaffAccess: React.FC = () => {
       return;
     }
     const staffId = staff.id;
+    const staffEmail = staff.email?.toLowerCase().trim();
     const staffName = staff.name || staff.email;
     setDeletingId(staffId);
 
     try {
       // 1. Delete from database & local persistence via API service
-      await api.deleteStaffMember(staffId);
+      await api.deleteStaffMember(staffId, staffEmail);
 
       // 2. Instantly update state
-      setStaffList((prev) => prev.filter((s) => s.id !== staffId));
+      setStaffList((prev) =>
+        prev.filter((s) => s.id !== staffId && s.email?.toLowerCase().trim() !== staffEmail)
+      );
       setSessionMonitor((prev) =>
         prev
           ? {
               ...prev,
-              sessions: prev.sessions.filter((s) => s.staffId !== staffId),
+              sessions: prev.sessions.filter(
+                (s) => s.staffId !== staffId && (s as any).email?.toLowerCase().trim() !== staffEmail
+              ),
               totalStaff: Math.max(0, prev.totalStaff - 1),
             }
           : null
@@ -550,8 +555,10 @@ export const StaffAccess: React.FC = () => {
     } catch (err: any) {
       console.warn('Backend delete returned warning:', err);
       // Fallback: guarantee local cleanup and update state
-      localStore.deleteStaffMember(staffId);
-      setStaffList((prev) => prev.filter((s) => s.id !== staffId));
+      localStore.deleteStaffMember(staffId, staffEmail);
+      setStaffList((prev) =>
+        prev.filter((s) => s.id !== staffId && s.email?.toLowerCase().trim() !== staffEmail)
+      );
       setDeleteConfirmStaff(null);
       setDeleteSuccessMessage(
         `Staff member "${staffName}" (${staff.email}) was removed from the roster.`

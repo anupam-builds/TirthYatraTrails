@@ -1587,14 +1587,28 @@ class DatabaseStore {
     return this.blockStaffMember(id, currentActive, currentActive ? 'Status toggled to Inactive by Admin' : undefined);
   }
 
-  public deleteStaffMember(id: string) {
+  public deleteStaffMember(id: string, email?: string) {
     if (!this.data.staff) this.data.staff = [...INITIAL_STAFF];
-    const target = id.trim().toLowerCase();
+    const target = (id || '').trim().toLowerCase();
+    const cleanEmail = (email || '').trim().toLowerCase();
     const index = this.data.staff.findIndex(
-      (s) => s.id === id || s.email.toLowerCase() === target
+      (s) =>
+        (id && s.id === id) ||
+        (target && s.id.toLowerCase() === target) ||
+        s.email.toLowerCase() === target ||
+        (cleanEmail && s.email.toLowerCase() === cleanEmail)
     );
     if (index === -1) {
-      // Already removed or ID matched - return true safely
+      // If allowlist has the email, purge from allowlist as well
+      if (this.data.admin_allowlist && (target || cleanEmail)) {
+        this.data.admin_allowlist = this.data.admin_allowlist.filter(
+          (a) =>
+            a.id !== id &&
+            a.email.toLowerCase() !== target &&
+            (!cleanEmail || a.email.toLowerCase() !== cleanEmail)
+        );
+        this.save();
+      }
       return true;
     }
     const staff = this.data.staff[index];
@@ -1607,7 +1621,10 @@ class DatabaseStore {
     // Also remove from admin allowlist if administrator
     if (this.data.admin_allowlist) {
       this.data.admin_allowlist = this.data.admin_allowlist.filter(
-        (a) => a.id !== staff.id && a.email.toLowerCase() !== staff.email.toLowerCase()
+        (a) =>
+          a.id !== staff.id &&
+          a.email.toLowerCase() !== staff.email.toLowerCase() &&
+          (!cleanEmail || a.email.toLowerCase() !== cleanEmail)
       );
     }
     

@@ -2012,9 +2012,63 @@ app.all([
   '/api/staff/:id/presence',
   '/api/staff/presence',
 ], handleStaffPresence);
-app.delete('/api/admin/staff/:id', verifyAdminToken, (req, res) => {
-  db.deleteStaffMember(req.params.id); res.json({ success: true });
-});
+app.delete(
+  ['/api/admin/staff/:id', '/api/admin/staff', '/api/staff/:id', '/api/staff'],
+  verifyAdminToken,
+  async (req, res) => {
+    try {
+      const targetId = String(req.params.id || req.query.id || req.body?.id || '').trim();
+      const targetEmail = String(req.query.email || req.body?.email || '').trim().toLowerCase();
+      const identifier = targetId || targetEmail;
+
+      if (!identifier) {
+        return res.status(400).json({ error: 'Staff ID or Email is required for deletion.' });
+      }
+
+      if (
+        identifier.toLowerCase() === 'anupamsaxena.dev@gmail.com' ||
+        targetEmail === 'anupamsaxena.dev@gmail.com'
+      ) {
+        return res.status(403).json({ error: 'Root administrator account cannot be deleted.' });
+      }
+
+      // 1. Delete from local database store
+      db.deleteStaffMember(identifier, targetEmail);
+
+      // 2. Delete from Supabase if connected
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isUuid = UUID_REGEX.test(targetId);
+
+      try {
+        if (targetId) {
+          await supabaseAdmin.from('staff_members').delete().eq('id', targetId);
+          if (isUuid) {
+            await supabaseAdmin.from('admin_allowlist').delete().eq('id', targetId);
+          }
+        }
+        if (targetEmail) {
+          await supabaseAdmin.from('staff_members').delete().ilike('email', targetEmail);
+          await supabaseAdmin.from('admin_allowlist').delete().ilike('email', targetEmail);
+        }
+      } catch (sbErr: any) {
+        console.warn('[server.ts] Supabase staff delete sync warning:', sbErr?.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Staff member deleted successfully',
+        id: targetId,
+        email: targetEmail,
+      });
+    } catch (err: any) {
+      console.error('[server.ts] Staff deletion error:', err);
+      const isForbidden = err?.message?.includes('cannot be deleted');
+      return res.status(isForbidden ? 403 : 400).json({
+        error: err?.message || 'Failed to delete staff member.',
+      });
+    }
+  }
+);
 
 // Reviews
 app.get('/api/admin/reviews', verifyAdminToken, (req, res) => { res.json(db.getReviews(false)); });

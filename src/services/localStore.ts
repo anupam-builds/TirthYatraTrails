@@ -1705,10 +1705,15 @@ export const localStore = {
     return this.blockStaffMember(id, currentActive, currentActive ? 'Status toggled to Inactive by Admin' : undefined);
   },
 
-  deleteStaffMember(id: string): boolean {
-    const target = id.trim().toLowerCase();
+  deleteStaffMember(id: string, email?: string): boolean {
+    const target = (id || '').trim().toLowerCase();
+    const cleanEmail = (email || '').trim().toLowerCase();
     const list = this.getStaffMembers().filter(
-      (s) => s.id !== id && s.email.toLowerCase() !== target
+      (s) =>
+        s.id !== id &&
+        (target ? s.id.toLowerCase() !== target : true) &&
+        s.email.toLowerCase() !== target &&
+        (!cleanEmail || s.email.toLowerCase() !== cleanEmail)
     );
     setStored(STORAGE_KEYS.STAFF, list);
     if (typeof window !== 'undefined') {
