@@ -3154,13 +3154,12 @@ export const api = {
     // Delete directly from admin_allowlist using Supabase client
     if (staffId) {
       try {
-        if (isUuid) {
-          await supabase.from('admin_allowlist').delete().eq('id', staffId);
-        } else {
-          // Attempt direct id deletion if table id is text-based
-          try {
-            await supabase.from('admin_allowlist').delete().eq('id', staffId);
-          } catch {}
+        const { error } = await supabase
+          .from('admin_allowlist')
+          .delete()
+          .eq('id', staffId);
+        if (error) {
+          console.warn('[deleteStaffMember] Supabase admin_allowlist delete id warning:', error);
         }
       } catch (e) {
         console.warn('[deleteStaffMember] Supabase admin_allowlist delete id notice:', e);
@@ -3175,31 +3174,14 @@ export const api = {
       }
     }
 
-    // Delete from staff_sessions using official Supabase query builder syntax
-    const emailAddress = email ? email.trim().toLowerCase() : '';
-    if (emailAddress) {
-      try {
-        const { error } = await supabase
-          .from('staff_sessions')
-          .delete()
-          .eq('email', emailAddress);
-        if (error) {
-          console.warn('[deleteStaffMember] staff_sessions delete by email warning:', error);
-        }
-      } catch (e) {
-        console.warn('[deleteStaffMember] Supabase staff_sessions delete email notice:', e);
-      }
-    }
-
+    // Delete from staff_sessions targeting solely the valid staff_id key
     if (staffId) {
       try {
         const { error } = await supabase
           .from('staff_sessions')
           .delete()
           .eq('staff_id', staffId);
-        if (error) {
-          console.warn('[deleteStaffMember] staff_sessions delete by staff_id warning:', error);
-        }
+        if (error) console.warn('[deleteStaffMember] staff_sessions delete warning:', error);
       } catch (e) {
         console.warn('[deleteStaffMember] Supabase staff_sessions delete staff_id notice:', e);
       }
