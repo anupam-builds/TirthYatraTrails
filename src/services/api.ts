@@ -2998,7 +2998,10 @@ export const api = {
 
     // 2. Direct Supabase Client Insertion into staff_members table
     const finalStaffId = allowlistId || newStaffId;
-    const payload = {
+    const staffDesignation = ((staff as any).designation || staff.role || 'Pilgrim Operations Specialist').trim();
+
+    // Construct insert payload matching exact database schema columns (no non-existent 'designation' column)
+    const payload: Record<string, any> = {
       id: finalStaffId,
       name: staffName,
       email: staffEmail,
@@ -3006,20 +3009,30 @@ export const api = {
       role: staffRole,
       department: (staff as any).department || 'Operations',
       phone: staff.phone || '',
-      designation: (staff as any).designation || '',
       is_active: (staff as any).isActive !== false,
       is_blocked: Boolean((staff as any).isBlocked),
       created_at: nowIso,
     };
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('staff_members')
         .insert([payload])
         .select();
 
+      // If department column is not in schema cache, retry cleanly without department
+      if (error && (error.message?.includes('department') || error.message?.includes('PGRST204'))) {
+        delete payload.department;
+        const retry = await supabase
+          .from('staff_members')
+          .insert([payload])
+          .select();
+        data = retry.data;
+        error = retry.error;
+      }
+
       if (data && data.length > 0) {
-        const mapped = mapStaffRow(data[0]);
+        const mapped = mapStaffRow({ ...data[0], designation: staffDesignation });
         localStore.createStaffMember(mapped);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
@@ -3052,10 +3065,11 @@ export const api = {
       }
     }
 
-    // 4. Update local store and notify listeners
+    // 4. Update local store and notify listeners (preserving designation for UI)
     const mapped = localStore.createStaffMember({
       ...payload,
       ...staff,
+      designation: staffDesignation,
       id: finalStaffId,
     });
     if (typeof window !== 'undefined') {
