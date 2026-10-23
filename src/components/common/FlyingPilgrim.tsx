@@ -1,10 +1,14 @@
 import React from 'react';
+import { useRouter } from '../../context/RouterContext.js';
+import { SECURE_ADMIN_PORTAL_PATH } from '../../constants/routes.js';
 
 /**
  * FlyingPilgrim component:
  * Renders a subtle, stylized, reverent flying pilgrim (Hanuman Ji / devotee)
  * that glides calmly and majestically across the screen at relaxed intervals.
  *
+ * - Active solely on customer-facing pages
+ * - Completely excluded/omitted on all admin dashboards and staff portals
  * - Slower, calmer speed (~11 seconds per pass) with soft ease-in-out transitions
  * - Deliberate ~6-second resting pause off-screen between flights
  * - Flips horizontally (scaleX(-1)) when traveling right-to-left so it always faces forward
@@ -12,6 +16,20 @@ import React from 'react';
  * - Full-page overlay (fixed inset-0 pointer-events-none z-50) that never obstructs clicks
  */
 export const FlyingPilgrim: React.FC = () => {
+  const { path } = useRouter();
+  const cleanPath = (path.split('?')[0].split('#')[0].replace(/\/+$/, '')) || '/';
+
+  // Completely hide flying animated pilgrim on all admin, portal, management, and staff pages
+  if (
+    cleanPath.startsWith(SECURE_ADMIN_PORTAL_PATH) ||
+    cleanPath.startsWith('/portal') ||
+    cleanPath.startsWith('/management') ||
+    cleanPath.startsWith('/admin') ||
+    cleanPath.startsWith('/staff')
+  ) {
+    return null;
+  }
+
   return (
     <div
       aria-hidden="true"
