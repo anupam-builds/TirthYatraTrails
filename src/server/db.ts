@@ -1442,17 +1442,41 @@ class DatabaseStore {
   }
 
   public createStaffMember(staffData: Partial<StaffMember>, adminInfo?: { name?: string; ip?: string; device?: string }) {
-    const staffList = this.getStaffMembers();
     const email = (staffData.email || '').trim().toLowerCase();
     if (!email) throw new Error('Staff Email ID is required');
-    if (staffList.some((s) => s.email.toLowerCase() === email)) {
-      throw new Error('A staff member with this Email ID already exists');
+
+    const isStaffAdmin = staffData.role === 'ADMIN' || Boolean(staffData.designation && staffData.designation.toLowerCase().includes('admin'));
+
+    const existingIndex = this.data.staff.findIndex((s) => s.email.toLowerCase() === email);
+    if (existingIndex !== -1) {
+      // Re-use and reactivate existing staff record seamlessly instead of throwing a hard conflict error
+      const existing = this.data.staff[existingIndex];
+      const updatedStaff: StaffMember = {
+        ...existing,
+        ...staffData,
+        id: staffData.id || existing.id,
+        name: (staffData.name || existing.name || (isStaffAdmin ? 'Enterprise Admin' : 'Staff Specialist')).trim(),
+        email: email,
+        password: staffData.password ? staffData.password.trim() : existing.password,
+        phone: staffData.phone !== undefined ? staffData.phone.trim() : existing.phone,
+        designation: (staffData.designation || existing.designation || (isStaffAdmin ? 'Admin (Enterprise Operations)' : 'Pilgrimage Coordinator')).trim(),
+        role: isStaffAdmin ? 'ADMIN' : 'STAFF',
+        isActive: staffData.isActive !== undefined ? Boolean(staffData.isActive) : true,
+        isBlocked: false,
+        blockedAt: undefined,
+        blockedReason: undefined,
+      };
+      this.data.staff[existingIndex] = updatedStaff;
+      if (isStaffAdmin) {
+        this.addAdminAllowlistEntry(email, updatedStaff.designation, 'Active & Authorized');
+      }
+      this.save();
+      return updatedStaff;
     }
+
     if (!staffData.password || staffData.password.trim().length < 6) {
       throw new Error('Staff Password is required (minimum 6 characters)');
     }
-
-    const isStaffAdmin = staffData.role === 'ADMIN' || Boolean(staffData.designation && staffData.designation.toLowerCase().includes('admin'));
 
     const newStaffId =
       staffData.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffData.id)

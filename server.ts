@@ -2081,6 +2081,32 @@ app.delete(
         console.warn('[server.ts] Supabase staff delete sync warning:', sbErr?.message);
       }
 
+      // 3. Remove user from Supabase Auth so re-creating the email does not trigger conflict
+      try {
+        if (targetId && isUuid) {
+          try {
+            await supabaseAdmin.auth.admin.deleteUser(targetId);
+          } catch (authIdErr: any) {
+            console.warn('[server.ts] Auth admin deleteUser by id notice:', authIdErr?.message);
+          }
+        }
+        if (targetEmail) {
+          try {
+            const { data: userListData } = await supabaseAdmin.auth.admin.listUsers();
+            const existingAuthUser = userListData?.users?.find(
+              (u: any) => u.email?.toLowerCase() === targetEmail.toLowerCase()
+            );
+            if (existingAuthUser?.id) {
+              await supabaseAdmin.auth.admin.deleteUser(existingAuthUser.id);
+            }
+          } catch (authEmailErr: any) {
+            console.warn('[server.ts] Auth admin deleteUser by email notice:', authEmailErr?.message);
+          }
+        }
+      } catch (authCleanupErr: any) {
+        console.warn('[server.ts] Auth cleanup notice:', authCleanupErr?.message);
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Staff member deleted successfully',

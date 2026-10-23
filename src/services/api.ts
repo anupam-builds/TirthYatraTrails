@@ -2980,10 +2980,22 @@ export const api = {
         created_at: nowIso,
       };
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('admin_allowlist')
         .insert([allowlistPayload])
         .select();
+
+      if (error && (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('already exists'))) {
+        const { data: updateData } = await supabase
+          .from('admin_allowlist')
+          .update(allowlistPayload)
+          .eq('email', staffEmail)
+          .select();
+        if (updateData && updateData.length > 0) {
+          data = updateData;
+          error = null;
+        }
+      }
 
       if (data && data.length > 0 && data[0]?.id && isValidUUID(data[0].id)) {
         allowlistId = data[0].id;
@@ -3015,23 +3027,26 @@ export const api = {
     };
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('staff_members')
         .insert([insertData])
         .select();
 
-      if (data && data.length > 0) {
-        const mapped = mapStaffRow({
-          ...data[0],
-          designation: staffDesignation,
-          phone: staffPhone,
-        });
-        localStore.createStaffMember(mapped);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+      if (error && (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('already exists'))) {
+        const { data: updateData, error: updateErr } = await supabase
+          .from('staff_members')
+          .update(insertData)
+          .eq('email', staffEmail)
+          .select();
+        if (updateData && updateData.length > 0) {
+          data = updateData;
+          error = null;
+        } else if (updateErr) {
+          console.warn('[createStaffMember] staff_members update notice:', updateErr.message);
         }
-      } else if (error) {
+      }
+
+      if (error) {
         console.warn('[createStaffMember] staff_members insert notice:', error.message);
       }
     } catch (e: any) {
@@ -3041,7 +3056,7 @@ export const api = {
     // 3. Supabase Auth User Registration (Optional credentials creation)
     if (staffEmail && staffPassword) {
       try {
-        await supabase.auth.signUp({
+        const { error: signUpErr } = await supabase.auth.signUp({
           email: staffEmail,
           password: staffPassword,
           options: {
@@ -3053,6 +3068,9 @@ export const api = {
             },
           },
         });
+        if (signUpErr) {
+          console.warn('[createStaffMember] Supabase Auth signUp note:', signUpErr.message);
+        }
       } catch (authErr: any) {
         console.warn('[createStaffMember] Supabase Auth signUp note:', authErr?.message || authErr);
       }
@@ -3211,8 +3229,26 @@ export const api = {
         await supabase.from('staff_members').delete().eq('email', email);
       }
 
-      // 4. Refresh local state / UI list
-      if (id) {
+      // 4. Synchronize with backend to ensure Supabase Auth user is removed via Admin Auth API
+      try {
+        const deleteTarget = id || email;
+        if (deleteTarget) {
+          const url = `/api/admin/staff/${encodeURIComponent(deleteTarget)}?email=${encodeURIComponent(email)}&id=${encodeURIComponent(id)}`;
+          await fetch(url, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }).catch((fetchErr) => {
+            console.warn('[deleteStaffMember] Backend staff delete sync note:', fetchErr?.message || fetchErr);
+          });
+        }
+      } catch (endpointErr) {
+        console.warn('[deleteStaffMember] API delete endpoint notice:', endpointErr);
+      }
+
+      // 5. Refresh local state / UI list
+      if (id || email) {
         localStore.deleteStaffMember(id, email);
       }
       if (typeof window !== 'undefined') {

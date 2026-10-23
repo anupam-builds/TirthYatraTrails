@@ -630,7 +630,14 @@ export const StaffAccess: React.FC = () => {
             canAddNotes: formData.canAddNotes,
           },
         });
-        setStaffList((prev) => [newStaff, ...prev]);
+        setStaffList((prev) => [
+          newStaff,
+          ...prev.filter(
+            (s) =>
+              s.id !== newStaff.id &&
+              s.email.toLowerCase().trim() !== newStaff.email.toLowerCase().trim()
+          ),
+        ]);
       }
 
       // Reload sessions and logs

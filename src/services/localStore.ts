@@ -1578,9 +1578,31 @@ export const localStore = {
     const list = this.getStaffMembers();
     const email = (staffData.email || '').trim().toLowerCase();
     if (!email) throw new Error('Staff Email ID is required.');
-    if (list.some((s) => s.email.toLowerCase() === email)) {
-      throw new Error('A staff member with this Email ID already exists.');
+
+    const existingIndex = list.findIndex((s) => s.email.toLowerCase() === email);
+    if (existingIndex !== -1) {
+      // Re-use and reactivate existing staff record seamlessly instead of throwing a hard conflict error
+      const existing = list[existingIndex];
+      const updatedStaff: StaffMember = {
+        ...existing,
+        ...staffData,
+        id: staffData.id || existing.id,
+        name: (staffData.name || existing.name || 'Travel Specialist').trim(),
+        email: email,
+        password: staffData.password ? staffData.password.trim() : existing.password,
+        phone: staffData.phone !== undefined ? staffData.phone.trim() : existing.phone,
+        designation: (staffData.designation || existing.designation || 'Pilgrim Operations Specialist').trim(),
+        role: 'STAFF',
+        isActive: staffData.isActive !== undefined ? Boolean(staffData.isActive) : true,
+        isBlocked: false,
+        blockedAt: undefined,
+        blockedReason: undefined,
+      };
+      list[existingIndex] = updatedStaff;
+      setStored(STORAGE_KEYS.STAFF, list);
+      return updatedStaff;
     }
+
     if (!staffData.password || staffData.password.trim().length < 6) {
       throw new Error('Staff Password is required (minimum 6 characters).');
     }
