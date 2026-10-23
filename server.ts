@@ -2042,13 +2042,15 @@ app.delete(
       try {
         if (targetId) {
           await supabaseAdmin.from('staff_members').delete().eq('id', targetId);
+          await supabaseAdmin.from('staff_sessions').delete().eq('staff_id', targetId);
           if (isUuid) {
             await supabaseAdmin.from('admin_allowlist').delete().eq('id', targetId);
           }
         }
         if (targetEmail) {
-          await supabaseAdmin.from('staff_members').delete().ilike('email', targetEmail);
-          await supabaseAdmin.from('admin_allowlist').delete().ilike('email', targetEmail);
+          await supabaseAdmin.from('staff_members').delete().eq('email', targetEmail);
+          await supabaseAdmin.from('admin_allowlist').delete().eq('email', targetEmail);
+          await supabaseAdmin.from('staff_sessions').delete().eq('email', targetEmail);
         }
       } catch (sbErr: any) {
         console.warn('[server.ts] Supabase staff delete sync warning:', sbErr?.message);

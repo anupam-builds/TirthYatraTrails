@@ -3112,75 +3112,55 @@ export const api = {
   async resetStaffPassword(id: string, newPassword: string) { return this.updateStaffMember(id, { password: newPassword }); },
 
   async deleteStaffMember(idOrStaff: string | { id: string; email?: string }, optionalEmail?: string): Promise<boolean> {
-    const id = typeof idOrStaff === 'string' ? idOrStaff.trim() : (idOrStaff?.id || '').trim();
+    const staffId = typeof idOrStaff === 'string' ? idOrStaff.trim() : (idOrStaff?.id || '').trim();
     let email = (optionalEmail || (typeof idOrStaff === 'object' ? idOrStaff?.email : '') || '').trim().toLowerCase();
 
-    // If email is not passed, attempt to find it from localStore or cached roster
-    if (!email && id) {
-      try {
-        const staff = localStore.getStaffMembers().find(
-          (s) => s.id === id || s.email.toLowerCase() === id.toLowerCase()
-        );
-        if (staff?.email) email = staff.email.trim().toLowerCase();
-      } catch {}
+    // If email is not passed, attempt to resolve it from localStore or cached roster
+    if (!email && staffId) {
+      if (staffId.includes('@')) {
+        email = staffId.toLowerCase();
+      } else {
+        try {
+          const staff = localStore.getStaffMembers().find(
+            (s) => s.id === staffId || s.email.toLowerCase() === staffId.toLowerCase()
+          );
+          if (staff?.email) email = staff.email.trim().toLowerCase();
+        } catch {}
+      }
     }
 
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const isUuid = UUID_REGEX.test(id);
+    const isUuid = UUID_REGEX.test(staffId);
 
-    // 1. Call custom Backend API endpoint with resilient auth headers
-    try {
-      const token =
-        (typeof window !== 'undefined' &&
-          (window.sessionStorage.getItem('tyt_admin_token') ||
-            window.localStorage.getItem('tyt_admin_token'))) ||
-        '';
-      const queryParams = new URLSearchParams();
-      if (email) queryParams.set('email', email);
-      const url = `/api/admin/staff/${encodeURIComponent(id || email)}${
-        queryParams.toString() ? `?${queryParams.toString()}` : ''
-      }`;
-
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ id, email }),
-      });
-
-      if (!res.ok && res.status !== 404) {
-        const errJson = await res.json().catch(() => null);
-        console.warn('[deleteStaffMember] API route warning:', res.status, errJson);
+    // 1. Direct Supabase Deletion (No external /api/admin/staff fetch to prevent missing endpoint errors)
+    // Delete from staff_members
+    if (staffId) {
+      try {
+        await supabase.from('staff_members').delete().eq('id', staffId);
+      } catch (e) {
+        console.warn('[deleteStaffMember] Supabase staff_members delete id notice:', e);
       }
-    } catch (e) {
-      console.warn('[deleteStaffMember] Server endpoint notice:', e);
-    }
-
-    // 2. Direct Supabase deletion with schema type safety:
-    // Notice: admin_allowlist.id is type UUID. Querying non-UUID string triggers Postgres 22P02 invalid input syntax!
-    // We only call .eq('id', id) on admin_allowlist when id is a valid UUID, and delete by email whenever available.
-    try {
-      if (id) {
-        await supabase.from('staff_members').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('[deleteStaffMember] Supabase staff_members delete id notice:', e);
     }
 
     if (email) {
       try {
-        await supabase.from('staff_members').delete().ilike('email', email);
+        await supabase.from('staff_members').delete().eq('email', email);
       } catch (e) {
         console.warn('[deleteStaffMember] Supabase staff_members delete email notice:', e);
       }
     }
 
-    // Deletion from admin_allowlist (safely handle UUID vs email)
-    if (isUuid) {
+    // Delete directly from admin_allowlist using Supabase client
+    if (staffId) {
       try {
-        await supabase.from('admin_allowlist').delete().eq('id', id);
+        if (isUuid) {
+          await supabase.from('admin_allowlist').delete().eq('id', staffId);
+        } else {
+          // Attempt direct id deletion if table id is text-based
+          try {
+            await supabase.from('admin_allowlist').delete().eq('id', staffId);
+          } catch {}
+        }
       } catch (e) {
         console.warn('[deleteStaffMember] Supabase admin_allowlist delete id notice:', e);
       }
@@ -3188,35 +3168,43 @@ export const api = {
 
     if (email) {
       try {
-        await supabase.from('admin_allowlist').delete().ilike('email', email);
+        await supabase.from('admin_allowlist').delete().eq('email', email);
       } catch (e) {
         console.warn('[deleteStaffMember] Supabase admin_allowlist delete email notice:', e);
       }
     }
 
-    // Deletion from staff_sessions
-    try {
-      if (id) {
-        await supabase.from('staff_sessions').delete().eq('staff_id', id);
+    // Delete from staff_sessions using strict .eq filters to avoid PostgREST 400 Bad Request
+    if (staffId) {
+      try {
+        await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
+      } catch (e) {
+        console.warn('[deleteStaffMember] Supabase staff_sessions delete staff_id notice:', e);
       }
-      if (email) {
-        await supabase.from('staff_sessions').delete().ilike('email', email);
-      }
-    } catch {}
+    }
 
-    // 3. Local persistence deletion
-    if (id) {
-      localStore.deleteStaffMember(id, email);
+    if (email) {
+      try {
+        await supabase.from('staff_sessions').delete().eq('email', email);
+      } catch (e) {
+        console.warn('[deleteStaffMember] Supabase staff_sessions delete email notice:', e);
+      }
+    }
+
+    // 2. Delete from local persistence store
+    if (staffId) {
+      localStore.deleteStaffMember(staffId, email);
     }
     if (email) {
       localStore.deleteStaffMember(email, email);
     }
 
-    // 4. Dispatch roster change events
+    // 3. Dispatch cross-component roster change events
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
       window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
     }
+
     return true;
   },
 
