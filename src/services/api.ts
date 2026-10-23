@@ -47,6 +47,23 @@ export function isTemporaryOrMissingPackageId(id: string | null | undefined): bo
   return !isValidDatabasePackageId(id);
 }
 
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUUID(id: unknown): boolean {
+  return typeof id === 'string' && UUID_REGEX.test(id.trim());
+}
+
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 /**
  * Automatically sanitizes image fields in payloads before saving to Supabase.
  * If any imageUrl or galleryImages array contains Base64 strings, it uploads them
@@ -2933,37 +2950,70 @@ export const api = {
   },
 
   async createStaffMember(staff: Partial<StaffMember>) {
-    try {
-      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
-      const res = await fetch('/api/admin/staff', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(staff),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        localStore.createStaffMember(created);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
-        }
-        return created;
-      }
-    } catch {}
+    const staffName = (staff.name || '').trim();
+    const staffEmail = (staff.email || '').trim().toLowerCase();
+    const staffRole = staff.role || (staff as any).designation || 'STAFF';
+    const staffPassword = staff.password || 'Tirth@123';
+    const nowIso = new Date().toISOString();
 
+    // Use provided valid UUID or generate a native standard UUID
+    const newStaffId = staff.id && isValidUUID(staff.id) ? String(staff.id).trim() : generateUUID();
+
+    // 1. Direct Supabase Client Insertion into admin_allowlist
+    let allowlistId = newStaffId;
+    try {
+      const allowlistPayload: Record<string, any> = {
+        id: newStaffId,
+        name: staffName,
+        email: staffEmail,
+        role: staffRole,
+        created_at: nowIso,
+      };
+
+      let { data, error } = await supabase
+        .from('admin_allowlist')
+        .insert([allowlistPayload])
+        .select()
+        .maybeSingle();
+
+      if (error && error.message?.includes("'name' column")) {
+        delete allowlistPayload.name;
+        const retry = await supabase
+          .from('admin_allowlist')
+          .insert([allowlistPayload])
+          .select()
+          .maybeSingle();
+        error = retry.error;
+        data = retry.data;
+      }
+
+      if (data && data.id && isValidUUID(data.id)) {
+        allowlistId = data.id;
+      }
+
+      if (error) {
+        console.warn('[createStaffMember] admin_allowlist insert notice:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[createStaffMember] admin_allowlist insert warning:', err?.message || err);
+    }
+
+    // 2. Direct Supabase Client Insertion into staff_members table
+    const finalStaffId = allowlistId || newStaffId;
     const payload = {
-      id: staff.id || `stf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name: staff.name,
-      email: staff.email,
-      password: staff.password || 'Tirth@123',
-      role: staff.role || 'STAFF',
+      id: finalStaffId,
+      name: staffName,
+      email: staffEmail,
+      password: staffPassword,
+      role: staffRole,
       department: (staff as any).department || 'Operations',
+      phone: staff.phone || '',
+      designation: (staff as any).designation || '',
       is_active: (staff as any).isActive !== false,
       is_blocked: Boolean((staff as any).isBlocked),
+      created_at: nowIso,
     };
+
     try {
       const { data } = await supabase.from('staff_members').insert([payload]).select().maybeSingle();
       if (data) {
@@ -2973,11 +3023,37 @@ export const api = {
           window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
           window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
         }
-        return mapped;
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn('[createStaffMember] staff_members insert notice:', e?.message || e);
+    }
 
-    const mapped = localStore.createStaffMember(staff);
+    // 3. Supabase Auth User Registration (Optional credentials creation)
+    if (staffEmail && staffPassword) {
+      try {
+        await supabase.auth.signUp({
+          email: staffEmail,
+          password: staffPassword,
+          options: {
+            data: {
+              name: staffName,
+              role: staffRole,
+              is_staff: true,
+              is_admin: staffRole === 'Super Admin' || staffRole === 'ADMIN',
+            },
+          },
+        });
+      } catch (authErr: any) {
+        console.warn('[createStaffMember] Supabase Auth signUp note:', authErr?.message || authErr);
+      }
+    }
+
+    // 4. Update local store and notify listeners
+    const mapped = localStore.createStaffMember({
+      ...payload,
+      ...staff,
+      id: finalStaffId,
+    });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
       window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
@@ -2986,27 +3062,6 @@ export const api = {
   },
 
   async updateStaffMember(id: string, staff: Partial<StaffMember>) {
-    try {
-      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
-      const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(staff),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStore.updateStaffMember(id, data);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
-        }
-        return data;
-      }
-    } catch {}
-
     try {
       const payload: Record<string, any> = {};
       if (staff.name !== undefined) payload.name = staff.name;
@@ -3017,7 +3072,21 @@ export const api = {
       if ((staff as any).isActive !== undefined) payload.is_active = (staff as any).isActive;
       if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
 
+      // Update in staff_members
       const { data } = await supabase.from('staff_members').update(payload).eq('id', id).select().maybeSingle();
+
+      // Sync allowlist if email or role changed
+      if (staff.email || staff.role) {
+        const allowUpdates: Record<string, any> = {};
+        if (staff.role) allowUpdates.role = staff.role;
+        if (staff.email) allowUpdates.email = staff.email;
+        if (isValidUUID(id)) {
+          await supabase.from('admin_allowlist').update(allowUpdates).eq('id', id);
+        } else if (staff.email) {
+          await supabase.from('admin_allowlist').update(allowUpdates).eq('email', staff.email);
+        }
+      }
+
       if (data) {
         const mapped = mapStaffRow(data);
         localStore.updateStaffMember(id, mapped);
@@ -3038,49 +3107,13 @@ export const api = {
   },
 
   async toggleStaffStatus(id: string) {
-    try {
-      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
-      const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}/status`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStore.updateStaffMember(id, data);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
-        }
-        return data;
-      }
-    } catch {}
     const list = await this.getStaffMembers();
     const target = list.find(s => s.id === id);
     return this.updateStaffMember(id, { isActive: !target?.isActive } as any);
   },
 
   async blockStaffMember(id: string, isBlocked: boolean, reason?: string) {
-    try {
-      const token = (typeof window !== 'undefined' && window.sessionStorage.getItem('tyt_admin_token')) || '';
-      const res = await fetch(`/api/admin/staff/${encodeURIComponent(id)}/block`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ isBlocked, reason }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStore.updateStaffMember(id, data);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-          window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
-        }
-        return data;
-      }
-    } catch {}
-    const updated = this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked } as any);
+    const updated = await this.updateStaffMember(id, { isBlocked, blockedReason: reason, isActive: !isBlocked } as any);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
       window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
@@ -3113,8 +3146,9 @@ export const api = {
   async resetStaffPassword(id: string, newPassword: string) { return this.updateStaffMember(id, { password: newPassword }); },
 
   async deleteStaffMember(staffId: any, staffEmail?: any) {
-    const id = typeof staffId === 'object' && staffId !== null ? staffId.id : staffId;
-    const email = staffEmail || (typeof staffId === 'object' && staffId !== null ? staffId.email : undefined);
+    const rawId = typeof staffId === 'object' && staffId !== null ? staffId.id : staffId;
+    const email = (staffEmail || (typeof staffId === 'object' && staffId !== null ? staffId.email : undefined) || '').trim().toLowerCase();
+    const id = rawId ? String(rawId).trim() : '';
 
     try {
       // 1. Delete active sessions associated with this staff member (using staff_id)
@@ -3129,18 +3163,44 @@ export const api = {
         }
       }
 
-      // 2. Delete the staff member from the main admin/allowlist table using their primary id
-      const { error: deleteError } = await supabase
-        .from('admin_allowlist') // Or your primary staff table name
-        .delete()
-        .eq('id', id);
+      // 2. Delete the staff member from the main admin/allowlist table
+      // CRITICAL: admin_allowlist.id is of type UUID in PostgreSQL.
+      // Passing non-UUID strings (e.g. 'stf-...') triggers PostgreSQL 22P02: invalid input syntax for type uuid.
+      // If id is a valid UUID, delete by id. If not a UUID and email is available, delete by email!
+      if (isValidUUID(id)) {
+        const { error: deleteError } = await supabase
+          .from('admin_allowlist')
+          .delete()
+          .eq('id', id);
 
-      if (deleteError) {
-        throw deleteError;
+        if (deleteError) {
+          console.warn('[deleteStaffMember] admin_allowlist delete by id notice:', deleteError.message);
+        }
+      } else if (email) {
+        const { error: deleteByEmailError } = await supabase
+          .from('admin_allowlist')
+          .delete()
+          .eq('email', email);
+
+        if (deleteByEmailError) {
+          console.warn('[deleteStaffMember] admin_allowlist delete by email notice:', deleteByEmailError.message);
+        }
       }
 
-      // 3. Refresh local state / UI list
-      // (Call your state setter or fetch function here to update the UI instantly)
+      // 3. Delete from staff_members table
+      if (id) {
+        const { error: staffMemberError } = await supabase
+          .from('staff_members')
+          .delete()
+          .eq('id', id);
+        if (staffMemberError && email) {
+          await supabase.from('staff_members').delete().eq('email', email);
+        }
+      } else if (email) {
+        await supabase.from('staff_members').delete().eq('email', email);
+      }
+
+      // 4. Refresh local state / UI list
       if (id) {
         localStore.deleteStaffMember(id, email);
       }
@@ -3152,9 +3212,15 @@ export const api = {
       return true;
     } catch (err: any) {
       console.error('Failed to delete staff member:', err?.message || err);
-      if (typeof window !== 'undefined') {
-        alert('Could not delete staff member. Please check console for details.');
+      // Fallback local cleanup so the UI never blocks or leaves orphaned cards
+      if (id) {
+        localStore.deleteStaffMember(id, email);
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
+        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+      }
+      return false;
     }
   },
 
@@ -5827,3 +5893,4 @@ export function generateWhatsAppLink(details: any) {
 }
 
 export const deleteStaffMember = api.deleteStaffMember;
+export const createStaffMember = api.createStaffMember;

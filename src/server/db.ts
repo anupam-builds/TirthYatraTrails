@@ -1454,8 +1454,19 @@ class DatabaseStore {
 
     const isStaffAdmin = staffData.role === 'ADMIN' || Boolean(staffData.designation && staffData.designation.toLowerCase().includes('admin'));
 
+    const newStaffId =
+      staffData.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffData.id)
+        ? staffData.id
+        : (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                const r = (Math.random() * 16) | 0;
+                const v = c === 'x' ? r : (r & 0x3) | 0x8;
+                return v.toString(16);
+              }));
+
     const newStaff: StaffMember = {
-      id: `stf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: newStaffId,
       name: (staffData.name || (isStaffAdmin ? 'Enterprise Admin' : 'Staff Specialist')).trim(),
       email: email,
       password: staffData.password.trim(),
