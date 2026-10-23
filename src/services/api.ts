@@ -1484,6 +1484,7 @@ export const api = {
       // Update session activity for live multi-admin tracking
       await supabase.from('staff_sessions').upsert({
         staff_id: data.id,
+        email: email.trim().toLowerCase(),
         ip_address: '122.161.48.12',
         device: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
         last_active: new Date().toISOString(),
@@ -3174,20 +3175,33 @@ export const api = {
       }
     }
 
-    // Delete from staff_sessions using strict .eq filters to avoid PostgREST 400 Bad Request
-    if (staffId) {
+    // Delete from staff_sessions using official Supabase query builder syntax
+    const emailAddress = email ? email.trim().toLowerCase() : '';
+    if (emailAddress) {
       try {
-        await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
+        const { error } = await supabase
+          .from('staff_sessions')
+          .delete()
+          .eq('email', emailAddress);
+        if (error) {
+          console.warn('[deleteStaffMember] staff_sessions delete by email warning:', error);
+        }
       } catch (e) {
-        console.warn('[deleteStaffMember] Supabase staff_sessions delete staff_id notice:', e);
+        console.warn('[deleteStaffMember] Supabase staff_sessions delete email notice:', e);
       }
     }
 
-    if (email) {
+    if (staffId) {
       try {
-        await supabase.from('staff_sessions').delete().eq('email', email);
+        const { error } = await supabase
+          .from('staff_sessions')
+          .delete()
+          .eq('staff_id', staffId);
+        if (error) {
+          console.warn('[deleteStaffMember] staff_sessions delete by staff_id warning:', error);
+        }
       } catch (e) {
-        console.warn('[deleteStaffMember] Supabase staff_sessions delete email notice:', e);
+        console.warn('[deleteStaffMember] Supabase staff_sessions delete staff_id notice:', e);
       }
     }
 

@@ -244,16 +244,28 @@ export function handleUnauthorizedResponse(targetUrl?: string) {
  * Dynamically resolves and attaches the active user's session Bearer token from sessionStorage,
  * falling back to the anon key only when unauthenticated.
  */
-export const getSupabaseHeaders = (extraHeaders: Record<string, string> = {}): Record<string, string> => {
+export const getSupabaseHeaders = (
+  extraHeaders: Record<string, string> = {},
+  method?: string,
+  body?: any
+): Record<string, string> => {
   const activeToken = getActiveSessionToken();
   const bearerToken = activeToken || SUPABASE_ANON_KEY;
+  const isDeleteWithoutBody = method?.toUpperCase() === 'DELETE' && !body;
   const headers: Record<string, string> = {
     apikey: SUPABASE_ANON_KEY,
     Authorization: `Bearer ${bearerToken}`,
-    'Content-Type': 'application/json',
     Prefer: 'return=representation',
   };
-  return { ...headers, ...extraHeaders };
+  if (!isDeleteWithoutBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const merged = { ...headers, ...extraHeaders };
+  if (isDeleteWithoutBody) {
+    delete merged['Content-Type'];
+    delete merged['content-type'];
+  }
+  return merged;
 };
 
 let isTableInSchemaCache: boolean | null = null;
@@ -270,11 +282,27 @@ export function markSchemaReloaded() {
  * and guarantees that:
  * 1. 'apikey' is always attached.
  * 2. Active user's session Bearer token is attached (not anonymous if logged in).
- * 3. 401 Unauthorized responses are intercepted and gracefully handled.
+ * 3. Content-Type is cleanly stripped on body-less DELETE requests to prevent PostgREST 400 Bad Request.
+ * 4. 401 Unauthorized responses are intercepted and gracefully handled.
  */
 export const customFetch: typeof fetch = async (input, init) => {
   const reqInit: RequestInit = init ? { ...init } : {};
   const headers = new Headers(reqInit.headers || {});
+  const reqMethod = (
+    reqInit.method ||
+    (input instanceof Request ? input.method : '') ||
+    'GET'
+  ).toUpperCase();
+
+  // Strip Content-Type on body-less DELETE requests to prevent 400 Bad Request from PostgREST gateways
+  if (reqMethod === 'DELETE' && !reqInit.body) {
+    headers.delete('Content-Type');
+    headers.delete('content-type');
+    if (reqInit.headers && typeof reqInit.headers === 'object') {
+      delete (reqInit.headers as any)['Content-Type'];
+      delete (reqInit.headers as any)['content-type'];
+    }
+  }
 
   if (SUPABASE_ANON_KEY && !headers.has('apikey')) {
     headers.set('apikey', SUPABASE_ANON_KEY);
@@ -303,8 +331,14 @@ export const customFetch: typeof fetch = async (input, init) => {
   if (!headers.has('Prefer')) {
     headers.set('Prefer', 'return=representation');
   }
-  if (!headers.has('Content-Type') && reqInit.body && typeof reqInit.body === 'string') {
+  if (!headers.has('Content-Type') && reqInit.body && typeof reqInit.body === 'string' && reqMethod !== 'DELETE') {
     headers.set('Content-Type', 'application/json');
+  }
+
+  // Guarantee body-less DELETE requests never send Content-Type header
+  if (reqMethod === 'DELETE' && !reqInit.body) {
+    headers.delete('Content-Type');
+    headers.delete('content-type');
   }
 
   const urlStr = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
@@ -773,6 +807,15 @@ export const customFetch: typeof fetch = async (input, init) => {
     });
   }
 
+  if (reqMethod === 'DELETE' && !reqInit.body) {
+    headers.delete('Content-Type');
+    headers.delete('content-type');
+    if (reqInit.headers && typeof reqInit.headers === 'object') {
+      delete (reqInit.headers as any)['Content-Type'];
+      delete (reqInit.headers as any)['content-type'];
+    }
+  }
+
   reqInit.headers = headers;
   const res = await fetch(input, reqInit);
 
@@ -857,9 +900,20 @@ export async function supabaseRest<T = any>(
       });
     }
 
+    const method = (options.method || 'GET').toUpperCase() as 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+    const headers = getSupabaseHeaders(options.headers, method, options.body);
+    if (method === 'DELETE' && !options.body) {
+      delete headers['Content-Type'];
+      delete headers['content-type'];
+      if (options.headers) {
+        delete options.headers['Content-Type'];
+        delete options.headers['content-type'];
+      }
+    }
+
     const response = await fetch(url.toString(), {
-      method: options.method || 'GET',
-      headers: getSupabaseHeaders(options.headers),
+      method,
+      headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
 
