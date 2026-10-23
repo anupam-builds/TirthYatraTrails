@@ -3229,25 +3229,7 @@ export const api = {
         await supabase.from('staff_members').delete().eq('email', email);
       }
 
-      // 4. Synchronize with backend to ensure Supabase Auth user is removed via Admin Auth API
-      try {
-        const deleteTarget = id || email;
-        if (deleteTarget) {
-          const url = `/api/admin/staff/${encodeURIComponent(deleteTarget)}?email=${encodeURIComponent(email)}&id=${encodeURIComponent(id)}`;
-          await fetch(url, {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }).catch((fetchErr) => {
-            console.warn('[deleteStaffMember] Backend staff delete sync note:', fetchErr?.message || fetchErr);
-          });
-        }
-      } catch (endpointErr) {
-        console.warn('[deleteStaffMember] API delete endpoint notice:', endpointErr);
-      }
-
-      // 5. Refresh local state / UI list
+      // 4. Refresh local state / UI list
       if (id || email) {
         localStore.deleteStaffMember(id, email);
       }
