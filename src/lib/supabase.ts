@@ -283,7 +283,8 @@ export function markSchemaReloaded() {
  * 1. 'apikey' is always attached.
  * 2. Active user's session Bearer token is attached (not anonymous if logged in).
  * 3. Content-Type is cleanly stripped on body-less DELETE requests to prevent PostgREST 400 Bad Request.
- * 4. 401 Unauthorized responses are intercepted and gracefully handled.
+ * 4. Any injected 'columns' URL parameters are stripped from POST requests, as PostgREST rejects them with 400 Bad Request.
+ * 5. 401 Unauthorized responses are intercepted and gracefully handled.
  */
 export const customFetch: typeof fetch = async (input, init) => {
   const reqInit: RequestInit = init ? { ...init } : {};
@@ -341,7 +342,29 @@ export const customFetch: typeof fetch = async (input, init) => {
     headers.delete('content-type');
   }
 
-  const urlStr = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+  let cleanInput: RequestInfo | URL = input;
+  let urlStr = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+
+  // Strip injected 'columns=' query parameter from Supabase REST requests.
+  // PostgREST rejects manual 'columns' query strings during standard JSON inserts with 400 Bad Request.
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const parsedUrl = new URL(urlStr, base);
+    if (parsedUrl.searchParams.has('columns')) {
+      parsedUrl.searchParams.delete('columns');
+      const cleanUrl = parsedUrl.toString();
+      if (typeof input === 'string') {
+        cleanInput = cleanUrl;
+      } else if (typeof Request !== 'undefined' && input instanceof Request) {
+        cleanInput = new Request(cleanUrl, input);
+      } else if (typeof URL !== 'undefined' && input instanceof URL) {
+        cleanInput = new URL(cleanUrl);
+      } else {
+        cleanInput = cleanUrl;
+      }
+      urlStr = cleanUrl;
+    }
+  } catch {}
 
   // Server-enforced RPC guard for create_sub_admin
   if (urlStr.includes('/rest/v1/rpc/create_sub_admin')) {
@@ -415,7 +438,7 @@ export const customFetch: typeof fetch = async (input, init) => {
     // Caller is validated root admin: try remote Supabase first
     try {
       reqInit.headers = headers;
-      const remoteRes = await fetch(input, reqInit);
+      const remoteRes = await fetch(cleanInput, reqInit);
       if (remoteRes.ok) {
         return remoteRes;
       }
@@ -473,7 +496,7 @@ export const customFetch: typeof fetch = async (input, init) => {
       try {
         lastSchemaCacheCheck = now;
         reqInit.headers = headers;
-        const remoteRes = await fetch(input, reqInit);
+        const remoteRes = await fetch(cleanInput, reqInit);
         if (remoteRes.ok) {
           isTableInSchemaCache = true;
           return remoteRes;
@@ -615,7 +638,7 @@ export const customFetch: typeof fetch = async (input, init) => {
     // Check remote Supabase first, but gracefully fallback if table is missing in schema cache (PGRST205)
     try {
       reqInit.headers = headers;
-      const remoteRes = await fetch(input, reqInit);
+      const remoteRes = await fetch(cleanInput, reqInit);
       if (remoteRes.ok) {
         return remoteRes;
       }
@@ -685,7 +708,7 @@ export const customFetch: typeof fetch = async (input, init) => {
   if (urlStr.includes('/rest/v1/sacred_cities')) {
     try {
       reqInit.headers = headers;
-      const remoteRes = await fetch(input, reqInit);
+      const remoteRes = await fetch(cleanInput, reqInit);
       if (remoteRes.ok) {
         return remoteRes;
       }
@@ -727,7 +750,7 @@ export const customFetch: typeof fetch = async (input, init) => {
         } catch {}
       }
 
-      const remoteRes = await fetch(input, reqInit);
+      const remoteRes = await fetch(cleanInput, reqInit);
       if (remoteRes.ok) {
         return remoteRes;
       }
@@ -817,7 +840,7 @@ export const customFetch: typeof fetch = async (input, init) => {
   }
 
   reqInit.headers = headers;
-  const res = await fetch(input, reqInit);
+  const res = await fetch(cleanInput, reqInit);
 
   // Gracefully handle 401 Unauthorized across all Supabase operations
   if (res.status === 401) {
@@ -894,13 +917,21 @@ export async function supabaseRest<T = any>(
       ? tableOrPath
       : `/rest/v1/${tableOrPath}`;
     const url = new URL(`${SUPABASE_URL}${cleanPath}`);
+    const method = (options.method || 'GET').toUpperCase() as 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
     if (options.params) {
       Object.entries(options.params).forEach(([k, v]) => {
+        // Strip any injected 'columns' query parameter (PostgREST rejects columns= in JSON inserts with 400)
+        if (k.toLowerCase() === 'columns') {
+          return;
+        }
         url.searchParams.append(k, v);
       });
     }
 
-    const method = (options.method || 'GET').toUpperCase() as 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+    if (url.searchParams.has('columns')) {
+      url.searchParams.delete('columns');
+    }
+
     const headers = getSupabaseHeaders(options.headers, method, options.body);
     if (method === 'DELETE' && !options.body) {
       delete headers['Content-Type'];

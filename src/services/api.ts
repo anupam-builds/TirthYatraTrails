@@ -2964,31 +2964,19 @@ export const api = {
     try {
       const allowlistPayload: Record<string, any> = {
         id: newStaffId,
-        name: staffName,
         email: staffEmail,
         role: staffRole,
+        status: 'Active & Authorized',
         created_at: nowIso,
       };
 
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from('admin_allowlist')
         .insert([allowlistPayload])
-        .select()
-        .maybeSingle();
+        .select();
 
-      if (error && error.message?.includes("'name' column")) {
-        delete allowlistPayload.name;
-        const retry = await supabase
-          .from('admin_allowlist')
-          .insert([allowlistPayload])
-          .select()
-          .maybeSingle();
-        error = retry.error;
-        data = retry.data;
-      }
-
-      if (data && data.id && isValidUUID(data.id)) {
-        allowlistId = data.id;
+      if (data && data.length > 0 && data[0]?.id && isValidUUID(data[0].id)) {
+        allowlistId = data[0].id;
       }
 
       if (error) {
@@ -3015,14 +3003,20 @@ export const api = {
     };
 
     try {
-      const { data } = await supabase.from('staff_members').insert([payload]).select().maybeSingle();
-      if (data) {
-        const mapped = mapStaffRow(data);
+      const { data, error } = await supabase
+        .from('staff_members')
+        .insert([payload])
+        .select();
+
+      if (data && data.length > 0) {
+        const mapped = mapStaffRow(data[0]);
         localStore.createStaffMember(mapped);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
           window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
         }
+      } else if (error) {
+        console.warn('[createStaffMember] staff_members insert notice:', error.message);
       }
     } catch (e: any) {
       console.warn('[createStaffMember] staff_members insert notice:', e?.message || e);
