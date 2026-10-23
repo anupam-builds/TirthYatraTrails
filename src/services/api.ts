@@ -2999,40 +2999,33 @@ export const api = {
     // 2. Direct Supabase Client Insertion into staff_members table
     const finalStaffId = allowlistId || newStaffId;
     const staffDesignation = ((staff as any).designation || staff.role || 'Pilgrim Operations Specialist').trim();
+    const staffPhone = (staff.phone || '').trim();
 
-    // Construct insert payload matching exact database schema columns (no non-existent 'designation' column)
-    const payload: Record<string, any> = {
+    // Construct insert payload matching exact database schema columns:
+    // Strip unmatched UI properties ('phone', 'designation', 'department') to prevent PostgREST 400 Bad Request
+    const insertData: Record<string, any> = {
       id: finalStaffId,
       name: staffName,
       email: staffEmail,
       password: staffPassword,
       role: staffRole,
-      department: (staff as any).department || 'Operations',
-      phone: staff.phone || '',
       is_active: (staff as any).isActive !== false,
       is_blocked: Boolean((staff as any).isBlocked),
       created_at: nowIso,
     };
 
     try {
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from('staff_members')
-        .insert([payload])
+        .insert([insertData])
         .select();
 
-      // If department column is not in schema cache, retry cleanly without department
-      if (error && (error.message?.includes('department') || error.message?.includes('PGRST204'))) {
-        delete payload.department;
-        const retry = await supabase
-          .from('staff_members')
-          .insert([payload])
-          .select();
-        data = retry.data;
-        error = retry.error;
-      }
-
       if (data && data.length > 0) {
-        const mapped = mapStaffRow({ ...data[0], designation: staffDesignation });
+        const mapped = mapStaffRow({
+          ...data[0],
+          designation: staffDesignation,
+          phone: staffPhone,
+        });
         localStore.createStaffMember(mapped);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
@@ -3065,10 +3058,11 @@ export const api = {
       }
     }
 
-    // 4. Update local store and notify listeners (preserving designation for UI)
+    // 4. Update local store and notify listeners (preserving phone and designation for UI)
     const mapped = localStore.createStaffMember({
-      ...payload,
+      ...insertData,
       ...staff,
+      phone: staffPhone,
       designation: staffDesignation,
       id: finalStaffId,
     });
@@ -3086,7 +3080,6 @@ export const api = {
       if (staff.email !== undefined) payload.email = staff.email;
       if (staff.password !== undefined) payload.password = staff.password;
       if (staff.role !== undefined) payload.role = staff.role;
-      if ((staff as any).department !== undefined) payload.department = (staff as any).department;
       if ((staff as any).isActive !== undefined) payload.is_active = (staff as any).isActive;
       if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
 
