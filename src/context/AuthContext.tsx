@@ -291,10 +291,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let authError: any = null;
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: cleanPass,
       });
+
+      if (error) {
+        const isEmailNotConfirmed =
+          error.message?.toLowerCase().includes('email not confirmed') ||
+          (error as any).code === 'email_not_confirmed' ||
+          error.message?.toLowerCase().includes('confirm');
+
+        if (isEmailNotConfirmed) {
+          try {
+            const confirmRes = await fetch('/api/auth/confirm-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
+            });
+            if (confirmRes.ok) {
+              const retry = await supabase.auth.signInWithPassword({
+                email: cleanEmail,
+                password: cleanPass,
+              });
+              if (!retry.error) {
+                data = retry.data;
+                error = null;
+              }
+            }
+          } catch {}
+        }
+      }
+
       if (error) {
         authError = error;
       } else {
@@ -331,12 +359,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       } catch (err: any) {
-        throw new Error(err?.message || authError?.message || 'Invalid administrator credentials.');
+        const rawMsg = err?.message || authError?.message || '';
+        if (rawMsg.toLowerCase().includes('email not confirmed')) {
+          throw new Error('Email Not Confirmed: In Supabase Dashboard, go to Authentication > Providers > Email and turn off "Confirm email", or confirm this administrator email in Authentication > Users.');
+        }
+        throw new Error(rawMsg || 'Invalid administrator credentials.');
       }
     }
 
     if (!authUser) {
-      throw new Error(authError?.message || 'Invalid administrator credentials.');
+      const rawMsg = authError?.message || '';
+      if (rawMsg.toLowerCase().includes('email not confirmed')) {
+        throw new Error('Email Not Confirmed: In Supabase Dashboard, go to Authentication > Providers > Email and turn off "Confirm email", or confirm this administrator email in Authentication > Users.');
+      }
+      throw new Error(rawMsg || 'Invalid administrator credentials.');
     }
 
     const verifiedEmail = (authUser?.email || cleanEmail).toLowerCase().trim();

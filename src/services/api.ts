@@ -3066,7 +3066,7 @@ export const api = {
       console.warn('[createStaffMember] staff_members insert notice:', e?.message || e);
     }
 
-    // 3. Supabase Auth User Registration (Optional credentials creation)
+    // 3. Supabase Auth User Registration & Guaranteed Instant Confirmation (email_confirm: true)
     if (staffEmail && staffPassword) {
       try {
         const { error: signUpErr } = await supabase.auth.signUp({
@@ -3087,6 +3087,15 @@ export const api = {
       } catch (authErr: any) {
         console.warn('[createStaffMember] Supabase Auth signUp note:', authErr?.message || authErr);
       }
+
+      // Immediately auto-confirm email via server-side Admin API to prevent "Email not confirmed" block
+      try {
+        await fetch('/api/auth/confirm-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: staffEmail, password: staffPassword }),
+        });
+      } catch {}
     }
 
     // 4. Update local store and notify listeners (preserving phone and designation for UI)

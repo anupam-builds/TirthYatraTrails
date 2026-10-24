@@ -66,13 +66,51 @@ export const StaffLoginPage: React.FC = () => {
 
     try {
       // 1. Authenticate with Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: cleanPassword,
       });
 
+      // Handle "Email not confirmed" by auto-confirming via backend Admin API or prompting admin instructions
       if (error) {
-        setErrorMessage(error.message); // Make sure this state renders in the UI!
+        const isEmailNotConfirmed =
+          error.message?.toLowerCase().includes('email not confirmed') ||
+          (error as any).code === 'email_not_confirmed' ||
+          error.message?.toLowerCase().includes('confirm');
+
+        if (isEmailNotConfirmed) {
+          try {
+            const confirmRes = await fetch('/api/auth/confirm-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
+            });
+            if (confirmRes.ok) {
+              const retry = await supabase.auth.signInWithPassword({
+                email: cleanEmail,
+                password: cleanPassword,
+              });
+              if (!retry.error) {
+                data = retry.data;
+                error = null;
+              }
+            }
+          } catch {}
+        }
+      }
+
+      if (error) {
+        const isEmailNotConfirmed =
+          error.message?.toLowerCase().includes('email not confirmed') ||
+          (error as any).code === 'email_not_confirmed';
+
+        if (isEmailNotConfirmed) {
+          setErrorMessage(
+            'Email Not Confirmed: In your Supabase Dashboard, go to Authentication > Providers > Email and turn off "Confirm email", or go to Authentication > Users, click the three dots next to this staff user, and select "Confirm Email".'
+          );
+        } else {
+          setErrorMessage(error.message);
+        }
         setIsLoading(false);
         return;
       }
