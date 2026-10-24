@@ -83,48 +83,37 @@ function registerChannelListener(
   table: string,
   handler: ChangeHandler
 ): () => void {
-  let reg = activeChannels.get(channelName);
+  const channelKey = `${channelName}:${table}`;
+  let reg = activeChannels.get(channelKey);
 
   if (!reg) {
-    const channel = supabase.channel(channelName);
-    reg = {
-      channel,
-      subscribers: new Map(),
-      refCount: 0,
-    };
-    activeChannels.set(channelName, reg);
-  }
-
-  if (!reg.subscribers.has(table)) {
-    reg.subscribers.set(table, new Set());
-
-    // Register Postgres change listener for this table on the shared channel
-    reg.channel.on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table },
-      (payload: any) => {
-        const eventType = (payload.eventType || payload.event || 'UPDATE') as 'INSERT' | 'UPDATE' | 'DELETE';
-        const handlers = reg?.subscribers.get(table);
-        if (handlers && handlers.size > 0) {
-          handlers.forEach((fn) => {
-            try {
-              fn({
-                eventType,
-                newRecord: payload.new,
-                oldRecord: payload.old,
-                table,
-              });
-            } catch (err) {
-              console.error(`[Realtime Sync] Error executing listener for ${table}:`, err);
-            }
-          });
-        }
-      }
-    );
-
-    // Cross-device broadcast listeners for instant client-to-client push
+    const channel = supabase.channel(channelKey);
     const singular = table.endsWith('s') ? table.slice(0, -1) : table;
-    reg.channel
+
+    // 1. Register Postgres change & broadcast listeners FIRST
+    channel
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        (payload: any) => {
+          const eventType = (payload.eventType || payload.event || 'UPDATE') as 'INSERT' | 'UPDATE' | 'DELETE';
+          const handlers = reg?.subscribers.get(table);
+          if (handlers && handlers.size > 0) {
+            handlers.forEach((fn) => {
+              try {
+                fn({
+                  eventType,
+                  newRecord: payload.new,
+                  oldRecord: payload.old,
+                  table,
+                });
+              } catch (err) {
+                console.error(`[Realtime Sync] Error executing listener for ${table}:`, err);
+              }
+            });
+          }
+        }
+      )
       .on('broadcast', { event: `${singular}_created` }, ({ payload }: any) => {
         const record = payload?.[singular] || payload?.record || payload;
         const handlers = reg?.subscribers.get(table);
@@ -158,20 +147,27 @@ function registerChannelListener(
           });
         }
       });
+
+    // 2. Call subscribe LAST
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        // Channel connected
+      }
+    });
+
+    reg = {
+      channel,
+      subscribers: new Map([[table, new Set()]]),
+      refCount: 0,
+    };
+    activeChannels.set(channelKey, reg);
   }
 
   reg.subscribers.get(table)!.add(handler);
   reg.refCount++;
 
-  // Subscribe channel if not already subscribed
-  reg.channel.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      // Channel connected
-    }
-  });
-
   return () => {
-    const currentReg = activeChannels.get(channelName);
+    const currentReg = activeChannels.get(channelKey);
     if (!currentReg) return;
 
     const tableSet = currentReg.subscribers.get(table);
@@ -183,7 +179,7 @@ function registerChannelListener(
 
     if (currentReg.refCount <= 0) {
       safeRemoveChannel(currentReg.channel);
-      activeChannels.delete(channelName);
+      activeChannels.delete(channelKey);
     }
   };
 }

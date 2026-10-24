@@ -87,12 +87,16 @@ export function useAdminPresence() {
     subscribersCount++;
 
     const initOrJoinChannel = async () => {
-      if (!sharedChannel) {
+      if (!sharedChannel || sharedChannel.state === 'closed' || sharedChannel.state === 'leaving') {
         // Explicitly create and join channel 'online-admins' as requested
         const channelName = 'online-admins';
         const channelKey = adminUser?.email ? adminUser.email.toLowerCase().trim() : `admin-${Date.now()}`;
 
-        const ch = supabase.channel(channelName, {
+        if (sharedChannel) {
+          safeRemoveChannel(sharedChannel);
+        }
+
+        const channel = supabase.channel(channelName, {
           config: {
             presence: {
               key: channelKey,
@@ -100,44 +104,48 @@ export function useAdminPresence() {
           },
         });
 
-        ch.on('presence', { event: 'sync' }, () => {
-          processPresenceState(ch, adminUser);
-        })
+        // 1. Register presence listeners FIRST (before subscribe)
+        channel
+          .on('presence', { event: 'sync' }, () => {
+            processPresenceState(channel, adminUser);
+          })
           .on('presence', { event: 'join' }, () => {
-            processPresenceState(ch, adminUser);
+            processPresenceState(channel, adminUser);
           })
           .on('presence', { event: 'leave' }, () => {
-            processPresenceState(ch, adminUser);
-          })
-          .subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
-              setIsConnected(true);
-              if (adminUser) {
-                const presenceData: AdminPresenceInfo = {
-                  id: adminUser.id,
-                  user_id: adminUser.id,
-                  email: adminUser.email.toLowerCase().trim(),
-                  name: adminUser.name || adminUser.email.split('@')[0],
-                  role: adminUser.role,
-                  online_at: new Date().toISOString(),
-                };
-                try {
-                  await ch.track(presenceData);
-                  processPresenceState(ch, adminUser);
-                } catch (err) {
-                  console.warn('[useAdminPresence] Failed to track presence:', err);
-                }
-              }
-            } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-              setIsConnected(false);
-            }
+            processPresenceState(channel, adminUser);
           });
 
-        sharedChannel = ch;
+        // 2. Call subscribe LAST
+        channel.subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            setIsConnected(true);
+            if (adminUser) {
+              const presenceData: AdminPresenceInfo = {
+                id: adminUser.id,
+                user_id: adminUser.id,
+                email: adminUser.email.toLowerCase().trim(),
+                name: adminUser.name || adminUser.email.split('@')[0],
+                role: adminUser.role,
+                online_at: new Date().toISOString(),
+              };
+              try {
+                await channel.track(presenceData);
+                processPresenceState(channel, adminUser);
+              } catch (err) {
+                console.warn('[useAdminPresence] Failed to track presence:', err);
+              }
+            }
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            setIsConnected(false);
+          }
+        });
+
+        sharedChannel = channel;
       } else {
-        // Channel already exists, refresh presence state and track if new user
+        // Channel already exists and is subscribed, just track presence without re-adding callbacks
         setIsConnected(sharedChannel.state === 'joined');
-        if (adminUser) {
+        if (adminUser && sharedChannel.state === 'joined') {
           sharedChannel.track({
             id: adminUser.id,
             user_id: adminUser.id,
