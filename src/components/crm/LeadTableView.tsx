@@ -48,6 +48,7 @@ import {
   Plus,
   Bell,
   Compass,
+  X,
   XCircle,
   CalendarClock,
   MoreVertical,
@@ -107,6 +108,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   const [selectedLeadForReminder, setSelectedLeadForReminder] = useState<Inquiry | null>(null);
   const [selectedLeadForNotes, setSelectedLeadForNotes] = useState<Inquiry | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [successNotification, setSuccessNotification] = useState<{ leadId: string; name: string } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{
     lead: Inquiry;
     seqLeadId: string;
@@ -329,6 +331,39 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* High-Visibility Success Notification Banner */}
+      {successNotification && (
+        <div
+          role="status"
+          className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white shadow-xl shadow-emerald-600/20 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/30 shadow-inner">
+              <CheckCircle2 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-xs font-black tracking-tight flex items-center gap-2">
+                <span>New Lead Created Successfully!</span>
+                <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-[10px] tracking-wider uppercase font-bold">
+                  {successNotification.leadId}
+                </span>
+              </p>
+              <p className="text-[11px] text-emerald-100 mt-0.5">
+                Devotee <strong>{successNotification.name}</strong> has been registered directly in Supabase and added to your workspace.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessNotification(null)}
+            className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors cursor-pointer"
+            title="Dismiss notification"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Real-time Audio & Visual Reminder Alert Banner */}
       <ReminderAlertBanner
         inquiries={localInquiries}
@@ -1372,6 +1407,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
         onSuccess={(newLead) => {
           setLocalInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)]);
           if (onLeadCreated) onLeadCreated(newLead);
+          const leadIdentifier = newLead.leadId || (newLead as any).lead_id || formatLeadId(newLead.id) || 'Lead';
+          const devoteeName = newLead.customerName || newLead.fullName || 'Devotee';
+          setSuccessNotification({ leadId: leadIdentifier, name: devoteeName });
+          setTimeout(() => setSuccessNotification(null), 6000);
         }}
         staffList={staffList}
         isStaffMode={isStaffMode}

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember, Package } from '../../types.js';
-import { api } from '../../services/api.js';
+import { api, mapInquiryRow } from '../../services/api.js';
+import { supabase } from '../../lib/supabase.js';
+import { localStore } from '../../services/localStore.js';
+import { broadcastNewInquiry } from '../../services/soundNotification.js';
 import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
 import {
   ADMIN_CRM_STATUS_LIST,
@@ -69,6 +72,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Load packages on open
   useEffect(() => {
@@ -88,6 +92,8 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
       if (isStaffMode && currentStaffId) {
         setAssignedStaffId(currentStaffId);
       }
+      setErrorMsg(null);
+      setSuccessMsg(null);
     }
   }, [isOpen, isStaffMode, currentStaffId]);
 
@@ -127,6 +133,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     const cleanName = fullName.trim();
     const cleanPhone = whatsappNumber.trim();
@@ -176,35 +183,169 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
     setSubmitting(true);
 
     try {
-      const created = await api.createManualLead({
-        fullName: cleanName,
-        customerName: cleanName,
-        whatsappNumber: cleanPhone,
-        customerPhone: cleanPhone,
-        email: cleanEmail || undefined,
-        customerEmail: cleanEmail || undefined,
-        userCity: userCity.trim() || undefined,
-        packageInterest: leadTitle,
-        title: leadTitle,
-        checkInDate: startDate || new Date().toISOString().split('T')[0],
-        endDate: endDate || undefined,
-        durationDays: durationDays !== '' ? Number(durationDays) : undefined,
-        budget: budget.trim() || undefined,
-        accommodationTier,
-        assignedStaffId: assignedStaffId || undefined,
-        assignedStaffName: assignedStaffName || undefined,
-        reminderAt: reminderAt ? new Date(reminderAt).toISOString() : undefined,
-        reminderNote: reminderNote.trim() || undefined,
-        notes: notes.trim() || undefined,
-        specialRequests: notes.trim() || undefined,
-        status: status || 'NEW',
-        type: 'PACKAGE',
-      });
+      // 1. Generate RFC4122 v4 UUID
+      const leadUuid =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+              const r = (Math.random() * 16) | 0;
+              const v = c === 'x' ? r : (r & 0x3) | 0x8;
+              return v.toString(16);
+            });
 
-      onSuccess(created);
+      // 2. Compute human-readable sequential Lead ID (TTT00000001, etc.)
+      let nextLeadId = 'TTT00000001';
+      try {
+        const existingList = localStore.getInquiries();
+        let maxNum = 0;
+        for (const inq of existingList) {
+          const raw = inq.leadId || (inq as any).lead_id;
+          if (raw) {
+            const cleaned = String(raw).replace(/^(TTT|TTX)/i, '');
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+          }
+        }
+        nextLeadId = `TTT${String(maxNum + 1).padStart(8, '0')}`;
+      } catch {
+        nextLeadId = `TTT${Date.now().toString().slice(-8)}`;
+      }
+
+      const durDaysNum =
+        durationDays !== '' && !isNaN(Number(durationDays)) ? Number(durationDays) : null;
+      const cleanStartDate = startDate || new Date().toISOString().split('T')[0];
+
+      // 3. Raw prospective payload matching the PostgreSQL 'leads' table schema
+      const rawPayload: Record<string, any> = {
+        id: leadUuid,
+        lead_id: nextLeadId,
+        customer_name: cleanName,
+        full_name: cleanName,
+        phone: cleanPhone,
+        whatsapp_number: cleanPhone,
+        email: cleanEmail || null,
+        city: userCity.trim() || null,
+        title: leadTitle,
+        type: 'PACKAGE',
+        status: status || 'NEW',
+        check_in_date: cleanStartDate,
+        start_date: cleanStartDate,
+        end_date: endDate || null,
+        duration_days: durDaysNum,
+        budget: budget.trim() || null,
+        accommodation_tier: accommodationTier || '3 Star Standard',
+        accommodation_preference: accommodationTier || '3 Star Standard',
+        adults: 1,
+        children: 0,
+        guests: 1,
+        assigned_staff_id: assignedStaffId || null,
+        assigned_staff_name: assignedStaffName || null,
+        reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
+        reminder_note: reminderNote.trim() || null,
+        special_requests: notes.trim() || null,
+        notes: notes.trim()
+          ? [
+              {
+                id: `note-${Date.now()}`,
+                text: notes.trim(),
+                createdAt: new Date().toISOString(),
+                authorName: assignedStaffName || currentStaffName || 'Staff Specialist',
+                authorRole: isStaffMode ? 'STAFF' : 'ADMIN',
+              },
+            ]
+          : [],
+        is_locked_for_staff: false,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // 4. Strictly whitelist columns that exist in public.leads schema and strip out undefined
+      const ALLOWED_LEADS_COLUMNS = new Set([
+        'id',
+        'lead_id',
+        'customer_name',
+        'full_name',
+        'phone',
+        'whatsapp_number',
+        'email',
+        'city',
+        'title',
+        'type',
+        'status',
+        'check_in_date',
+        'start_date',
+        'end_date',
+        'duration_days',
+        'budget',
+        'accommodation_tier',
+        'accommodation_preference',
+        'adults',
+        'children',
+        'guests',
+        'assigned_staff_id',
+        'assigned_staff_name',
+        'reminder_at',
+        'reminder_note',
+        'special_requests',
+        'notes',
+        'is_locked_for_staff',
+        'is_deleted',
+        'created_at',
+        'updated_at',
+      ]);
+
+      const cleanPayload: Record<string, any> = {};
+      for (const [k, v] of Object.entries(rawPayload)) {
+        if (ALLOWED_LEADS_COLUMNS.has(k) && v !== undefined) {
+          cleanPayload[k] = v;
+        }
+      }
+
+      console.log('🚀 [CreateLeadModal] Direct Supabase insertion into leads table:', cleanPayload);
+
+      // Direct insertion into Supabase leads table
+      const { data, error: insertError } = await supabase
+        .from('leads')
+        .insert([cleanPayload])
+        .select();
+
+      if (insertError) {
+        console.error('❌ [CreateLeadModal] Direct Supabase lead insertion error:', insertError);
+        setErrorMsg(`Failed to create lead: ${insertError.message} (Code: ${insertError.code || 'UNKNOWN'})`);
+        setSubmitting(false);
+        return;
+      }
+
+      // Non-blocking mirror into inquiries table for cross-view query tolerance
+      try {
+        await supabase.from('inquiries').insert([cleanPayload]);
+      } catch {}
+
+      const createdRow = data && data.length > 0 ? data[0] : cleanPayload;
+      const mapped = mapInquiryRow(createdRow);
+      if (!mapped.leadId && cleanPayload.lead_id) {
+        mapped.leadId = cleanPayload.lead_id;
+      }
+      mapped.assignedStaffId = cleanPayload.assigned_staff_id;
+      mapped.assigned_staff_id = cleanPayload.assigned_staff_id;
+      mapped.assignedStaffName = cleanPayload.assigned_staff_name;
+      mapped.assigned_staff_name = cleanPayload.assigned_staff_name;
+
+      // Synchronize in-memory/local stores and sound notification
+      try {
+        localStore.submitInquiry(mapped);
+        broadcastNewInquiry(mapped);
+      } catch {}
+
+      console.log('✅ [CreateLeadModal] Lead created successfully in Supabase:', mapped);
+      setSuccessMsg(`Lead ${mapped.leadId || cleanPayload.lead_id} created successfully!`);
+
+      // Immediately append new lead to UI state and close modal
+      onSuccess(mapped);
       onClose();
     } catch (err: any) {
-      console.error('Failed to create manual lead:', err);
+      console.error('❌ [CreateLeadModal] Unexpected exception during lead creation:', err);
       setErrorMsg(err.message || 'Failed to create lead in database. Please check connection and try again.');
     } finally {
       setSubmitting(false);
@@ -252,6 +393,13 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-semibold flex items-center gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{successMsg}</span>
             </div>
           )}
 

@@ -2205,48 +2205,34 @@ export const api = {
 
     let createdRow: any = null;
 
-    // Write to active CRM table 'inquiries' with error parsing
+    // Direct Supabase insert into 'leads' table
     try {
-      const inqRes = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
-        method: 'POST',
-        headers: getSupabaseHeaders(),
-        body: JSON.stringify(inquiriesPayload),
-      });
+      const { data, error } = await supabase
+        .from('leads')
+        .insert([leadsDbPayload])
+        .select();
 
-      if (!inqRes.ok) {
-        if (inqRes.status === 401) {
-          handleUnauthorizedResponse('/rest/v1/inquiries');
-        }
-        const errBody = await inqRes.json().catch(() => null);
-        console.error('❌ [createManualLead] Supabase POST to /rest/v1/inquiries returned', inqRes.status, errBody);
-      } else {
-        const json = await inqRes.json().catch(() => null);
-        createdRow = Array.isArray(json) ? json[0] : json;
+      if (error) {
+        console.error('❌ [createManualLead] Supabase leads insertion error:', error);
+      } else if (data && data.length > 0) {
+        createdRow = data[0];
       }
     } catch (err) {
-      console.warn('⚠️ [createManualLead] Fetch to inquiries failed:', err);
+      console.warn('⚠️ [createManualLead] Direct Supabase leads insert exception:', err);
     }
 
-    // Synchronize to 'leads' table with error parsing
+    // Synchronize to active CRM table 'inquiries' for compatibility
     try {
-      const leadsRes = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
-        method: 'POST',
-        headers: getSupabaseHeaders(),
-        body: JSON.stringify(leadsDbPayload),
-      });
+      const { data: inqData, error: inqErr } = await supabase
+        .from('inquiries')
+        .insert([inquiriesPayload])
+        .select();
 
-      if (!leadsRes.ok) {
-        if (leadsRes.status === 401) {
-          handleUnauthorizedResponse('/rest/v1/leads');
-        }
-        const errBody = await leadsRes.json().catch(() => null);
-        console.error('❌ [createManualLead] Supabase POST to /rest/v1/leads returned', leadsRes.status, errBody);
-      } else if (!createdRow) {
-        const json = await leadsRes.json().catch(() => null);
-        createdRow = Array.isArray(json) ? json[0] : json;
+      if (!inqErr && inqData && inqData.length > 0 && !createdRow) {
+        createdRow = inqData[0];
       }
     } catch (err) {
-      console.warn('⚠️ [createManualLead] Fetch to leads failed:', err);
+      console.warn('⚠️ [createManualLead] Supabase inquiries insert exception:', err);
     }
 
     const mapped = createdRow ? mapInquiryRow(createdRow) : mapInquiryRow(inquiriesPayload);

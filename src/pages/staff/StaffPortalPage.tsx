@@ -1292,7 +1292,10 @@ export const StaffPortalPage: React.FC = () => {
                 setSelectedInquiryForEdit(inq);
               }}
               onAddNote={handleAddNote}
-              onLeadCreated={(newLead) => setInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)])}
+              onLeadCreated={(newLead) => {
+                setInquiries((prev) => [newLead, ...prev.filter((i) => i.id !== newLead.id)]);
+                setStaffLeads((prev) => [newLead, ...prev.filter((l) => l.id !== newLead.id)]);
+              }}
             />
 
             {/* Detailed Lead Edit Modal */}
