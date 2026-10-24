@@ -150,16 +150,17 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   }, [menuAnchor]);
 
   // Local state for optimistic updates and immediate persistence
-  const [localInquiries, setLocalInquiries] = useState<Inquiry[]>(inquiries);
+  const [localInquiries, setLocalInquiries] = useState<Inquiry[]>(Array.isArray(inquiries) ? inquiries : []);
 
   useEffect(() => {
-    setLocalInquiries(inquiries);
+    setLocalInquiries(Array.isArray(inquiries) ? inquiries : []);
   }, [inquiries]);
 
   // In Staff Mode, staff members can ONLY view inquiries explicitly assigned to them by the administrator
   // Prioritize incoming inquiries prop so remote realtime status updates render immediately without lag
   const baseInquiries = useMemo(() => {
-    const activeList = inquiries && inquiries.length > 0 ? inquiries : localInquiries;
+    const rawList = Array.isArray(inquiries) && inquiries.length > 0 ? inquiries : (Array.isArray(localInquiries) ? localInquiries : []);
+    const activeList = Array.isArray(rawList) ? rawList : [];
     if (!isStaffMode) return activeList;
     const targetId = String(currentStaffId || '').trim().toLowerCase();
     const targetName = String(currentStaffName || '').trim().toLowerCase();
@@ -168,6 +169,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     if (!targetId && !targetName) return activeList;
 
     return activeList.filter((inq) => {
+      if (!inq) return false;
       // 1. Strict & normalized ID matching (handles assigned_staff_id and assignedStaffId)
       const rawStaffId = (inq as any).assigned_staff_id || inq.assignedStaffId || '';
       const inqStaffId = String(rawStaffId).trim().toLowerCase();
@@ -192,17 +194,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   // Status options: Admin has 7 (New, Contacted, Cancelled, Postponed, Confirmed, Trip, Closed), Staff has 7
   const statusOptions = isAdmin ? ADMIN_CRM_STATUS_LIST : STAFF_CRM_STATUS_LIST;
 
-  // Summary Metrics calculation matching workflow
-  const totalCount = baseInquiries.length;
-  const newCount = baseInquiries.filter((i) => !i.status || i.status === 'NEW').length;
-  const contactedCount = baseInquiries.filter((i) => i.status === 'CONTACTED').length;
-  const confirmedCount = baseInquiries.filter((i) => i.status === 'CONFIRMED').length;
-  const tripCount = baseInquiries.filter((i) => i.status === 'TRIP' || i.status === 'Trip').length;
-  const cancelledCount = baseInquiries.filter((i) => i.status === 'CANCELLED' || i.status === 'Cancelled').length;
-  const postponedCount = baseInquiries.filter((i) => i.status === 'POSTPONED' || i.status === 'Postponed').length;
-  const closedCount = baseInquiries.filter((i) => i.status === 'CLOSED').length;
-  const unassignedCount = baseInquiries.filter((i) => {
-    const raw = (i as any).assigned_staff_id || i.assignedStaffId;
+  // Summary Metrics calculation matching workflow with defensive array fallbacks
+  const safeBaseList = Array.isArray(baseInquiries) ? baseInquiries : [];
+  const totalCount = safeBaseList.length;
+  const newCount = safeBaseList.filter((i) => !i?.status || i?.status === 'NEW').length;
+  const contactedCount = safeBaseList.filter((i) => i?.status === 'CONTACTED').length;
+  const confirmedCount = safeBaseList.filter((i) => i?.status === 'CONFIRMED').length;
+  const tripCount = safeBaseList.filter((i) => i?.status === 'TRIP' || i?.status === 'Trip').length;
+  const cancelledCount = safeBaseList.filter((i) => i?.status === 'CANCELLED' || i?.status === 'Cancelled').length;
+  const postponedCount = safeBaseList.filter((i) => i?.status === 'POSTPONED' || i?.status === 'Postponed').length;
+  const closedCount = safeBaseList.filter((i) => i?.status === 'CLOSED').length;
+  const unassignedCount = safeBaseList.filter((i) => {
+    const raw = (i as any)?.assigned_staff_id || i?.assignedStaffId;
     return !raw || raw === '--Unassigned--';
   }).length;
 
@@ -253,11 +256,12 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   // Compute chronological sequential IDs (oldest -> TTT00000001, TTT00000002, ...)
   // Consistent across filtering and search queries
   const leadSeqIdMap = useMemo(() => {
-    return computeSequentialLeadIdMap(baseInquiries);
-  }, [baseInquiries]);
+    return computeSequentialLeadIdMap(safeBaseList);
+  }, [safeBaseList]);
 
-  // Filter inquiries
-  const filteredInquiries = baseInquiries.filter((inq) => {
+  // Filter inquiries with array safety
+  const filteredInquiries = safeBaseList.filter((inq) => {
+    if (!inq) return false;
     // Status Filter
     if (statusFilter !== 'ALL') {
       const isTripFilter = statusFilter === 'TRIP' || statusFilter === 'Trip';
@@ -678,8 +682,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           >
             All Leads ({totalCount})
           </button>
-          {statusOptions.map((st) => {
-            const count = baseInquiries.filter((i) => {
+          {(statusOptions || []).map((st) => {
+            const count = safeBaseList.filter((i) => {
+              if (!i) return false;
               if (st === 'TRIP') return i.status === 'TRIP' || i.status === 'Trip';
               if (st === 'CANCELLED') return i.status === 'CANCELLED' || i.status === 'Cancelled';
               if (st === 'POSTPONED') return i.status === 'POSTPONED' || i.status === 'Postponed';
@@ -743,24 +748,24 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     Loading CRM database records...
                   </td>
                 </tr>
-              ) : filteredInquiries.length === 0 ? (
+              ) : (filteredInquiries || []).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-16 text-center text-slate-400 space-y-2">
                     <MessageSquare className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
                     <p className="font-bold text-slate-700 dark:text-slate-300">
-                      {isStaffMode && baseInquiries.length === 0
+                      {isStaffMode && safeBaseList.length === 0
                         ? 'No leads currently assigned to your desk'
                         : 'No leads match your search criteria'}
                     </p>
                     <p className="text-[11px] text-slate-400">
-                      {isStaffMode && baseInquiries.length === 0
+                      {isStaffMode && safeBaseList.length === 0
                         ? 'When an administrator assigns inquiries to your desk, they will appear here in real-time.'
                         : 'Try clearing filters or search terms.'}
                     </p>
                   </td>
                 </tr>
               ) : (
-                filteredInquiries.map((inq, index) => {
+                (filteredInquiries || []).map((inq, index) => {
                   const lead = inq as any;
                   const currentAssignedId = lead.assigned_staff_id || lead.assignedStaffId || inq.assignedStaffId || '--Unassigned--';
                   // Priority: Look up explicit lead_id or leadId, then globally sequenced ID (TTT00000001, etc.), fallback to sequential position index

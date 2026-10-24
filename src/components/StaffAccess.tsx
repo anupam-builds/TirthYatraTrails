@@ -362,10 +362,10 @@ export const StaffAccess: React.FC = () => {
 
   // Dynamically keep staff metrics responsive to lead & activity log changes
   useEffect(() => {
-    if (staffList.length === 0) return;
+    if (!staffList || staffList.length === 0) return;
     setStaffList((prev) =>
-      prev.map((s) => {
-        const m = computeStaffLeadMetrics(s, inquiriesList, activityLogs);
+      (prev || []).map((s) => {
+        const m = computeStaffLeadMetrics(s, inquiriesList || [], activityLogs || []);
         if (
           s.assignedLeadsCount === m.assignedLeadsCount &&
           s.contactedCount === m.contactedCount &&
@@ -386,16 +386,16 @@ export const StaffAccess: React.FC = () => {
     setLoading(true);
     try {
       const [members, sessions, logs, inqs] = await Promise.all([
-        api.getStaffMembers(),
+        api.getStaffMembers().catch(() => []),
         api.getStaffSessions().catch(() => null),
         api.getStaffLogs().catch(() => []),
         api.getInquiries().catch(() => []),
       ]);
-      setInquiriesList(inqs);
-      setActivityLogs(logs);
+      setInquiriesList(inqs || []);
+      setActivityLogs(logs || []);
       if (sessions) setSessionMonitor(sessions);
-      const computed = members.map((m) => {
-        const metrics = computeStaffLeadMetrics(m, inqs, logs);
+      const computed = (members || []).map((m) => {
+        const metrics = computeStaffLeadMetrics(m, inqs || [], logs || []);
         return {
           ...m,
           ...metrics,
@@ -656,7 +656,11 @@ export const StaffAccess: React.FC = () => {
     }
   };
 
-  const filteredStaff = staffList.filter((s) => {
+  const safeStaffList = Array.isArray(staffList) ? staffList : [];
+  const safeLogsList = Array.isArray(activityLogs) ? activityLogs : [];
+
+  const filteredStaff = safeStaffList.filter((s) => {
+    if (!s) return false;
     if (filterRole === 'ACTIVE' && (s.isBlocked || !s.isActive)) return false;
     if (filterRole === 'BLOCKED' && !s.isBlocked) return false;
     if (searchQuery.trim()) {
@@ -669,25 +673,26 @@ export const StaffAccess: React.FC = () => {
     return true;
   });
 
-  const totalActive = staffList.filter((s) => s.isActive && !s.isBlocked).length;
-  const totalBlocked = staffList.filter((s) => s.isBlocked).length;
-  const currentlyOnline = staffList.filter((s) => (s.isCurrentlyLoggedIn || s.isOnline) && !s.isBlocked).length;
-  const totalLeadsHandled = staffList.reduce((acc, s) => {
-    const m = computeStaffLeadMetrics(s, inquiriesList, activityLogs);
-    return acc + (m.contactedCount || s.contactedCount || 0) + (m.closedCount || s.closedCount || 0);
+  const totalActive = safeStaffList.filter((s) => s?.isActive && !s?.isBlocked).length;
+  const totalBlocked = safeStaffList.filter((s) => s?.isBlocked).length;
+  const currentlyOnline = safeStaffList.filter((s) => (s?.isCurrentlyLoggedIn || s?.isOnline) && !s?.isBlocked).length;
+  const totalLeadsHandled = safeStaffList.reduce((acc, s) => {
+    const m = computeStaffLeadMetrics(s, inquiriesList || [], safeLogsList);
+    return acc + (m.contactedCount || s?.contactedCount || 0) + (m.closedCount || s?.closedCount || 0);
   }, 0);
 
-  const filteredLogs = activityLogs.filter((log) => {
+  const filteredLogs = safeLogsList.filter((log) => {
+    if (!log) return false;
     if (selectedStaffLogFilter !== 'ALL' && log.staffId !== selectedStaffLogFilter) {
       return false;
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       return (
-        log.staffName.toLowerCase().includes(q) ||
-        log.staffEmail.toLowerCase().includes(q) ||
-        log.description.toLowerCase().includes(q) ||
-        log.action.toLowerCase().includes(q)
+        (log.staffName || '').toLowerCase().includes(q) ||
+        (log.staffEmail || '').toLowerCase().includes(q) ||
+        (log.description || '').toLowerCase().includes(q) ||
+        (log.action || '').toLowerCase().includes(q)
       );
     }
     return true;
@@ -954,7 +959,7 @@ export const StaffAccess: React.FC = () => {
               <RefreshCw className="w-8 h-8 text-orange-500 animate-spin mx-auto mb-3" />
               <p className="text-xs text-slate-500">Loading staff directory and permission matrices...</p>
             </div>
-          ) : filteredStaff.length === 0 ? (
+          ) : (filteredStaff || []).length === 0 ? (
             <div className="p-12 text-center bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 rounded-3xl">
               <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
               <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
@@ -1395,8 +1400,8 @@ export const StaffAccess: React.FC = () => {
                   onChange={(e) => setSelectedStaffLogFilter(e.target.value)}
                   className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
-                  <option value="ALL">All Staff Members ({activityLogs.length})</option>
-                  {staffList.map((s) => (
+                  <option value="ALL">All Staff Members ({(activityLogs || []).length})</option>
+                  {(staffList || []).map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name || s.email}
                     </option>
@@ -1405,7 +1410,7 @@ export const StaffAccess: React.FC = () => {
               </div>
             </div>
 
-            {filteredLogs.length === 0 ? (
+            {(filteredLogs || []).length === 0 ? (
               <div className="p-8 text-center bg-slate-50 dark:bg-[#081220] rounded-2xl border border-slate-200 dark:border-slate-800">
                 <Activity className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                 <p className="text-xs font-bold text-slate-600 dark:text-slate-400">

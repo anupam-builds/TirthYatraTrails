@@ -124,7 +124,9 @@ export const StaffPortalPage: React.FC = () => {
   // Staff members can view inquiries assigned explicitly OR matching name/ID fallback (case-insensitive trim check)
   const staffAssignedInquiries = useMemo(() => {
     if (!staffUser) return [];
-    const baseList = inquiries.filter((inq) => {
+    const inqList = Array.isArray(inquiries) ? inquiries : [];
+    const baseList = inqList.filter((inq) => {
+      if (!inq) return false;
       const matchId = Boolean(inq.assignedStaffId && inq.assignedStaffId === staffUser.id);
       const matchName = Boolean(
         inq.assignedStaffName &&
@@ -135,10 +137,12 @@ export const StaffPortalPage: React.FC = () => {
       return matchId || matchName;
     });
 
-    if (!staffLeads.length) return baseList;
+    const leadsList = Array.isArray(staffLeads) ? staffLeads : [];
+    if (!leadsList.length) return baseList;
 
     const combined = [...baseList];
-    for (const rawLead of staffLeads) {
+    for (const rawLead of leadsList) {
+      if (!rawLead) continue;
       const mapped = mapInquiryRow(rawLead);
       const idx = combined.findIndex((i) => i.id === mapped.id || (rawLead.id && i.id === String(rawLead.id)));
       if (idx >= 0) {
@@ -189,13 +193,21 @@ export const StaffPortalPage: React.FC = () => {
     },
   ];
 
-  // Real-time session monitoring heartbeat
+  // Real-time session monitoring heartbeat with failure backoff
   useEffect(() => {
     if (!isStaffAuthenticated || !staffUser) return;
 
+    let consecutiveFailures = 0;
     const checkInterval = setInterval(async () => {
+      // If excessive transient errors occurred, slow down/skip to avoid spamming
+      if (consecutiveFailures > 5 && consecutiveFailures % 2 !== 0) {
+        consecutiveFailures++;
+        return;
+      }
+
       try {
         const check = await api.checkStaffSession();
+        consecutiveFailures = 0;
         if (!check?.ok || check.staff?.isBlocked || !check.staff?.isActive) {
           const reason = check?.staff?.blockedReason || 'Access revoked by Administrator';
           setBlockedAlertMessage(`Your staff access has been revoked: "${reason}". Session terminated.`);
@@ -217,9 +229,11 @@ export const StaffPortalPage: React.FC = () => {
             logoutStaff();
             navigate('/staff/login');
           }, 3500);
+          return;
         }
+        consecutiveFailures++;
       }
-    }, 12000);
+    }, 15000);
 
     return () => clearInterval(checkInterval);
   }, [isStaffAuthenticated, staffUser, logoutStaff, navigate]);
@@ -631,10 +645,10 @@ export const StaffPortalPage: React.FC = () => {
     return <StaffLoginPage />;
   }
 
-  // Calculate metrics
-  const myAssignedCount = staffAssignedInquiries.length;
-  const myContactedCount = staffAssignedInquiries.filter((i) => i.status === 'CONTACTED').length;
-  const myClosedCount = staffAssignedInquiries.filter((i) => i.status === 'CLOSED').length;
+  // Calculate metrics with defensive array fallback
+  const myAssignedCount = (staffAssignedInquiries || []).length;
+  const myContactedCount = (staffAssignedInquiries || []).filter((i) => i?.status === 'CONTACTED').length;
+  const myClosedCount = (staffAssignedInquiries || []).filter((i) => i?.status === 'CLOSED').length;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#071322] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-150">
@@ -760,7 +774,7 @@ export const StaffPortalPage: React.FC = () => {
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                {staffAssignedInquiries.length}
+                {(staffAssignedInquiries || []).length}
               </span>
             </button>
 

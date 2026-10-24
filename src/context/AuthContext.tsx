@@ -29,6 +29,7 @@ interface AuthContextType {
   staffUser: StaffMember | null;
   isStaffLoading: boolean;
   isStaffAuthenticated: boolean;
+  setStaffSession: (staffRecord: StaffMember) => void;
   loginStaff: (email: string, pass: string) => Promise<void>;
   logoutStaff: () => void;
 }
@@ -526,6 +527,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [setAdminSession]);
 
+  // Direct Staff Session Setter for immediate authentication & transition
+  const setStaffSession = useCallback((staffRecord: StaffMember) => {
+    const sessionToken = btoa(JSON.stringify(staffRecord));
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('tyt_staff_token', sessionToken);
+      localStorage.removeItem('tyt_staff_token');
+    }
+    setStaffUser(staffRecord);
+    setIsStaffLoading(false);
+  }, []);
+
   // Staff Login
   const loginStaff = async (email: string, pass: string) => {
     const res = await api.loginStaff(email, pass);
@@ -582,6 +594,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         staffUser,
         isStaffLoading,
         isStaffAuthenticated: !!staffUser && (staffUser.role === 'STAFF' || (staffUser as any).role === 'ADMIN'),
+        setStaffSession,
         loginStaff,
         logoutStaff,
       }}

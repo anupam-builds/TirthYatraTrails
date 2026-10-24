@@ -15,9 +15,10 @@ import {
   AlertCircle,
   ExternalLink,
 } from 'lucide-react';
+import { StaffMember } from '../../types.js';
 
 export const StaffLoginPage: React.FC = () => {
-  const { loginStaff } = useAuth();
+  const { loginStaff, setStaffSession } = useAuth();
   const { navigate } = useRouter();
   const lampRef = useRef<CuteLampRef>(null);
 
@@ -134,22 +135,62 @@ export const StaffLoginPage: React.FC = () => {
         return;
       }
 
-      // Update staff session activity / presence for live tracking
-      try {
-        await supabase.from('staff_sessions').upsert({
-          staff_id: verifiedStaff.id,
-          email: authUserEmail,
-          ip_address: '122.161.48.12',
-          device: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
-          last_active: new Date().toISOString(),
-        }, { onConflict: 'staff_id' });
-      } catch (sessErr: any) {
-        console.warn('[StaffLogin] staff_sessions upsert note:', sessErr?.message);
+      // 3. Immediately establish authenticated staff session and navigate to Staff Desk without blocking
+      const mappedStaff: StaffMember & { access_token?: string } = {
+        id: verifiedStaff.id,
+        name: verifiedStaff.name || authUserEmail.split('@')[0],
+        email: authUserEmail,
+        phone: verifiedStaff.phone || '',
+        designation: verifiedStaff.designation || 'Staff Specialist',
+        role: 'STAFF',
+        isBlocked: false,
+        isActive: true,
+        isOnline: true,
+        isCurrentlyLoggedIn: true,
+        permissions: (verifiedStaff as any).permissions || {
+          canViewInquiries: true,
+          canUpdateStatus: true,
+          canAddNotes: true,
+        },
+        createdAt: verifiedStaff.created_at || (verifiedStaff as any).createdAt || new Date().toISOString(),
+        access_token: data?.session?.access_token,
+      };
+
+      if (setStaffSession) {
+        setStaffSession(mappedStaff);
+      } else {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(mappedStaff)));
+          localStorage.removeItem('tyt_staff_token');
+        }
       }
 
-      // 3. Establish active staff session in AuthContext
-      await loginStaff(cleanEmail, cleanPassword);
+      // Instant transition to Staff Desk
       navigate('/staff');
+
+      // Non-blocking background session persistence (safe delete-then-insert, NO onConflict)
+      const staffId = verifiedStaff.id;
+      (async () => {
+        try {
+          if (staffId) {
+            await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
+            const { error: sessionErr } = await supabase.from('staff_sessions').insert([
+              {
+                staff_id: staffId,
+                last_active: new Date().toISOString(),
+              },
+            ]);
+            if (sessionErr) console.warn('[Session Track Warning]:', sessionErr.message);
+          }
+        } catch (e) {
+          console.warn('[Session Track Ignored]:', e);
+        }
+      })();
+
+      // Background authentication sync
+      loginStaff(cleanEmail, cleanPassword).catch((e) => {
+        console.warn('[StaffLogin] background sync note:', e?.message);
+      });
     } catch (err: any) {
       setErrorMessage(err.message || 'Staff login failed. Please verify your credentials.');
     } finally {

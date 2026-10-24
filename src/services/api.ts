@@ -1471,14 +1471,22 @@ export const api = {
         }
       }
       
-      // Update session activity for live multi-admin tracking
-      await supabase.from('staff_sessions').upsert({
-        staff_id: data.id,
-        email: cleanEmail,
-        ip_address: '122.161.48.12',
-        device: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
-        last_active: new Date().toISOString(),
-      }, { onConflict: 'staff_id' });
+      // Update session activity for live tracking (safe non-blocking delete-then-insert)
+      const staffId = data?.id;
+      try {
+        if (staffId) {
+          await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
+          const { error: sessionErr } = await supabase.from('staff_sessions').insert([
+            {
+              staff_id: staffId,
+              last_active: new Date().toISOString(),
+            },
+          ]);
+          if (sessionErr) console.warn('[Session Track Warning]:', sessionErr.message);
+        }
+      } catch (e) {
+        console.warn('[Session Track Ignored]:', e);
+      }
 
       // Also establish Supabase Auth session in sessionStorage
       let supabaseAccessToken: string | undefined;
@@ -3122,15 +3130,15 @@ export const api = {
   async getStaffSessions() {
     try {
       const { data, error } = await supabase.from('staff_sessions').select('*');
-      if (error || !data || data.length === 0) return localStore.getStaffSessionMonitor();
-      const sessions = data.map((row: any) => ({
+      if (error || !data || !Array.isArray(data) || data.length === 0) return localStore.getStaffSessionMonitor();
+      const sessions = (data || []).map((row: any) => ({
         staffId: row.staff_id,
         ip: row.ip_address,
         device: row.device,
         lastActive: row.last_active,
         isOnline: new Date().getTime() - new Date(row.last_active).getTime() < 15 * 60 * 1000,
       }));
-      return { activeCount: sessions.filter((s: any) => s.isOnline).length, sessions };
+      return { activeCount: (sessions || []).filter((s: any) => s.isOnline).length, sessions: sessions || [] };
     } catch {
       return localStore.getStaffSessionMonitor();
     }

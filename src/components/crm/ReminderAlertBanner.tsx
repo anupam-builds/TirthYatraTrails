@@ -31,8 +31,9 @@ export const ReminderAlertBanner: React.FC<ReminderAlertBannerProps> = ({
     const checkReminders = () => {
       const now = Date.now();
       const dueList: Inquiry[] = [];
+      const safeInquiries = Array.isArray(inquiries) ? inquiries : [];
 
-      for (const inq of inquiries) {
+      for (const inq of safeInquiries) {
         if (!inq || inq.isDeleted || inq.status === 'CLOSED') continue;
 
         // In staff mode, only alert for inquiries assigned to this staff member
@@ -69,10 +70,10 @@ export const ReminderAlertBanner: React.FC<ReminderAlertBannerProps> = ({
       }
 
       // Filter out dismissed leads
-      const unDismissed = dueList.filter((i) => !dismissedLeadIds.has(String(i.id)));
+      const unDismissed = (dueList || []).filter((i) => !dismissedLeadIds.has(String(i.id)));
       setActiveDueLeads(unDismissed);
 
-      if (currentLeadIndex >= unDismissed.length && unDismissed.length > 0) {
+      if (currentLeadIndex >= (unDismissed || []).length && (unDismissed || []).length > 0) {
         setCurrentLeadIndex(0);
       }
     };
@@ -82,9 +83,9 @@ export const ReminderAlertBanner: React.FC<ReminderAlertBannerProps> = ({
     return () => clearInterval(interval);
   }, [inquiries, dismissedLeadIds, isStaffMode, currentStaffId, currentLeadIndex]);
 
-  if (activeDueLeads.length === 0) return null;
+  if (!activeDueLeads || !Array.isArray(activeDueLeads) || activeDueLeads.length === 0) return null;
 
-  const currentLead = activeDueLeads[currentLeadIndex] || activeDueLeads[0];
+  const currentLead = (activeDueLeads || [])[currentLeadIndex] || (activeDueLeads || [])[0];
   if (!currentLead) return null;
 
   const leadDisplayId =
@@ -223,10 +224,10 @@ export const ReminderAlertBanner: React.FC<ReminderAlertBannerProps> = ({
             </button>
 
             {/* Next Reminder (if multiple) */}
-            {activeDueLeads.length > 1 && (
+            {(activeDueLeads || []).length > 1 && (
               <button
                 type="button"
-                onClick={() => setCurrentLeadIndex((prev) => (prev + 1) % activeDueLeads.length)}
+                onClick={() => setCurrentLeadIndex((prev) => (prev + 1) % ((activeDueLeads || []).length || 1))}
                 className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                 title="Next reminder"
               >
