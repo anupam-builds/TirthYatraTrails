@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase.js';
+import { supabase, safeRemoveChannel } from '../lib/supabase.js';
 
 export function useStaffLeadsRealtime(currentStaffId?: string) {
   const [leads, setLeads] = useState<any[]>([]);
@@ -53,7 +53,7 @@ export function useStaffLeadsRealtime(currentStaffId?: string) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      safeRemoveChannel(channel);
     };
   }, [currentStaffId]);
 

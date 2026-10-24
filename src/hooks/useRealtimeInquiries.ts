@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, safeRemoveChannel } from '../lib/supabase';
 import { Inquiry } from '../types';
 import { api, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields } from '../services/api';
 
@@ -315,8 +315,8 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
         window.removeEventListener('tirth-lead-changed', handleLocalLeadChange);
         window.removeEventListener('tirth-inquiry-changed', handleLocalLeadChange);
       }
-      supabase.removeChannel(leadsChannel);
-      supabase.removeChannel(presenceChannel);
+      safeRemoveChannel(leadsChannel);
+      safeRemoveChannel(presenceChannel);
     };
   }, [handleLeadChange, handleProfileChange, options.channelName]);
 

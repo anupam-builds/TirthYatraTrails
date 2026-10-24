@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { supabase } from '../lib/supabase.js';
+import { supabase, safeRemoveChannel } from '../lib/supabase.js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { matchLeadId, mergeUpdatedLeadFields } from '../services/api.js';
 
@@ -182,7 +182,7 @@ function registerChannelListener(
     currentReg.refCount--;
 
     if (currentReg.refCount <= 0) {
-      supabase.removeChannel(currentReg.channel);
+      safeRemoveChannel(currentReg.channel);
       activeChannels.delete(channelName);
     }
   };
@@ -640,7 +640,7 @@ export function useIsolatedLeadsRealtime<T extends Record<string, any> = any>(
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      safeRemoveChannel(channel);
     };
   }, [options?.channelName]);
 
@@ -683,7 +683,7 @@ export function useStaffPresenceRealtime(onProfileUpdate?: (profile: any) => voi
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      safeRemoveChannel(channel);
     };
   }, []);
 }

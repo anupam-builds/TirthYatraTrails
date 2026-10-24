@@ -889,6 +889,111 @@ export const supabase: SupabaseClient = createClient(
   }
 );
 
+/**
+ * Safely tears down a Supabase Realtime channel without triggering premature WebSocket closure warnings.
+ * Checks whether the channel or underlying WebSocket is still in the 'joining' or 'connecting' phase,
+ * and defers teardown until the connection is established.
+ */
+export function safeRemoveChannel(channel: any): Promise<string> {
+  if (!channel) return Promise.resolve('ok');
+  try {
+    if (channel.state === 'closed') {
+      return Promise.resolve('ok');
+    }
+
+    const socket = (channel as any).socket;
+    const isSocketConnecting =
+      socket?.conn?.readyState === 0 || // WebSocket.CONNECTING
+      (typeof socket?.connectionState === 'function' && socket.connectionState() === 'connecting') ||
+      channel.state === 'joining';
+
+    if (isSocketConnecting) {
+      return new Promise<string>((resolve) => {
+        let hasResolved = false;
+        const doTeardown = () => {
+          if (hasResolved) return;
+          hasResolved = true;
+          try {
+            if (channel.state !== 'closed' && channel.state !== 'leaving') {
+              supabase.removeChannel(channel).then(resolve).catch(() => resolve('ok'));
+            } else {
+              resolve('ok');
+            }
+          } catch {
+            resolve('ok');
+          }
+        };
+
+        const timer = setTimeout(doTeardown, 350);
+
+        if (socket?.conn && typeof socket.conn.addEventListener === 'function') {
+          try {
+            socket.conn.addEventListener('open', () => {
+              clearTimeout(timer);
+              setTimeout(doTeardown, 50);
+            }, { once: true });
+          } catch {}
+        }
+      });
+    }
+
+    return supabase.removeChannel(channel).catch(() => 'ok');
+  } catch {
+    return Promise.resolve('ok');
+  }
+}
+
+// Safely intercept supabase.removeChannel to prevent premature WebSocket closure warnings across all hooks
+const _originalRemoveChannel = supabase.removeChannel.bind(supabase);
+(supabase as any).removeChannel = (channel: any): Promise<string> => {
+  if (!channel) return Promise.resolve('ok');
+  try {
+    if (channel.state === 'closed') {
+      return Promise.resolve('ok');
+    }
+
+    const socket = (channel as any).socket;
+    const isSocketConnecting =
+      socket?.conn?.readyState === 0 || // WebSocket.CONNECTING
+      (typeof socket?.connectionState === 'function' && socket.connectionState() === 'connecting') ||
+      channel.state === 'joining';
+
+    if (isSocketConnecting) {
+      return new Promise<string>((resolve) => {
+        let hasResolved = false;
+        const doTeardown = () => {
+          if (hasResolved) return;
+          hasResolved = true;
+          try {
+            if (channel.state !== 'closed' && channel.state !== 'leaving') {
+              _originalRemoveChannel(channel).then(resolve).catch(() => resolve('ok'));
+            } else {
+              resolve('ok');
+            }
+          } catch {
+            resolve('ok');
+          }
+        };
+
+        const timer = setTimeout(doTeardown, 350);
+
+        if (socket?.conn && typeof socket.conn.addEventListener === 'function') {
+          try {
+            socket.conn.addEventListener('open', () => {
+              clearTimeout(timer);
+              setTimeout(doTeardown, 50);
+            }, { once: true });
+          } catch {}
+        }
+      });
+    }
+
+    return _originalRemoveChannel(channel);
+  } catch {
+    return _originalRemoveChannel(channel);
+  }
+};
+
 export const SUPABASE_SERVICE_ROLE_KEY: string = (
   (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || (import.meta.env as any).SUPABASE_SERVICE_ROLE_KEY)) ||
   (typeof process !== 'undefined' && process.env && (process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)) ||

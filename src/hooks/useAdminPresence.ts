@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../lib/supabase.js';
+import { supabase, safeRemoveChannel } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -173,7 +173,7 @@ export function useAdminPresence() {
         subscribersCount = 0;
         if (sharedChannel) {
           sharedChannel.untrack().catch(() => {});
-          supabase.removeChannel(sharedChannel);
+          safeRemoveChannel(sharedChannel);
           sharedChannel = null;
           currentPresences = [];
           currentEmails = new Set();

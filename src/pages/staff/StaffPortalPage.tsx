@@ -3,7 +3,7 @@ import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
-import { supabase } from '../../lib/supabase.js';
+import { supabase, safeRemoveChannel } from '../../lib/supabase.js';
 import { api, generateWhatsAppLink, updateLeadOrInquiryStatus, cleanUnassignedValue, mapInquiryRow } from '../../services/api.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
@@ -417,7 +417,7 @@ export const StaffPortalPage: React.FC = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      safeRemoveChannel(channel);
     };
   }, [currentStaffId]);
 
