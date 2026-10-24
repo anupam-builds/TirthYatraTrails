@@ -296,32 +296,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         password: cleanPass,
       });
 
-      if (error) {
-        const isEmailNotConfirmed =
-          error.message?.toLowerCase().includes('email not confirmed') ||
-          (error as any).code === 'email_not_confirmed' ||
-          error.message?.toLowerCase().includes('confirm');
 
-        if (isEmailNotConfirmed) {
-          try {
-            const confirmRes = await fetch('/api/auth/confirm-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
-            });
-            if (confirmRes.ok) {
-              const retry = await supabase.auth.signInWithPassword({
-                email: cleanEmail,
-                password: cleanPass,
-              });
-              if (!retry.error) {
-                data = retry.data;
-                error = null;
-              }
-            }
-          } catch {}
-        }
-      }
 
       if (error) {
         authError = error;

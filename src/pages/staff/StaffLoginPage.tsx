@@ -71,33 +71,7 @@ export const StaffLoginPage: React.FC = () => {
         password: cleanPassword,
       });
 
-      // Handle "Email not confirmed" by auto-confirming via backend Admin API or prompting admin instructions
-      if (error) {
-        const isEmailNotConfirmed =
-          error.message?.toLowerCase().includes('email not confirmed') ||
-          (error as any).code === 'email_not_confirmed' ||
-          error.message?.toLowerCase().includes('confirm');
 
-        if (isEmailNotConfirmed) {
-          try {
-            const confirmRes = await fetch('/api/auth/confirm-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
-            });
-            if (confirmRes.ok) {
-              const retry = await supabase.auth.signInWithPassword({
-                email: cleanEmail,
-                password: cleanPassword,
-              });
-              if (!retry.error) {
-                data = retry.data;
-                error = null;
-              }
-            }
-          } catch {}
-        }
-      }
 
       if (error) {
         const isEmailNotConfirmed =

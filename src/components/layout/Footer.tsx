@@ -54,16 +54,7 @@ export const CustomerFooter: React.FC = () => {
           }
         }
 
-        // Secondary fallback to Express backend /api/agency-settings if Supabase returns nothing or errors
-        if (!resolved) {
-          try {
-            const res = await fetch('/api/agency-settings');
-            if (res.ok) {
-              const json = await res.json();
-              resolved = (json.whatsapp_helpline || json.phone || json.contact_phone || '').trim();
-            }
-          } catch {}
-        }
+
 
         if (resolved && isMounted) {
           setHelplinePhone(resolved);

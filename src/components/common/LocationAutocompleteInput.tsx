@@ -208,45 +208,7 @@ export const LocationAutocompleteInput: React.FC<LocationAutocompleteInputProps>
           // If browser CORS or rate-limit intercepted Nominatim, fall through to proxy/photon
         }
 
-        // Fallback 1: Backend proxy endpoint /api/geo/autocomplete?q=...
-        if (foundSuggestions.length === 0) {
-          try {
-            const proxyRes = await fetch(`/api/geo/autocomplete?q=${encodeURIComponent(query)}`, {
-              signal: abortController.signal,
-            });
-            if (proxyRes.ok) {
-              const resJson = await proxyRes.json();
-              if (resJson.type === 'pincode' && Array.isArray(resJson.data) && resJson.data[0]?.PostOffice) {
-                foundSuggestions = resJson.data[0].PostOffice.slice(0, 8).map((po: any, idx: number) => ({
-                  id: `proxy-po-${idx}`,
-                  title: `${po.Name} (PIN ${po.Pincode || query})`,
-                  subtitle: `${po.District ? `${po.District}, ` : ''}${po.State} - ${po.Pincode}`,
-                  fullAddress: `${po.Name}, ${po.District ? `${po.District}, ` : ''}${po.State} - ${po.Pincode}`,
-                  postcode: po.Pincode,
-                  type: 'postal',
-                }));
-              } else if (resJson.type === 'nominatim' && Array.isArray(resJson.data)) {
-                foundSuggestions = resJson.data.slice(0, 8).map((item: any) => {
-                  const addr = item.address || {};
-                  const primary = item.name || addr.railway || addr.aeroway || addr.tourism || item.display_name.split(',')[0].trim();
-                  const city = addr.city || addr.town || addr.state_district || '';
-                  const state = addr.state || '';
-                  const postcode = addr.postcode ? String(addr.postcode).trim() : '';
-                  const subtitle = `${city ? `${city}, ` : ''}${state}${postcode ? ` - ${postcode}` : ''}`;
-                  const fullAddress = `${primary}${city ? `, ${city}` : ''}${state ? `, ${state}` : ''}${postcode ? ` - ${postcode}` : ''}`;
-                  return {
-                    id: `proxy-nom-${item.place_id || Math.random()}`,
-                    title: primary,
-                    subtitle,
-                    fullAddress,
-                    postcode,
-                    type: 'place',
-                  };
-                });
-              }
-            }
-          } catch {}
-        }
+
 
         // Fallback 2: Photon OSM Geocoding API with CORS support
         if (foundSuggestions.length === 0) {

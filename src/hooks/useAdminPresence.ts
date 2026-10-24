@@ -16,6 +16,8 @@ export interface AdminPresenceInfo {
 // Module-level shared singleton state across components
 let sharedChannel: RealtimeChannel | null = null;
 let subscribersCount = 0;
+let isSettingUpChannel = false;
+let setupPromise: Promise<void> | null = null;
 let currentPresences: AdminPresenceInfo[] = [];
 let currentEmails = new Set<string>();
 let currentIds = new Set<string>();
@@ -65,6 +67,96 @@ function processPresenceState(channel: RealtimeChannel, fallbackAdmin?: { id?: s
   }
 }
 
+async function ensureOnlineAdminsChannel(currentUser?: { id?: string; email?: string; name?: string; role?: string } | null) {
+  // If channel is already joined or joining, reuse without re-subscribing or attaching duplicate listeners
+  if (sharedChannel && (sharedChannel.state === 'joined' || sharedChannel.state === 'joining')) {
+    if (currentUser && sharedChannel.state === 'joined') {
+      sharedChannel.track({
+        id: currentUser.id,
+        user_id: currentUser.id,
+        email: currentUser.email?.toLowerCase().trim(),
+        name: currentUser.name || currentUser.email?.split('@')[0],
+        role: currentUser.role,
+        online_at: new Date().toISOString(),
+      }).catch(() => {});
+    }
+    processPresenceState(sharedChannel, currentUser);
+    return;
+  }
+
+  if (isSettingUpChannel && setupPromise) {
+    return setupPromise;
+  }
+
+  isSettingUpChannel = true;
+  setupPromise = (async () => {
+    try {
+      const channelName = 'online-admins';
+
+      // 1. Check if an existing channel with that topic is already mounted in supabase.getChannels()
+      const existingChannels = supabase.getChannels().filter(
+        (c: any) => c.topic === `realtime:${channelName}` || c.subTopic === channelName || c.topic?.includes(channelName)
+      );
+
+      // Remove it first using await supabase.removeChannel(existingChannel)
+      for (const existingChannel of existingChannels) {
+        try {
+          await supabase.removeChannel(existingChannel);
+        } catch (e) {
+          console.warn('[useAdminPresence] Error removing existing channel:', e);
+        }
+      }
+
+      if (subscribersCount <= 0) {
+        return;
+      }
+
+      // 2. Create fresh channel instance
+      const adminChannel = supabase.channel(channelName);
+      sharedChannel = adminChannel;
+
+      // 3. Attach .on('presence', ...) listeners BEFORE subscribe
+      adminChannel
+        .on('presence', { event: 'sync' }, () => {
+          processPresenceState(adminChannel, currentUser);
+        })
+        .on('presence', { event: 'join' }, ({ newPresences }: any) => {
+          processPresenceState(adminChannel, currentUser);
+        })
+        .on('presence', { event: 'leave' }, ({ leftPresences }: any) => {
+          processPresenceState(adminChannel, currentUser);
+        });
+
+      // 4. Call subscribe LAST
+      adminChannel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          if (currentUser) {
+            const presenceData: AdminPresenceInfo = {
+              id: currentUser.id,
+              user_id: currentUser.id,
+              email: currentUser.email?.toLowerCase().trim(),
+              name: currentUser.name || currentUser.email?.split('@')[0],
+              role: currentUser.role,
+              online_at: new Date().toISOString(),
+            };
+            try {
+              await adminChannel.track(presenceData);
+              processPresenceState(adminChannel, currentUser);
+            } catch (err) {
+              console.warn('[useAdminPresence] Failed to track presence:', err);
+            }
+          }
+        }
+      });
+    } finally {
+      isSettingUpChannel = false;
+      setupPromise = null;
+    }
+  })();
+
+  return setupPromise;
+}
+
 export function useAdminPresence() {
   const { adminUser } = useAuth();
   const adminUserRef = useRef(adminUser);
@@ -89,78 +181,10 @@ export function useAdminPresence() {
     listeners.add(handleUpdate);
     subscribersCount++;
 
-    // Ensure we do not re-subscribe or add duplicate callbacks to an already active channel
-    if (!sharedChannel || sharedChannel.state === 'closed' || sharedChannel.state === 'leaving') {
-      const channelName = 'online-admins';
+    ensureOnlineAdminsChannel(adminUserRef.current).then(() => {
+      setIsConnected(sharedChannel?.state === 'joined');
+    });
 
-      // Check if any stale channel with this topic already exists in supabase client
-      const existing = supabase.getChannels().find(
-        (c: any) => c.topic === `realtime:${channelName}` || c.subTopic === channelName
-      );
-      if (existing) {
-        supabase.removeChannel(existing);
-      }
-
-      // Explicitly declare channel variable
-      const adminChannel = supabase.channel(channelName);
-
-      // Immediately register shared reference synchronously to block concurrent race conditions
-      sharedChannel = adminChannel;
-
-      // 1. Attach listeners FIRST
-      adminChannel
-        .on('presence', { event: 'sync' }, () => {
-          processPresenceState(adminChannel, adminUserRef.current);
-        })
-        .on('presence', { event: 'join' }, ({ newPresences }: any) => {
-          processPresenceState(adminChannel, adminUserRef.current);
-        })
-        .on('presence', { event: 'leave' }, ({ leftPresences }: any) => {
-          processPresenceState(adminChannel, adminUserRef.current);
-        });
-
-      // 2. Call subscribe LAST
-      adminChannel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          setIsConnected(true);
-          const currentUser = adminUserRef.current;
-          if (currentUser) {
-            const presenceData: AdminPresenceInfo = {
-              id: currentUser.id,
-              user_id: currentUser.id,
-              email: currentUser.email.toLowerCase().trim(),
-              name: currentUser.name || currentUser.email.split('@')[0],
-              role: currentUser.role,
-              online_at: new Date().toISOString(),
-            };
-            try {
-              await adminChannel.track(presenceData);
-              processPresenceState(adminChannel, currentUser);
-            } catch (err) {
-              console.warn('[useAdminPresence] Failed to track presence:', err);
-            }
-          }
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          setIsConnected(false);
-        }
-      });
-    } else {
-      // Channel already exists and is subscribed: do not call .on('presence') or .subscribe() again
-      setIsConnected(sharedChannel.state === 'joined');
-      if (adminUserRef.current && sharedChannel.state === 'joined') {
-        sharedChannel.track({
-          id: adminUserRef.current.id,
-          user_id: adminUserRef.current.id,
-          email: adminUserRef.current.email.toLowerCase().trim(),
-          name: adminUserRef.current.name || adminUserRef.current.email.split('@')[0],
-          role: adminUserRef.current.role,
-          online_at: new Date().toISOString(),
-        }).catch(() => {});
-      }
-      processPresenceState(sharedChannel, adminUserRef.current);
-    }
-
-    // Track on unload / pagehide
     const handleBeforeUnload = () => {
       if (sharedChannel) {
         sharedChannel.untrack().catch(() => {});
@@ -179,9 +203,10 @@ export function useAdminPresence() {
       if (subscribersCount <= 0) {
         subscribersCount = 0;
         if (sharedChannel) {
-          sharedChannel.untrack().catch(() => {});
-          supabase.removeChannel(sharedChannel);
+          const toRemove = sharedChannel;
           sharedChannel = null;
+          toRemove.untrack().catch(() => {});
+          supabase.removeChannel(toRemove).catch(() => {});
           currentPresences = [];
           currentEmails = new Set();
           currentIds = new Set();

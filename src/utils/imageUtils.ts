@@ -188,78 +188,7 @@ export async function uploadDirectToSupabaseStorage(
     }
   }
 
-  // 2. If direct upload blocked by RLS, use signed upload token flow
-  try {
-    const signedRes = await fetch(`/api/upload-signed-url?filename=${encodeURIComponent(cleanBase)}.${ext}&folder=${encodeURIComponent(folder)}`);
-    if (signedRes.ok) {
-      const signedInfo = await signedRes.json();
-      if (signedInfo.token && signedInfo.path) {
-        // Upload directly from browser to storage using the signed upload token
-        const targetBucket = signedInfo.bucket || 'pilgrimage-media';
-        const { error: signedUploadError } = await supabase.storage
-          .from(targetBucket)
-          .uploadToSignedUrl(signedInfo.path, signedInfo.token, fileOrBlob, {
-            contentType,
-          });
 
-        if (!signedUploadError && signedInfo.publicUrl) {
-          console.log('[Supabase Signed Upload] Uploaded successfully to:', signedInfo.publicUrl);
-          return signedInfo.publicUrl;
-        }
-
-        // If uploadToSignedUrl had issue, try direct PUT to signedUrl
-        if (signedInfo.signedUrl) {
-          const putRes = await fetch(signedInfo.signedUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': contentType },
-            body: fileOrBlob,
-          });
-          if (putRes.ok && signedInfo.publicUrl) {
-            console.log('[Supabase Signed PUT] Uploaded successfully to:', signedInfo.publicUrl);
-            return signedInfo.publicUrl;
-          }
-        }
-      }
-    }
-  } catch (signedErr: any) {
-    console.warn('[Supabase Storage Signed URL Fallback]:', signedErr?.message || signedErr);
-  }
-
-  // 3. Fallback to /api/upload
-  try {
-    let base64Payload: string;
-    if (typeof (fileOrBlob as any).arrayBuffer === 'function') {
-      const arrayBuffer = await (fileOrBlob as Blob).arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      base64Payload = `data:${contentType};base64,${btoa(binary)}`;
-    } else {
-      base64Payload = await fileToDataUrl(fileOrBlob as File);
-    }
-
-    const uploadApiRes = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fileData: base64Payload,
-        filename: `${cleanBase}.${ext}`,
-        folder,
-      }),
-    });
-
-    if (uploadApiRes.ok) {
-      const data = await uploadApiRes.json();
-      if (data.url) {
-        console.log('[Upload API] Uploaded successfully:', data.url);
-        return data.url;
-      }
-    }
-  } catch (apiErr: any) {
-    console.warn('[/api/upload Fallback Error]:', apiErr?.message || apiErr);
-  }
 
   // If all methods failed, log exact error and throw
   console.error('[Supabase Storage Direct Error] Direct upload to all buckets failed:', lastError);
