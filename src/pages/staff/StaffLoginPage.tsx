@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
+import { supabase } from '../../lib/supabase.js';
+import { localStore } from '../../services/localStore.js';
 import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
 import { BaseInput } from '../../components/FormField.js';
 import { motion, AnimatePresence } from 'motion/react';
@@ -25,14 +27,20 @@ export const StaffLoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Compatibility aliases
+  const error = errorMessage;
+  const setError = setErrorMessage;
+  const loading = isLoading;
+  const setLoading = setIsLoading;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get('reason') === 'session_expired' || searchParams.get('expired') === 'true') {
-        setError('Your staff session has expired or requires re-authentication. Please sign in again.');
+        setErrorMessage('Your staff session has expired or requires re-authentication. Please sign in again.');
         setIsLampOn(true);
       }
     }
@@ -42,23 +50,102 @@ export const StaffLoginPage: React.FC = () => {
     setIsLampOn((prev) => !prev);
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    setErrorMessage(null);
+    setIsLoading(true);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    if (!cleanEmail || !cleanPassword) {
+      setErrorMessage('Please enter both your staff email and password.');
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      if (!email.trim() || !password) {
-        throw new Error('Please enter both your staff email and password.');
+      // 1. Authenticate with Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: cleanPassword,
+      });
+
+      if (error) {
+        setErrorMessage(error.message); // Make sure this state renders in the UI!
+        setIsLoading(false);
+        return;
       }
-      await loginStaff(email.trim(), password);
+
+      // 2. Verify Staff Table Validation:
+      // After a successful Supabase Auth sign-in, check whether the user's email exists in the active staff_members table
+      const authUserEmail = (data?.user?.email || cleanEmail).toLowerCase().trim();
+
+      const { data: staffMember, error: staffError } = await supabase
+        .from('staff_members')
+        .select('*')
+        .ilike('email', authUserEmail)
+        .maybeSingle();
+
+      if (staffError) {
+        console.warn('[StaffLogin] staff_members lookup warning:', staffError.message);
+      }
+
+      let verifiedStaff = staffMember;
+      if (!verifiedStaff) {
+        // Also check local store roster fallback
+        const localMatch = localStore.getStaffMembers().find(
+          (s) => s.email.toLowerCase().trim() === authUserEmail
+        );
+        if (localMatch) {
+          verifiedStaff = localMatch as any;
+        }
+      }
+
+      if (!verifiedStaff) {
+        await supabase.auth.signOut().catch(() => {});
+        setErrorMessage('Access Denied: No staff account found for this email address in the staff roster. Self-registration is disabled.');
+        setIsLoading(false);
+        return;
+      }
+
+      const isBlocked = Boolean(verifiedStaff.is_blocked ?? (verifiedStaff as any).isBlocked);
+      const isActive = verifiedStaff.is_active !== undefined
+        ? Boolean(verifiedStaff.is_active)
+        : (verifiedStaff as any).isActive !== false;
+
+      if (isBlocked || !isActive) {
+        await supabase.auth.signOut().catch(() => {});
+        const reason = verifiedStaff.blocked_reason || (verifiedStaff as any).blockedReason || 'revoked by administrator';
+        setErrorMessage(`Access Denied: Staff account is inactive or blocked (${reason}). Active session terminated.`);
+        setIsLoading(false);
+        return;
+      }
+
+      // Update staff session activity / presence for live tracking
+      try {
+        await supabase.from('staff_sessions').upsert({
+          staff_id: verifiedStaff.id,
+          email: authUserEmail,
+          ip_address: '122.161.48.12',
+          device: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
+          last_active: new Date().toISOString(),
+        }, { onConflict: 'staff_id' });
+      } catch (sessErr: any) {
+        console.warn('[StaffLogin] staff_sessions upsert note:', sessErr?.message);
+      }
+
+      // 3. Establish active staff session in AuthContext
+      await loginStaff(cleanEmail, cleanPassword);
       navigate('/staff');
     } catch (err: any) {
-      setError(err.message || 'Staff login failed. Please verify your credentials.');
+      setErrorMessage(err.message || 'Staff login failed. Please verify your credentials.');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
+
+  const handleLogin = handleStaffLogin;
 
   return (
     <div
@@ -177,14 +264,18 @@ export const StaffLoginPage: React.FC = () => {
                 </p>
               </div>
 
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-400 flex items-start gap-2.5">
+              {errorMessage && (
+                <div
+                  id="staff-login-error-banner"
+                  role="alert"
+                  className="p-3.5 bg-red-500/15 border border-red-500/40 rounded-2xl text-xs text-red-300 flex items-start gap-2.5 shadow-md shadow-red-950/40"
+                >
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <span>{error}</span>
+                  <span className="font-medium leading-relaxed">{errorMessage}</span>
                 </div>
               )}
 
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleStaffLogin} className="space-y-4">
                 <div className="space-y-1.5">
                   <label htmlFor="staff-login-email" className="text-xs font-bold block text-slate-300">
                     Staff Email Address
@@ -232,10 +323,10 @@ export const StaffLoginPage: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={isLoading}
                   className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-orange-600/30 transition-all disabled:opacity-50 cursor-pointer"
                 >
-                  {loading ? (
+                  {isLoading ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <>

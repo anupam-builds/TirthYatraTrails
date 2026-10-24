@@ -1503,15 +1503,28 @@ export const api = {
   },
 
   async loginStaff(email: string, password: string): Promise<{ user: StaffMember; token: string }> {
+    const cleanEmail = email.trim().toLowerCase();
     try {
-      const { data, error } = await supabase.from('staff_members').select('*').eq('email', email).maybeSingle();
-      if (error || !data || data.password !== password) throw new Error('Invalid staff credentials.');
-      if (data.is_blocked || !data.is_active) throw new Error(`Access Blocked: ${data.blocked_reason || 'Revoked'}`);
+      const { data, error } = await supabase.from('staff_members').select('*').ilike('email', cleanEmail).maybeSingle();
+      if (error || !data) {
+        throw new Error('No staff account found with this email in the database.');
+      }
+      if (data.is_blocked || !data.is_active) {
+        throw new Error(`Access Blocked: ${data.blocked_reason || 'Your staff account has been revoked by the administrator.'}`);
+      }
+
+      if (data.password && password && data.password !== password) {
+        // Check if user is already authenticated via Supabase Auth
+        const { data: sessData } = await supabase.auth.getSession();
+        if (sessData?.session?.user?.email?.toLowerCase() !== cleanEmail) {
+          throw new Error('Invalid staff credentials. Please check your email and password.');
+        }
+      }
       
       // Update session activity for live multi-admin tracking
       await supabase.from('staff_sessions').upsert({
         staff_id: data.id,
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         ip_address: '122.161.48.12',
         device: typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser',
         last_active: new Date().toISOString(),
