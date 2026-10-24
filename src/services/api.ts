@@ -1459,7 +1459,9 @@ export const api = {
       if (error || !data) {
         throw new Error('No staff account found with this email in the database.');
       }
-      if (data.is_blocked || !data.is_active) {
+      const isBlocked = data.is_blocked === true;
+      const isActive = data.is_active !== false;
+      if (isBlocked || !isActive) {
         throw new Error(`Access Blocked: ${data.blocked_reason || 'Your staff account has been revoked by the administrator.'}`);
       }
 
@@ -1471,18 +1473,21 @@ export const api = {
         }
       }
       
-      // Update session activity for live tracking (safe non-blocking delete-then-insert)
+      // Update session activity for live tracking (safe non-blocking update-first fallback)
       const staffId = data?.id;
       try {
         if (staffId) {
-          await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
-          const { error: sessionErr } = await supabase.from('staff_sessions').insert([
-            {
-              staff_id: staffId,
-              last_active: new Date().toISOString(),
-            },
-          ]);
-          if (sessionErr) console.warn('[Session Track Warning]:', sessionErr.message);
+          const { data: updated, error: updateErr } = await supabase
+            .from('staff_sessions')
+            .update({ last_active: new Date().toISOString() })
+            .eq('staff_id', staffId)
+            .select();
+
+          if (!updateErr && (!updated || updated.length === 0)) {
+            await supabase.from('staff_sessions').insert([
+              { staff_id: staffId, last_active: new Date().toISOString() }
+            ]);
+          }
         }
       } catch (e) {
         console.warn('[Session Track Ignored]:', e);
@@ -1512,8 +1517,8 @@ export const api = {
       const { password: _, ...safeStaff } = data;
       const mapped: StaffMember & { access_token?: string } = {
         ...safeStaff,
-        isBlocked: safeStaff.is_blocked,
-        isActive: safeStaff.is_active,
+        isBlocked: safeStaff.is_blocked === true,
+        isActive: safeStaff.is_active !== false,
         isOnline: true,
         isCurrentlyLoggedIn: true,
         access_token: supabaseAccessToken,
@@ -1558,43 +1563,87 @@ export const api = {
 
   async checkStaffSession(): Promise<{ ok: boolean; staff: StaffMember }> {
     const token = typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null;
-    if (!token) throw new Error('No staff token');
-    const parsed = JSON.parse(atob(token));
-    if (!parsed || !parsed.id) throw new Error('Invalid staff token payload');
+    let parsed: any = null;
+    if (token) {
+      try {
+        parsed = JSON.parse(atob(token));
+      } catch {}
+    }
+
+    // Also get Supabase Auth session as primary or fallback
+    let authEmail = parsed?.email ? String(parsed.email).trim().toLowerCase() : '';
+    try {
+      const { data: sessData } = await supabase.auth.getSession();
+      if (sessData?.session?.user?.email) {
+        authEmail = sessData.session.user.email.trim().toLowerCase();
+      }
+    } catch {}
+
+    if (!authEmail && !parsed?.id) {
+      throw new Error('No staff token or active session');
+    }
 
     try {
-      const { data, error } = await supabase.from('staff_members').select('*').eq('id', parsed.id).maybeSingle();
+      let query = supabase.from('staff_members').select('*');
+      if (authEmail) {
+        query = query.ilike('email', authEmail);
+      } else {
+        query = query.eq('id', parsed.id);
+      }
+      const { data, error } = await query.maybeSingle();
+
       if (!error && data) {
-        if (data.is_blocked || !data.is_active) {
+        const isBlocked = data.is_blocked === true;
+        const isActive = data.is_active !== false;
+
+        if (isBlocked || !isActive) {
           throw new Error(`Account Blocked: ${data.blocked_reason || 'Access revoked by Administrator'}`);
         }
+
+        const safeStaff: StaffMember & { access_token?: string } = {
+          id: data.id,
+          name: data.name || authEmail.split('@')[0],
+          email: data.email || authEmail,
+          phone: data.phone || '',
+          designation: data.designation || 'Staff Specialist',
+          role: 'STAFF',
+          isBlocked: false,
+          isActive: true,
+          isOnline: true,
+          isCurrentlyLoggedIn: true,
+          permissions: data.permissions || {
+            canViewInquiries: true,
+            canUpdateStatus: true,
+            canAddNotes: true,
+          },
+          createdAt: data.created_at || new Date().toISOString(),
+          access_token: parsed?.access_token,
+        };
         return {
           ok: true,
-          staff: {
-            ...data,
-            isBlocked: Boolean(data.is_blocked),
-            isActive: Boolean(data.is_active),
-            isOnline: Boolean(data.is_online),
-          },
+          staff: safeStaff,
         };
       }
     } catch (err: any) {
-      if (err.message?.includes('Account Blocked') || err.message?.includes('Access revoked')) {
+      if (err.message?.includes('Account Blocked:') || err.message?.includes('Access revoked')) {
         throw err;
       }
     }
 
     // Fallback to localStore staff list verification for offline or seed staff continuity
-    const localStaff = localStore.getStaffMembers().find((s) => s.id === parsed.id || s.email.toLowerCase() === (parsed.email || '').toLowerCase());
+    const localStaff = localStore.getStaffMembers().find(
+      (s) => (authEmail && s.email.toLowerCase().trim() === authEmail) || (parsed?.id && s.id === parsed.id)
+    );
     if (localStaff) {
-      if (localStaff.isBlocked || !localStaff.isActive) {
+      const isBlocked = localStaff.isBlocked === true;
+      const isActive = localStaff.isActive !== false;
+      if (isBlocked || !isActive) {
         throw new Error(`Account Blocked: ${localStaff.blockedReason || 'Access revoked by Administrator'}`);
       }
       return { ok: true, staff: localStaff };
     }
 
-    // If neither returned a valid account, token is invalid
-    throw new Error('Staff account not found or removed');
+    throw new Error('Staff session verification pending');
   },
 
   async register(name: string, email: string, password: string, phone?: string): Promise<AuthResponse> {

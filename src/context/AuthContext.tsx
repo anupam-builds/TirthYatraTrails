@@ -160,8 +160,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Restore Staff Session (clears on window close via sessionStorage)
+  // Restore Staff Session with Supabase Auth resolution and email-based verification
   useEffect(() => {
+    let isCancelled = false;
+
     async function initStaff() {
       const clearStaffToken = () => {
         if (typeof window !== 'undefined') {
@@ -171,76 +173,121 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       try {
-        const token = typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null;
-        if (token) {
+        // 1. Wait until supabase.auth.getSession() has fully resolved
+        let supabaseSession: any = null;
+        try {
+          const { data: sessData } = await supabase.auth.getSession();
+          supabaseSession = sessData?.session;
+        } catch (e) {
+          console.warn('[AuthContext] getSession error in initStaff:', e);
+        }
+
+        // 2. Also inspect sessionStorage token
+        const storedToken = typeof window !== 'undefined' ? window.sessionStorage.getItem('tyt_staff_token') : null;
+        let storedStaff: any = null;
+        if (storedToken) {
           try {
-            const check = await api.checkStaffSession();
-            if (check?.ok && check.staff && !check.staff.isBlocked && check.staff.isActive) {
-              if (!(check.staff as any).access_token || isJwtExpired((check.staff as any).access_token)) {
-                try {
-                  const freshToken = await ensureActiveSupabaseSession();
-                  if (freshToken) {
-                    (check.staff as any).access_token = freshToken;
-                    if (typeof window !== 'undefined') {
-                      sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(check.staff)));
-                    }
-                  }
-                } catch {}
-              }
-              setStaffUser(check.staff);
-            } else {
-              clearStaffToken();
-              setStaffUser(null);
+            storedStaff = JSON.parse(atob(storedToken));
+          } catch {}
+        }
+
+        // 3. Resolve staff email (case-insensitive, trimmed)
+        const authEmail = (
+          supabaseSession?.user?.email ||
+          storedStaff?.email ||
+          ''
+        ).trim().toLowerCase();
+
+        if (authEmail) {
+          // Verify staff member by matching email against staff_members table
+          // (does not require staff_members.id === auth.users.id, nor staff_sessions row)
+          let verifiedStaff: any = null;
+          try {
+            const { data: staffMember, error: staffErr } = await supabase
+              .from('staff_members')
+              .select('*')
+              .ilike('email', authEmail)
+              .maybeSingle();
+
+            if (!staffErr && staffMember) {
+              verifiedStaff = staffMember;
             }
-          } catch (err: any) {
-            // If the account was blocked or revoked, instantly revoke the session and remove stored token
-            if (
-              err?.message?.includes('Blocked') ||
-              err?.message?.includes('revoked') ||
-              err?.message?.includes('not found')
-            ) {
-              console.warn('[AuthContext] Staff account revoked or blocked. Terminating session.');
-              clearStaffToken();
-              setStaffUser(null);
-            } else {
-              // Only fallback to decoded token if it's explicitly verified as unblocked
-              try {
-                const decoded = JSON.parse(atob(token));
-                if (
-                  decoded &&
-                  (decoded.role === 'STAFF' || decoded.role === 'ADMIN') &&
-                  !decoded.isBlocked &&
-                  decoded.isActive !== false
-                ) {
-                  // Re-check against localStore if available
-                  const verifiedLocal = localStore.getStaffMembers().find((s) => s.id === decoded.id);
-                  if (verifiedLocal && (verifiedLocal.isBlocked || !verifiedLocal.isActive)) {
-                    clearStaffToken();
-                    setStaffUser(null);
-                  } else {
-                    setStaffUser(decoded);
-                  }
-                } else {
-                  clearStaffToken();
-                  setStaffUser(null);
-                }
-              } catch {
-                clearStaffToken();
-                setStaffUser(null);
-              }
+          } catch (e) {
+            console.warn('[AuthContext] staff_members lookup error:', e);
+          }
+
+          // Fallback to localStore roster for seed staff
+          if (!verifiedStaff) {
+            const localMatch = localStore.getStaffMembers().find(
+              (s) => s.email.toLowerCase().trim() === authEmail
+            );
+            if (localMatch) {
+              verifiedStaff = localMatch;
             }
           }
+
+          if (verifiedStaff) {
+            // Treat null or undefined is_active / is_blocked safely
+            const isBlocked = verifiedStaff.is_blocked === true || (verifiedStaff as any).isBlocked === true;
+            const isActive = verifiedStaff.is_active !== false && (verifiedStaff as any).isActive !== false;
+
+            if (isBlocked || !isActive) {
+              console.warn('[AuthContext] Staff account is blocked or inactive. Revoking session.');
+              clearStaffToken();
+              if (!isCancelled) setStaffUser(null);
+            } else {
+              const mapped: StaffMember & { access_token?: string } = {
+                id: verifiedStaff.id,
+                name: verifiedStaff.name || authEmail.split('@')[0],
+                email: authEmail,
+                phone: verifiedStaff.phone || '',
+                designation: verifiedStaff.designation || 'Staff Specialist',
+                role: 'STAFF',
+                isBlocked: false,
+                isActive: true,
+                isOnline: true,
+                isCurrentlyLoggedIn: true,
+                permissions: verifiedStaff.permissions || {
+                  canViewInquiries: true,
+                  canUpdateStatus: true,
+                  canAddNotes: true,
+                },
+                createdAt: verifiedStaff.created_at || (verifiedStaff as any).createdAt || new Date().toISOString(),
+                access_token: supabaseSession?.access_token || storedStaff?.access_token,
+              };
+
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(mapped)));
+                localStorage.removeItem('tyt_staff_token');
+              }
+              if (!isCancelled) {
+                setStaffUser(mapped);
+              }
+            }
+          } else {
+            clearStaffToken();
+            if (!isCancelled) setStaffUser(null);
+          }
         } else {
-          setStaffUser(null);
+          clearStaffToken();
+          if (!isCancelled) setStaffUser(null);
         }
-      } catch {
+      } catch (err) {
+        console.warn('[AuthContext] initStaff error:', err);
         clearStaffToken();
-        setStaffUser(null);
+        if (!isCancelled) setStaffUser(null);
       } finally {
-        setIsStaffLoading(false);
+        if (!isCancelled) {
+          setIsStaffLoading(false);
+        }
       }
     }
+
     initStaff();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   // Customer Login
@@ -502,10 +549,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('tirth-admin-auth-changed', handleAdminAuthChanged);
   }, []);
 
+  // Direct Staff Session Setter for immediate authentication & transition
+  const setStaffSession = useCallback((staffRecord: StaffMember) => {
+    const sessionToken = btoa(JSON.stringify(staffRecord));
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('tyt_staff_token', sessionToken);
+      localStorage.removeItem('tyt_staff_token');
+    }
+    setStaffUser(staffRecord);
+    setIsStaffLoading(false);
+  }, []);
+
   // Real-time Supabase auth state change listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user?.email) {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session?.user?.email) {
         const cleanEmail = session.user.email.toLowerCase().trim();
         const isAdmin = await api.checkIsAdminEmail(cleanEmail);
         if (isAdmin) {
@@ -519,24 +577,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           setAdminSession(adminRecord);
         }
+
+        // Also check if user is a staff member by email
+        try {
+          const { data: staffMember } = await supabase
+            .from('staff_members')
+            .select('*')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+
+          if (staffMember) {
+            const isBlocked = staffMember.is_blocked === true;
+            const isActive = staffMember.is_active !== false;
+            if (!isBlocked && isActive) {
+              const mapped: StaffMember & { access_token?: string } = {
+                id: staffMember.id,
+                name: staffMember.name || cleanEmail.split('@')[0],
+                email: cleanEmail,
+                phone: staffMember.phone || '',
+                designation: staffMember.designation || 'Staff Specialist',
+                role: 'STAFF',
+                isBlocked: false,
+                isActive: true,
+                isOnline: true,
+                isCurrentlyLoggedIn: true,
+                permissions: staffMember.permissions || {
+                  canViewInquiries: true,
+                  canUpdateStatus: true,
+                  canAddNotes: true,
+                },
+                createdAt: staffMember.created_at || new Date().toISOString(),
+                access_token: session.access_token,
+              };
+              setStaffSession(mapped);
+            }
+          }
+        } catch {}
+      } else if (event === 'SIGNED_OUT') {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('tyt_staff_token');
+        }
+        setStaffUser(null);
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [setAdminSession]);
-
-  // Direct Staff Session Setter for immediate authentication & transition
-  const setStaffSession = useCallback((staffRecord: StaffMember) => {
-    const sessionToken = btoa(JSON.stringify(staffRecord));
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('tyt_staff_token', sessionToken);
-      localStorage.removeItem('tyt_staff_token');
-    }
-    setStaffUser(staffRecord);
-    setIsStaffLoading(false);
-  }, []);
+  }, [setAdminSession, setStaffSession]);
 
   // Staff Login
   const loginStaff = async (email: string, pass: string) => {

@@ -122,10 +122,8 @@ export const StaffLoginPage: React.FC = () => {
         return;
       }
 
-      const isBlocked = Boolean(verifiedStaff.is_blocked ?? (verifiedStaff as any).isBlocked);
-      const isActive = verifiedStaff.is_active !== undefined
-        ? Boolean(verifiedStaff.is_active)
-        : (verifiedStaff as any).isActive !== false;
+      const isBlocked = verifiedStaff.is_blocked === true || (verifiedStaff as any).isBlocked === true;
+      const isActive = verifiedStaff.is_active !== false && (verifiedStaff as any).isActive !== false;
 
       if (isBlocked || !isActive) {
         await supabase.auth.signOut().catch(() => {});
@@ -168,19 +166,25 @@ export const StaffLoginPage: React.FC = () => {
       // Instant transition to Staff Desk
       navigate('/staff');
 
-      // Non-blocking background session persistence (safe delete-then-insert, NO onConflict)
+      // Non-blocking background session persistence (safe update-first fallback pattern)
       const staffId = verifiedStaff.id;
       (async () => {
         try {
           if (staffId) {
-            await supabase.from('staff_sessions').delete().eq('staff_id', staffId);
-            const { error: sessionErr } = await supabase.from('staff_sessions').insert([
-              {
-                staff_id: staffId,
-                last_active: new Date().toISOString(),
-              },
-            ]);
-            if (sessionErr) console.warn('[Session Track Warning]:', sessionErr.message);
+            const { data: updated, error: updateErr } = await supabase
+              .from('staff_sessions')
+              .update({ last_active: new Date().toISOString() })
+              .eq('staff_id', staffId)
+              .select();
+
+            if (!updateErr && (!updated || updated.length === 0)) {
+              await supabase.from('staff_sessions').insert([
+                {
+                  staff_id: staffId,
+                  last_active: new Date().toISOString(),
+                },
+              ]);
+            }
           }
         } catch (e) {
           console.warn('[Session Track Ignored]:', e);

@@ -59,10 +59,84 @@ import {
 } from 'lucide-react';
 
 export const StaffPortalPage: React.FC = () => {
-  const { staffUser, isStaffAuthenticated, isStaffLoading, logoutStaff } = useAuth();
+  const { staffUser, isStaffAuthenticated, isStaffLoading, logoutStaff, setStaffSession } = useAuth();
   const currentStaffId = staffUser?.id;
   const { navigate } = useRouter();
   const { theme, isDark, setTheme, toggleTheme } = useTheme();
+
+  // Route guard: wait until supabase.auth.getSession() and email-based staff verification fully resolve
+  const [authResolving, setAuthResolving] = useState(true);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function verifyStaffRoute() {
+      if (staffUser) {
+        if (!isCancelled) setAuthResolving(false);
+        return;
+      }
+
+      try {
+        const { data: sessData } = await supabase.auth.getSession();
+        const authEmail = sessData?.session?.user?.email?.trim().toLowerCase();
+
+        if (authEmail) {
+          const { data: staffData } = await supabase
+            .from('staff_members')
+            .select('*')
+            .ilike('email', authEmail)
+            .maybeSingle();
+
+          if (staffData) {
+            const isBlocked = staffData.is_blocked === true;
+            const isActive = staffData.is_active !== false;
+
+            if (!isBlocked && isActive) {
+              const mapped: StaffMember & { access_token?: string } = {
+                id: staffData.id,
+                name: staffData.name || authEmail.split('@')[0],
+                email: authEmail,
+                phone: staffData.phone || '',
+                designation: staffData.designation || 'Staff Specialist',
+                role: 'STAFF',
+                isBlocked: false,
+                isActive: true,
+                isOnline: true,
+                isCurrentlyLoggedIn: true,
+                permissions: staffData.permissions || {
+                  canViewInquiries: true,
+                  canUpdateStatus: true,
+                  canAddNotes: true,
+                },
+                createdAt: staffData.created_at || new Date().toISOString(),
+                access_token: sessData.session.access_token,
+              };
+              if (setStaffSession) {
+                setStaffSession(mapped);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[StaffPortalPage] Staff route verification error:', err);
+      } finally {
+        if (!isCancelled) {
+          setAuthResolving(false);
+        }
+      }
+    }
+
+    if (!isStaffLoading) {
+      verifyStaffRoute();
+    } else {
+      // If AuthContext is still loading, keep authResolving true
+      setAuthResolving(true);
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isStaffLoading, staffUser, setStaffSession]);
 
   // Safety Confirmation Dialog for Logout (replicated from Admin side)
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -208,20 +282,37 @@ export const StaffPortalPage: React.FC = () => {
       try {
         const check = await api.checkStaffSession();
         consecutiveFailures = 0;
-        if (!check?.ok || check.staff?.isBlocked || !check.staff?.isActive) {
+        const isBlocked = check?.staff?.isBlocked === true;
+        const isActive = check?.staff?.isActive !== false;
+        if (!check?.ok || isBlocked || !isActive) {
           const reason = check?.staff?.blockedReason || 'Access revoked by Administrator';
           setBlockedAlertMessage(`Your staff access has been revoked: "${reason}". Session terminated.`);
           setTimeout(() => {
             logoutStaff();
             navigate('/staff/login');
           }, 3500);
+          return;
+        }
+
+        // Heartbeat activity tracking using update-first pattern
+        if (staffUser?.id) {
+          const { data: updated, error: updateErr } = await supabase
+            .from('staff_sessions')
+            .update({ last_active: new Date().toISOString() })
+            .eq('staff_id', staffUser.id)
+            .select();
+
+          if (!updateErr && (!updated || updated.length === 0)) {
+            await supabase.from('staff_sessions').insert([
+              { staff_id: staffUser.id, last_active: new Date().toISOString() }
+            ]);
+          }
         }
       } catch (err: any) {
         if (
           err.message &&
-          (err.message.includes('Blocked') ||
-            err.message.includes('revoked') ||
-            err.message.includes('403') ||
+          (err.message.includes('Account Blocked:') ||
+            err.message.includes('Access Revoked:') ||
             err.message.includes('revocation'))
         ) {
           setBlockedAlertMessage(err.message || 'Access Revoked: Account blocked by administrator.');
@@ -628,8 +719,8 @@ export const StaffPortalPage: React.FC = () => {
     handleToggleSound(!notificationSettings.soundEnabled);
   };
 
-  // If loading session
-  if (isStaffLoading) {
+  // If loading session or verifying route guard, wait until getSession has fully resolved
+  if (isStaffLoading || authResolving) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#071322] flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-3">
@@ -640,7 +731,7 @@ export const StaffPortalPage: React.FC = () => {
     );
   }
 
-  // If not authenticated, render Staff Login Page
+  // If not authenticated after full resolution, render Staff Login Page
   if (!isStaffAuthenticated || !staffUser) {
     return <StaffLoginPage />;
   }
