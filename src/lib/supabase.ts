@@ -1473,4 +1473,113 @@ export async function safeSupabaseUpdate<T = any>(
 
 export const safeUpdateLead = safeSupabaseUpdate;
 
+// ==============================================================================
+// Staff Heartbeat & Realtime Presence Tracking (Zero 409 Conflicts)
+// ==============================================================================
+
+let lastHeartbeatAt = 0;
+const lastHeartbeatByStaff = new Map<string, number>();
+let staffPresenceChannelInstance: any = null;
+
+/**
+ * Returns a shared Supabase Realtime channel for staff presence ('public:staff-presence-realtime').
+ */
+export function getStaffPresenceChannel() {
+  if (!staffPresenceChannelInstance && typeof window !== 'undefined' && supabase) {
+    staffPresenceChannelInstance = supabase.channel('public:staff-presence-realtime');
+
+    staffPresenceChannelInstance
+      .on('presence', { event: 'sync' }, () => {
+        try {
+          const state = staffPresenceChannelInstance.presenceState();
+          const activePresences: any[] = [];
+          Object.values(state).forEach((presList: any) => {
+            if (Array.isArray(presList)) {
+              activePresences.push(...presList);
+            }
+          });
+          window.dispatchEvent(
+            new CustomEvent('tirth-staff-presence-changed', {
+              detail: { presences: activePresences },
+            })
+          );
+        } catch {}
+      })
+      .subscribe();
+  }
+  return staffPresenceChannelInstance;
+}
+
+/**
+ * Conflict-free staff heartbeat tracker:
+ * 1. Debounced in-memory: runs at most once every 60 seconds per staff session,
+ *    preventing React StrictMode double-mounts from firing duplicate network requests.
+ * 2. Supabase Realtime Presence: tracks live online status without any database writes.
+ * 3. PATCH update only: sends HTTP PATCH to staff_members (and staff_sessions if present).
+ *    NEVER sends HTTP POST (.insert/.upsert), eliminating 409 Conflict entirely.
+ */
+export async function trackStaffHeartbeat(staffId?: string, staffEmail?: string): Promise<void> {
+  if (!staffId) return;
+
+  const cleanId = String(staffId).trim();
+  if (!cleanId) return;
+
+  const now = Date.now();
+  const lastStaff = lastHeartbeatByStaff.get(cleanId) || 0;
+
+  // Guard with module-level debouncer: at most once every 60s per session
+  if (now - lastHeartbeatAt < 60000 && now - lastStaff < 60000) {
+    return;
+  }
+  lastHeartbeatAt = now;
+  lastHeartbeatByStaff.set(cleanId, now);
+
+  const timestamp = new Date().toISOString();
+  const cleanEmail = (staffEmail || '').trim().toLowerCase();
+
+  // 1. Supabase Realtime Presence (zero database writes, zero conflicts)
+  try {
+    const channel = getStaffPresenceChannel();
+    if (channel && typeof channel.track === 'function') {
+      channel.track({
+        staff_id: cleanId,
+        email: cleanEmail,
+        online_at: timestamp,
+      }).catch?.(() => {});
+    }
+  } catch {}
+
+  // 2. Conflict-free PATCH updates ONLY (Zero POST / Zero 409 Conflicts):
+  // HTTP PATCH returns 200/204 with 0 rows affected if row doesn't exist, and CAN NEVER throw 409 Conflict.
+  try {
+    const updates: Promise<any>[] = [
+      Promise.resolve(
+        supabase
+          .from('staff_members')
+          .update({ updated_at: timestamp })
+          .eq('id', cleanId)
+      ),
+      Promise.resolve(
+        supabase
+          .from('staff_sessions')
+          .update({ last_active: timestamp })
+          .eq('staff_id', cleanId)
+      ),
+    ];
+
+    if (cleanEmail) {
+      updates.push(
+        Promise.resolve(
+          supabase
+            .from('staff_members')
+            .update({ updated_at: timestamp })
+            .eq('email', cleanEmail)
+        )
+      );
+    }
+
+    Promise.allSettled(updates).catch(() => {});
+  } catch {}
+}
+
 export default supabase;

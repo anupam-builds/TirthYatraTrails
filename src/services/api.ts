@@ -1,8 +1,8 @@
 import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 
-export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns };
+export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat };
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
 import { resolveBase64ToUrl, uploadImageFile, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
@@ -1382,24 +1382,10 @@ export const api = {
         }
       }
       
-      // Update session activity for live tracking (safe non-blocking update-first fallback)
+      // Conflict-free staff heartbeat & presence tracking (Zero 409 Conflicts)
       const staffId = data?.id;
-      try {
-        if (staffId) {
-          const { data: updated, error: updateErr } = await supabase
-            .from('staff_sessions')
-            .update({ last_active: new Date().toISOString() })
-            .eq('staff_id', staffId)
-            .select();
-
-          if (!updateErr && (!updated || updated.length === 0)) {
-            await supabase.from('staff_sessions').insert([
-              { staff_id: staffId, last_active: new Date().toISOString() }
-            ]);
-          }
-        }
-      } catch (e) {
-        console.warn('[Session Track Ignored]:', e);
+      if (staffId) {
+        trackStaffHeartbeat(staffId, cleanEmail).catch(() => {});
       }
 
       // Also establish Supabase Auth session in sessionStorage

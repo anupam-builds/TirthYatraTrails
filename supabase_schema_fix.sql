@@ -101,7 +101,35 @@ ALTER TABLE IF EXISTS public.leads
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
--- 3. Relax status check constraints if any exist
+-- 3. Ensure public.staff_sessions table, primary key, and RLS policies exist
+CREATE TABLE IF NOT EXISTS public.staff_sessions (
+  id UUID DEFAULT gen_random_uuid(),
+  staff_id TEXT PRIMARY KEY,
+  last_active TIMESTAMPTZ DEFAULT now(),
+  ip_address TEXT,
+  device TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Ensure primary key constraint on staff_id exists if table pre-existed without PK
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'staff_sessions' AND constraint_type = 'PRIMARY KEY'
+  ) THEN
+    ALTER TABLE public.staff_sessions ADD PRIMARY KEY (staff_id);
+  END IF;
+END $$;
+
+-- Enable RLS on staff_sessions
+ALTER TABLE public.staff_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Allow public access on staff_sessions so presence and session queries never fail RLS
+DROP POLICY IF EXISTS "Allow public all on staff_sessions" ON public.staff_sessions;
+CREATE POLICY "Allow public all on staff_sessions" ON public.staff_sessions FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. Relax status check constraints if any exist
 DO $$ 
 BEGIN
   IF EXISTS (
@@ -185,10 +213,24 @@ BEGIN
     ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 
+  -- Ensure staff_sessions table and RLS policy
+  CREATE TABLE IF NOT EXISTS public.staff_sessions (
+    id UUID DEFAULT gen_random_uuid(),
+    staff_id TEXT PRIMARY KEY,
+    last_active TIMESTAMPTZ DEFAULT now(),
+    ip_address TEXT,
+    device TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+
+  ALTER TABLE public.staff_sessions ENABLE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS "Allow public all on staff_sessions" ON public.staff_sessions;
+  CREATE POLICY "Allow public all on staff_sessions" ON public.staff_sessions FOR ALL USING (true) WITH CHECK (true);
+
   NOTIFY pgrst, 'reload schema';
   RETURN true;
 END;
 $$;
 
--- 6. Force PostgREST to reload its schema cache
+-- 7. Force PostgREST to reload its schema cache
 NOTIFY pgrst, 'reload schema';

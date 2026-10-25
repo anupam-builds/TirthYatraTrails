@@ -3,7 +3,7 @@ import { useRealtimeInquiries } from '../../hooks/useRealtimeInquiries.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
 import { useTheme } from '../../context/ThemeContext.js';
-import { supabase, safeRemoveChannel } from '../../lib/supabase.js';
+import { supabase, safeRemoveChannel, trackStaffHeartbeat } from '../../lib/supabase.js';
 import { api, generateWhatsAppLink, updateLeadOrInquiryStatus, cleanUnassignedValue, mapInquiryRow } from '../../services/api.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { LeadTableView } from '../../components/crm/LeadTableView.js';
@@ -294,19 +294,9 @@ export const StaffPortalPage: React.FC = () => {
           return;
         }
 
-        // Heartbeat activity tracking using update-first pattern
+        // Heartbeat activity tracking using debounced conflict-free presence and PATCH
         if (staffUser?.id) {
-          const { data: updated, error: updateErr } = await supabase
-            .from('staff_sessions')
-            .update({ last_active: new Date().toISOString() })
-            .eq('staff_id', staffUser.id)
-            .select();
-
-          if (!updateErr && (!updated || updated.length === 0)) {
-            await supabase.from('staff_sessions').insert([
-              { staff_id: staffUser.id, last_active: new Date().toISOString() }
-            ]);
-          }
+          trackStaffHeartbeat(staffUser.id, staffUser.email).catch(() => {});
         }
       } catch (err: any) {
         if (

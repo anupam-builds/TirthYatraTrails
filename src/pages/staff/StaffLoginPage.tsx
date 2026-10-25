@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useRouter } from '../../context/RouterContext.js';
-import { supabase } from '../../lib/supabase.js';
+import { supabase, trackStaffHeartbeat } from '../../lib/supabase.js';
 import { localStore } from '../../services/localStore.js';
 import { CuteLamp, CuteLampRef } from '../../components/auth/CuteLamp.js';
 import { BaseInput } from '../../components/FormField.js';
@@ -166,30 +166,11 @@ export const StaffLoginPage: React.FC = () => {
       // Instant transition to Staff Desk
       navigate('/staff');
 
-      // Non-blocking background session persistence (safe update-first fallback pattern)
+      // Non-blocking conflict-free session and presence tracking (Zero 409 Conflicts)
       const staffId = verifiedStaff.id;
-      (async () => {
-        try {
-          if (staffId) {
-            const { data: updated, error: updateErr } = await supabase
-              .from('staff_sessions')
-              .update({ last_active: new Date().toISOString() })
-              .eq('staff_id', staffId)
-              .select();
-
-            if (!updateErr && (!updated || updated.length === 0)) {
-              await supabase.from('staff_sessions').insert([
-                {
-                  staff_id: staffId,
-                  last_active: new Date().toISOString(),
-                },
-              ]);
-            }
-          }
-        } catch (e) {
-          console.warn('[Session Track Ignored]:', e);
-        }
-      })();
+      if (staffId) {
+        trackStaffHeartbeat(staffId, verifiedStaff.email).catch(() => {});
+      }
 
       // Background authentication sync
       loginStaff(cleanEmail, cleanPassword).catch((e) => {
