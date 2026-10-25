@@ -242,7 +242,8 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         duration_days: durDaysNum,
         budget: budget.trim() || null,
         accommodation_tier: accommodationTier || '3 Star Standard',
-        accommodation_preference: accommodationTier || '3 Star Standard',
+        hotel_tier: accommodationTier || '3 Star Standard',
+        plan: accommodationTier || '3 Star Standard',
         adults: Number(adults),
         children: Number(children),
         travelers: calculatedTravelers,
@@ -288,7 +289,8 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         'duration_days',
         'budget',
         'accommodation_tier',
-        'accommodation_preference',
+        'hotel_tier',
+        'plan',
         'adults',
         'children',
         'travelers',
@@ -307,7 +309,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
 
       const cleanPayload: Record<string, any> = {};
       for (const [k, v] of Object.entries(rawPayload)) {
-        if (ALLOWED_LEADS_COLUMNS.has(k) && v !== undefined) {
+        if (ALLOWED_LEADS_COLUMNS.has(k) && v !== undefined && k !== 'accommodation_preference') {
           cleanPayload[k] = v;
         }
       }
@@ -330,7 +332,9 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
 
       // Non-blocking self-healing mirror into inquiries table for cross-view query tolerance
       try {
-        await safeSupabaseInsert(supabase, 'inquiries', cleanPayload);
+        const inqPayload = { ...cleanPayload };
+        delete inqPayload.accommodation_preference;
+        await safeSupabaseInsert(supabase, 'inquiries', inqPayload);
       } catch {}
 
       const createdRow = data && data.length > 0 ? data[0] : cleanPayload;

@@ -434,7 +434,7 @@ export const EnquiryPage: React.FC = () => {
         selectedPlan: submissionPayload.metadata.accommodation_tier,
         accommodationTier: submissionPayload.metadata.accommodation_tier,
         accommodation_tier: submissionPayload.metadata.accommodation_tier,
-        accommodation_preference: submissionPayload.metadata.accommodation_tier,
+        hotel_tier: submissionPayload.metadata.accommodation_tier,
         specialRequests: submissionPayload.metadata.special_requests,
       });
 

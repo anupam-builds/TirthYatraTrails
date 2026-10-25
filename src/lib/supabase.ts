@@ -917,10 +917,24 @@ export async function supabaseRest<T = any>(
 }
 
 /**
+ * In-memory cache of unsupported schema columns by table name.
+ * Whenever a column is detected as unsupported for a table (via PGRST204),
+ * it is added here so it is automatically stripped *before* future requests are sent.
+ * This prevents repeated 400 (Bad Request) network errors in the browser console.
+ */
+export const unsupportedColumnsCache: Record<string, Set<string>> = {
+  inquiries: new Set(['accommodation_preference', 'travelers']),
+  leads: new Set(['accommodation_preference']),
+};
+
+export const unsupportedColumnsByTable = unsupportedColumnsCache;
+
+/**
  * Self-healing Supabase insert helper:
- * Retries insertion up to maxAttempts (default 15). If PostgREST returns PGRST204
+ * Proactively strips any known unsupported columns from unsupportedColumnsCache upfront,
+ * then retries insertion up to maxAttempts (default 15). If PostgREST returns PGRST204
  * matching missing schema column error (e.g. "Could not find the 'xyz' column"),
- * it strips that missing column key from the payload and retries automatically until it succeeds.
+ * it adds the column to unsupportedColumnsCache and strips it from payload, retrying automatically.
  */
 export async function safeSupabaseInsert<T = any>(
   supabaseClient: SupabaseClient | any,
@@ -928,7 +942,20 @@ export async function safeSupabaseInsert<T = any>(
   initialPayload: Record<string, any>,
   maxAttempts: number = 15
 ): Promise<{ data: T[] | null; error: any }> {
+  if (!unsupportedColumnsCache[tableName]) {
+    unsupportedColumnsCache[tableName] = new Set<string>();
+  }
+  const knownBadCols = unsupportedColumnsCache[tableName];
+
   let payload: Record<string, any> = { ...initialPayload };
+
+  // 1. Proactively strip previously detected unsupported columns BEFORE sending the request
+  for (const badCol of knownBadCols) {
+    if (badCol in payload) {
+      delete payload[badCol];
+    }
+  }
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const { data, error } = await supabaseClient
       .from(tableName)
@@ -947,8 +974,9 @@ export async function safeSupabaseInsert<T = any>(
     if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
       const missingCol = match[1];
       console.warn(
-        `[Self-Healing Insert] Stripping unsupported column '${missingCol}' from ${tableName} payload and retrying...`
+        `[Self-Healing Insert] Caching unsupported column '${missingCol}' for table '${tableName}' and retrying...`
       );
+      knownBadCols.add(missingCol);
       delete payload[missingCol];
       continue;
     }
@@ -962,9 +990,9 @@ export const safeInsertLead = safeSupabaseInsert;
 
 /**
  * Self-healing Supabase update helper:
- * Retries update up to maxAttempts (default 15). If PostgREST returns PGRST204
- * matching missing schema column error, it strips that column from the update payload
- * and retries until it succeeds.
+ * Proactively strips any known unsupported columns from unsupportedColumnsCache upfront,
+ * then retries update up to maxAttempts (default 15). If PostgREST returns PGRST204
+ * matching missing schema column error, it caches that column and strips it from the update payload.
  */
 export async function safeSupabaseUpdate<T = any>(
   supabaseClient: SupabaseClient | any,
@@ -973,7 +1001,20 @@ export async function safeSupabaseUpdate<T = any>(
   matchCriteria: { column: string; value: any } | Record<string, any>,
   maxAttempts: number = 15
 ): Promise<{ data: T[] | null; error: any }> {
+  if (!unsupportedColumnsCache[tableName]) {
+    unsupportedColumnsCache[tableName] = new Set<string>();
+  }
+  const knownBadCols = unsupportedColumnsCache[tableName];
+
   let payload: Record<string, any> = { ...initialPayload };
+
+  // Proactively strip previously detected unsupported columns BEFORE sending the request
+  for (const badCol of knownBadCols) {
+    if (badCol in payload) {
+      delete payload[badCol];
+    }
+  }
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     let query = supabaseClient.from(tableName).update(payload);
 
@@ -1004,8 +1045,9 @@ export async function safeSupabaseUpdate<T = any>(
     if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
       const missingCol = match[1];
       console.warn(
-        `[Self-Healing Update] Stripping unsupported column '${missingCol}' from ${tableName} payload and retrying...`
+        `[Self-Healing Update] Caching unsupported column '${missingCol}' for table '${tableName}' and retrying...`
       );
+      knownBadCols.add(missingCol);
       delete payload[missingCol];
       continue;
     }

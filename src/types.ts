@@ -306,6 +306,8 @@ export interface Inquiry {
   plan?: string;
   accommodationTier?: string; // e.g. "2 Star Standard", "3 Star Premium", etc.
   accommodation_tier?: string;
+  hotel_tier?: string;
+  hotelTier?: string;
   accommodation_preference?: string;
   accommodationPreference?: string;
   pickupLocation?: string;

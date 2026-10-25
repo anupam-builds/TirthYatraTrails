@@ -1,8 +1,8 @@
 import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 
-export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead };
+export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable };
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
 import { resolveBase64ToUrl, uploadImageFile, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
@@ -411,7 +411,7 @@ export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set
 
   const baselineLeads = new Set([
     'id', 'customer_name', 'full_name', 'phone', 'whatsapp_number', 'email',
-    'city', 'accommodation_tier', 'accommodation_preference',
+    'city', 'accommodation_tier', 'hotel_tier', 'plan',
     'assigned_staff_id', 'assigned_staff_name', 'status',
     'created_at', 'updated_at',
     'is_deleted', 'deleted_at', 'deleted_by',
@@ -904,7 +904,7 @@ export async function submitCustomerInquiry(formData: any) {
     duration_days: durationDaysVal,
     budget: budgetVal || null,
     accommodation_tier: accommodationTierVal || null,
-    accommodation_preference: accommodationTierVal || null,
+    hotel_tier: accommodationTierVal || null,
     plan: accommodationTierVal || null,
   };
 
@@ -2145,7 +2145,7 @@ export const api = {
       children: leadData.children ?? 0,
       plan: accomVal || null,
       accommodation_tier: accomVal || null,
-      accommodation_preference: accomVal || null,
+      hotel_tier: accomVal || null,
       reminder_at: leadData.reminderAt ? new Date(leadData.reminderAt).toISOString() : null,
       reminder_note: leadData.reminderNote || null,
       special_requests: leadData.specialRequests || leadData.notes || '',
@@ -2160,7 +2160,7 @@ export const api = {
 
     const inquiriesPayload: Record<string, any> = {};
     for (const [k, v] of Object.entries(allInquiriesProps)) {
-      if (inqAllowed.has(k) && k !== 'metadata') {
+      if (inqAllowed.has(k) && k !== 'metadata' && k !== 'accommodation_preference') {
         inquiriesPayload[k] = v;
       }
     }
@@ -2176,7 +2176,8 @@ export const api = {
       email: emailVal || null,
       city: cityVal || null,
       accommodation_tier: accomVal || null,
-      accommodation_preference: accomVal || null,
+      hotel_tier: accomVal || null,
+      plan: accomVal || null,
       adults: leadData.adults ?? 2,
       children: leadData.children ?? 0,
       travelers: (leadData.adults ?? 2) + (leadData.children ?? 0),
