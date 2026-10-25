@@ -1035,78 +1035,6 @@ export async function fetchOpenApiSchema(force = false): Promise<Record<string, 
   return openApiFetchPromise;
 }
 
-let hasAttemptedRepair = false;
-
-/**
- * Silently attempts to execute schema repair via RPC if the user's database has an exec_sql or sync_schema function.
- * Wrapped in a silent try/catch so missing functions never generate unhandled rejections or error modals.
- */
-export async function attemptDatabaseSchemaRepair(): Promise<void> {
-  if (typeof window === 'undefined' || hasAttemptedRepair) return;
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('placeholder')) return;
-  hasAttemptedRepair = true;
-
-  const sql = `
-    ALTER TABLE IF EXISTS public.leads
-      ADD COLUMN IF NOT EXISTS check_in_date DATE,
-      ADD COLUMN IF NOT EXISTS check_out_date DATE,
-      ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS plan TEXT,
-      ADD COLUMN IF NOT EXISTS package_name TEXT,
-      ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
-      ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
-      ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
-      ADD COLUMN IF NOT EXISTS start_date DATE,
-      ADD COLUMN IF NOT EXISTS tour_start_date DATE,
-      ADD COLUMN IF NOT EXISTS end_date DATE,
-      ADD COLUMN IF NOT EXISTS tour_end_date DATE,
-      ADD COLUMN IF NOT EXISTS duration_days INTEGER,
-      ADD COLUMN IF NOT EXISTS budget TEXT,
-      ADD COLUMN IF NOT EXISTS reminder_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS reminder_note TEXT,
-      ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb,
-      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
-
-    ALTER TABLE IF EXISTS public.inquiries
-      ADD COLUMN IF NOT EXISTS check_in_date DATE,
-      ADD COLUMN IF NOT EXISTS check_out_date DATE,
-      ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
-      ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS plan TEXT,
-      ADD COLUMN IF NOT EXISTS package_name TEXT,
-      ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
-      ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
-      ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
-      ADD COLUMN IF NOT EXISTS start_date DATE,
-      ADD COLUMN IF NOT EXISTS tour_start_date DATE,
-      ADD COLUMN IF NOT EXISTS end_date DATE,
-      ADD COLUMN IF NOT EXISTS tour_end_date DATE,
-      ADD COLUMN IF NOT EXISTS duration_days INTEGER,
-      ADD COLUMN IF NOT EXISTS budget TEXT,
-      ADD COLUMN IF NOT EXISTS reminder_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS reminder_note TEXT,
-      ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb,
-      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
-
-    NOTIFY pgrst, 'reload schema';
-  `;
-
-  try {
-    await Promise.race([
-      Promise.resolve(supabase.rpc('sync_schema')).catch(() => null),
-      Promise.resolve(supabase.rpc('exec_sql', { sql })).catch(() => null),
-      new Promise((res) => setTimeout(res, 2000)),
-    ]);
-  } catch {}
-}
-
 /**
  * Retrieves the full set of unsupported columns for a table from memory and localStorage.
  */
@@ -1577,11 +1505,10 @@ export async function safeSupabaseUpdate<T = any>(
 
 export const safeUpdateLead = safeSupabaseUpdate;
 
-// Trigger background OpenAPI schema discovery and database repair on client initialization
+// Trigger background OpenAPI schema discovery on client initialization
 if (typeof window !== 'undefined') {
   setTimeout(() => {
     fetchOpenApiSchema().catch(() => {});
-    attemptDatabaseSchemaRepair().catch(() => {});
   }, 100);
 }
 
