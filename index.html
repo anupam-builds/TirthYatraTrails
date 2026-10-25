@@ -2,6 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        // Global capture-phase keyboard event sanitizer for browser autofill & extension scripts (e.g. dymvgb96d.js)
+        function sanitizeKeyEvent(e) {
+          if (!e) return;
+          if (typeof e.key === 'undefined' || e.key === null) {
+            try {
+              Object.defineProperty(e, 'key', { value: '', configurable: true, writable: true });
+            } catch (_) {
+              try { e.stopImmediatePropagation(); } catch (__) {}
+            }
+          }
+          if (typeof e.code === 'undefined' || e.code === null) {
+            try {
+              Object.defineProperty(e, 'code', { value: '', configurable: true, writable: true });
+            } catch (_) {}
+          }
+        }
+        window.addEventListener('keydown', sanitizeKeyEvent, true);
+        window.addEventListener('keyup', sanitizeKeyEvent, true);
+        window.addEventListener('keypress', sanitizeKeyEvent, true);
+
+        // Guard against extension script crashes (e.g., dymvgb96d.js / chrome-extension) attempting to read .length on undefined
+        window.addEventListener('error', function(event) {
+          var msg = event && event.message ? String(event.message) : '';
+          var src = event && event.filename ? String(event.filename) : '';
+          if (msg.indexOf("Cannot read properties of undefined (reading 'length')") !== -1 || msg.indexOf("reading 'length'") !== -1) {
+            if (!src || src.indexOf('dymvgb96d') !== -1 || src.indexOf('extension') !== -1 || src.indexOf('chrome-extension') !== -1 || src.indexOf('moz-extension') !== -1) {
+              if (event.preventDefault) event.preventDefault();
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              return true;
+            }
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="https://i.postimg.cc/Sxqk00xZ/Tirth-Yatra-Trails-Logo.png" />
     <title>TirthYatraTrails - Sacred Pilgrimage & Hotel Booking</title>
