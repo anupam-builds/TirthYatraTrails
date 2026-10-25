@@ -833,6 +833,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     inq.whatsappNumber ||
                     '';
                   const waData = generateCustomerWhatsAppLink({ ...inq, lead_id: seqLeadId, leadId: seqLeadId }, currentStaffName, seqLeadId);
+                  const leadStartDate = inq.startDate || lead.start_date || lead.startDate || inq.checkInDate || lead.check_in_date;
                   const leadEndDate = inq.endDate || lead.end_date || lead.endDate || inq.end_date || lead.metadata?.end_date;
                   const leadDurationDays = inq.durationDays ?? lead.duration_days ?? lead.durationDays ?? inq.duration_days ?? lead.metadata?.duration_days;
                   const leadBudget = inq.budget || lead.budget || lead.metadata?.budget;
@@ -1058,7 +1059,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           <div className="space-y-0.5 text-xs whitespace-nowrap">
                             <div className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
                               <Calendar className="w-3 h-3 text-orange-500 shrink-0" />
-                              <span>{formatCrmDate(inq.checkInDate)}</span>
+                              <span>{formatCrmDate(leadStartDate)}</span>
+                              {leadEndDate && leadEndDate !== leadStartDate && (
+                                <span className="text-[10px] text-slate-400 font-normal">→ {formatCrmDate(leadEndDate)}</span>
+                              )}
                             </div>
                             <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                               {leadDurationDays ? (

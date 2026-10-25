@@ -26,6 +26,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Compass,
+  Users,
+  Minus,
+  Plus,
 } from 'lucide-react';
 
 interface CreateLeadModalProps {
@@ -62,6 +65,8 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
   const [durationDays, setDurationDays] = useState<number | string>('');
   const [budget, setBudget] = useState('');
   const [accommodationTier, setAccommodationTier] = useState<string>('3 Star Standard');
+  const [adults, setAdults] = useState<number>(2);
+  const [children, setChildren] = useState<number>(0);
   const [status, setStatus] = useState<InquiryStatus>('NEW');
   const [assignedStaffId, setAssignedStaffId] = useState<string>(
     isStaffMode && currentStaffId ? currentStaffId : ''
@@ -92,6 +97,8 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
       if (isStaffMode && currentStaffId) {
         setAssignedStaffId(currentStaffId);
       }
+      setAdults(2);
+      setChildren(0);
       setErrorMsg(null);
       setSuccessMsg(null);
     }
@@ -214,6 +221,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
       const durDaysNum =
         durationDays !== '' && !isNaN(Number(durationDays)) ? Number(durationDays) : null;
       const cleanStartDate = startDate || new Date().toISOString().split('T')[0];
+      const calculatedTravelers = Math.max(1, Number(adults) + Number(children));
 
       // 3. Raw prospective payload matching the PostgreSQL 'leads' table schema
       const rawPayload: Record<string, any> = {
@@ -235,9 +243,10 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         budget: budget.trim() || null,
         accommodation_tier: accommodationTier || '3 Star Standard',
         accommodation_preference: accommodationTier || '3 Star Standard',
-        adults: 1,
-        children: 0,
-        guests: 1,
+        adults: Number(adults),
+        children: Number(children),
+        travelers: calculatedTravelers,
+        guests: calculatedTravelers,
         assigned_staff_id: assignedStaffId || null,
         assigned_staff_name: assignedStaffName || null,
         reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
@@ -282,6 +291,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         'accommodation_preference',
         'adults',
         'children',
+        'travelers',
         'guests',
         'assigned_staff_id',
         'assigned_staff_name',
@@ -325,13 +335,27 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
 
       const createdRow = data && data.length > 0 ? data[0] : cleanPayload;
       const mapped = mapInquiryRow(createdRow);
-      if (!mapped.leadId && cleanPayload.lead_id) {
-        mapped.leadId = cleanPayload.lead_id;
-      }
-      mapped.assignedStaffId = cleanPayload.assigned_staff_id;
-      mapped.assigned_staff_id = cleanPayload.assigned_staff_id;
-      mapped.assignedStaffName = cleanPayload.assigned_staff_name;
-      mapped.assigned_staff_name = cleanPayload.assigned_staff_name;
+      mapped.id = leadUuid;
+      mapped.leadId = nextLeadId;
+      mapped.lead_id = nextLeadId;
+      mapped.adults = Number(adults);
+      mapped.children = Number(children);
+      mapped.travelers = calculatedTravelers;
+      mapped.guests = calculatedTravelers;
+      mapped.startDate = cleanStartDate;
+      mapped.start_date = cleanStartDate;
+      mapped.endDate = endDate || undefined;
+      mapped.end_date = endDate || undefined;
+      mapped.durationDays = durDaysNum || undefined;
+      mapped.duration_days = durDaysNum || undefined;
+      mapped.reminderAt = reminderAt ? new Date(reminderAt).toISOString() : undefined;
+      mapped.reminder_at = reminderAt ? new Date(reminderAt).toISOString() : undefined;
+      mapped.reminderNote = reminderNote.trim() || undefined;
+      mapped.reminder_note = reminderNote.trim() || undefined;
+      mapped.assignedStaffId = cleanPayload.assigned_staff_id || undefined;
+      mapped.assigned_staff_id = cleanPayload.assigned_staff_id || null;
+      mapped.assignedStaffName = cleanPayload.assigned_staff_name || undefined;
+      mapped.assigned_staff_name = cleanPayload.assigned_staff_name || null;
 
       // Synchronize in-memory/local stores and sound notification
       try {
@@ -612,6 +636,85 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
                   onChange={(e) => setBudget(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium"
                 />
+              </div>
+            </div>
+
+            {/* Pilgrims & Travellers (Group Size) Counter UI */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#081220] border border-slate-200/80 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-orange-500" />
+                  <span>Pilgrims &amp; Travellers (Group Size)</span>
+                </span>
+                <span className="text-[11px] font-extrabold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/60 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800/80">
+                  Total: {Number(adults) + Number(children)} {Number(adults) + Number(children) === 1 ? 'Pilgrim' : 'Pilgrims'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Adults counter */}
+                <div className="flex items-center justify-between bg-white dark:bg-[#0d1d33] p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Adults</span>
+                    <span className="text-[10px] text-slate-400">Ages 18 and above</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      id="create-lead-adults-minus"
+                      onClick={() => setAdults((a) => Math.max(1, a - 1))}
+                      disabled={adults <= 1}
+                      className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer transition-colors"
+                      title="Decrease Adults"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-sm font-extrabold text-slate-900 dark:text-white w-5 text-center font-mono">
+                      {adults}
+                    </span>
+                    <button
+                      type="button"
+                      id="create-lead-adults-plus"
+                      onClick={() => setAdults((a) => a + 1)}
+                      className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                      title="Increase Adults"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Children counter */}
+                <div className="flex items-center justify-between bg-white dark:bg-[#0d1d33] p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Children</span>
+                    <span className="text-[10px] text-slate-400">Ages 0 to 17 years</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      id="create-lead-children-minus"
+                      onClick={() => setChildren((c) => Math.max(0, c - 1))}
+                      disabled={children <= 0}
+                      className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer transition-colors"
+                      title="Decrease Children"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-sm font-extrabold text-slate-900 dark:text-white w-5 text-center font-mono">
+                      {children}
+                    </span>
+                    <button
+                      type="button"
+                      id="create-lead-children-plus"
+                      onClick={() => setChildren((c) => c + 1)}
+                      className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                      title="Increase Children"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

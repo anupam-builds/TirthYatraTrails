@@ -368,12 +368,28 @@ export function getLeadId(inquiry: Partial<Inquiry>): string {
 }
 
 /**
- * Formats guests into compact CRM Pax count (e.g. "8A 0C", "4A 2C")
+ * Formats guests into clear CRM Pax count (e.g. "2 Adults, 0 Children")
  */
 export function formatPaxCount(inquiry: Partial<Inquiry>): string {
-  const adults = inquiry.adults !== undefined ? inquiry.adults : (inquiry.guests || 2);
-  const children = inquiry.children !== undefined ? inquiry.children : 0;
-  return `${adults}A ${children}C`;
+  const anyInq = inquiry as any;
+  const meta = anyInq?.metadata || {};
+  const adults =
+    inquiry.adults !== undefined && inquiry.adults !== null
+      ? inquiry.adults
+      : anyInq?.adults !== undefined && anyInq?.adults !== null
+      ? anyInq.adults
+      : meta.adults !== undefined && meta.adults !== null
+      ? meta.adults
+      : (inquiry.guests || 2);
+  const children =
+    inquiry.children !== undefined && inquiry.children !== null
+      ? inquiry.children
+      : anyInq?.children !== undefined && anyInq?.children !== null
+      ? anyInq.children
+      : meta.children !== undefined && meta.children !== null
+      ? meta.children
+      : 0;
+  return `${adults} Adult${adults === 1 ? '' : 's'}, ${children} Child${children === 1 ? '' : 'ren'}`;
 }
 
 /**

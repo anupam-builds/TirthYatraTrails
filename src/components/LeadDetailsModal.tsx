@@ -61,13 +61,14 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
   const residentStateCity = meta?.resident_state || activeLead?.resident_state || activeLead?.city || activeLead?.userCity || 'N/A';
 
   const packageInterest = meta?.package_interest || activeLead?.package_name || activeLead?.packageName || activeLead?.title || 'N/A';
-  const startDate = meta?.start_date || activeLead?.start_date || activeLead?.checkInDate || activeLead?.arrival_date || 'Flexible / TBD';
-  const endDate = meta?.end_date || activeLead?.end_date || activeLead?.endDate || 'Flexible / TBD';
+  const startDate = activeLead?.start_date || activeLead?.startDate || meta?.start_date || activeLead?.checkInDate || activeLead?.arrival_date || 'Flexible / TBD';
+  const endDate = activeLead?.end_date || activeLead?.endDate || meta?.end_date || 'Flexible / TBD';
   const durationDays = activeLead?.duration_days ?? activeLead?.durationDays ?? meta?.duration_days ?? (activeLead?.duration ? parseInt(activeLead.duration) : null);
   const duration = durationDays ? `${durationDays} Days` : (meta?.duration || activeLead?.duration || 'Standard Itinerary');
   const budget = activeLead?.budget || meta?.budget || 'Not specified';
-  const adults = meta?.adults ?? activeLead?.adults ?? 1;
-  const children = meta?.children ?? activeLead?.children ?? 0;
+  const adults = activeLead?.adults ?? meta?.adults ?? (activeLead?.guests ? activeLead.guests : 2);
+  const children = activeLead?.children ?? meta?.children ?? 0;
+  const travelers = activeLead?.travelers ?? (Number(adults) + Number(children));
   const pickupCity = meta?.pickup_city || activeLead?.pickup_city || activeLead?.pickupLocation || 'N/A';
   const dropCity = meta?.drop_city || activeLead?.drop_city || activeLead?.dropoffLocation || 'Same as pickup';
 
@@ -218,7 +219,7 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                     <Users className="w-3 h-3" /> Group Size:
                   </span>
                   <span className="text-slate-100 font-bold">
-                    {adults} Adult{adults === 1 ? '' : 's'} • {children} Child{children === 1 ? '' : 'ren'}
+                    {adults} Adult{adults === 1 ? '' : 's'}, {children} Child{children === 1 ? '' : 'ren'} ({travelers} Total)
                   </span>
                 </div>
                 <div className="flex items-center justify-between pt-1">

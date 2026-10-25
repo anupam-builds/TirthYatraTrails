@@ -294,7 +294,10 @@ export interface Inquiry {
   metadata?: Record<string, any>;
   userCity?: string;
   checkInDate: string;
+  startDate?: string;
+  start_date?: string;
   guests: number;
+  travelers?: number;
   adults: number;
   children?: number;
   childAges?: string | number[];
