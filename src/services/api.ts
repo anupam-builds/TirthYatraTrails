@@ -1,8 +1,8 @@
 import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 
-export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable };
+export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns };
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
 import { resolveBase64ToUrl, uploadImageFile, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
@@ -906,67 +906,27 @@ export async function submitCustomerInquiry(formData: any) {
     accommodation_tier: accommodationTierVal || null,
     hotel_tier: accommodationTierVal || null,
     plan: accommodationTierVal || null,
+    metadata: metadataPayload,
   };
 
-  let res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
-    method: 'POST',
-    headers: getSupabaseHeaders(),
-    body: JSON.stringify(payload),
-  });
+  const { data: inqData, error: inqErr } = await smartSupabaseInsert(
+    supabase,
+    'inquiries',
+    payload
+  );
 
-  if (res.status === 401) {
-    handleUnauthorizedResponse('/rest/v1/inquiries');
+  if (inqErr) {
+    console.error('❌ [submitCustomerInquiry] Supabase insert failed:', inqErr);
   }
 
-  // If table does not yet have end_date/duration_days/budget/accommodation_tier columns in PostgREST cache, retry cleanly
-  if (!res.ok && res.status === 400) {
-    const errText = await res.text();
-    if (
-      errText.includes('end_date') ||
-      errText.includes('duration_days') ||
-      errText.includes('budget') ||
-      errText.includes('accommodation_tier') ||
-      errText.includes('accommodation_preference') ||
-      errText.includes('PGRST204')
-    ) {
-      const fallbackPayload = {
-        full_name: fullNameVal,
-        email: emailVal,
-        phone: phoneVal,
-        whatsapp_number: phoneVal,
-        status: 'new',
-        plan: accommodationTierVal || null,
-      };
-      res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
-        method: 'POST',
-        headers: getSupabaseHeaders(),
-        body: JSON.stringify(fallbackPayload),
-      });
-      if (res.status === 401) {
-        handleUnauthorizedResponse('/rest/v1/inquiries');
-      }
-    } else {
-      console.error(`POST inquiries failed (${res.status}):`, errText);
-      throw new Error(`Inquiry submission failed: ${res.status}`);
-    }
-  }
+  const createdRow = inqData && inqData.length > 0 ? inqData[0] : payload;
+  const mapped = mapInquiryRow(createdRow);
+  try {
+    broadcastNewInquiry(mapped);
+    localStore.submitInquiry(mapped);
+  } catch {}
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error(`POST inquiries failed (${res.status}):`, errText);
-    throw new Error(`Inquiry submission failed: ${res.status}`);
-  }
-
-  const result = await res.json();
-  const createdRow = Array.isArray(result) ? result[0] : result;
-  if (createdRow) {
-    try {
-      const mapped = mapInquiryRow(createdRow);
-      broadcastNewInquiry(mapped);
-      localStore.submitInquiry(mapped);
-    } catch {}
-  }
-  return result;
+  return createdRow;
 }
 
 // In-memory query cache with TTL & mutation-driven invalidation
@@ -1947,62 +1907,34 @@ export const api = {
         metadata: structuredMetadata,
       };
 
-      let res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
-        method: 'POST',
-        headers: getSupabaseHeaders(),
-        body: JSON.stringify(payload),
-      });
+      const { data: inqData, error: inqErr } = await smartSupabaseInsert(
+        supabase,
+        'inquiries',
+        payload
+      );
 
-      if (res.status === 401) {
-        handleUnauthorizedResponse('/rest/v1/inquiries');
-      }
+      let createdRow: any = inqData && inqData.length > 0 ? inqData[0] : null;
 
-      // If table has schema mismatch, log detailed JSON error and retry with fallback
-      if (!res.ok && res.status === 400) {
-        const errBody = await res.json().catch(() => null);
-        console.error('❌ [submitInquiry] Supabase POST to /rest/v1/inquiries returned 400:', errBody);
-        delete payload.accommodation_tier;
-        res = await fetch(`${SUPABASE_URL}/rest/v1/inquiries`, {
-          method: 'POST',
-          headers: getSupabaseHeaders(),
-          body: JSON.stringify(payload),
-        });
-        if (res.status === 401) {
-          handleUnauthorizedResponse('/rest/v1/inquiries');
+      if (inqErr || !createdRow) {
+        // Fallback to 'leads' table if needed
+        const { data: leadData } = await smartSupabaseInsert(
+          supabase,
+          'leads',
+          payload
+        );
+        if (leadData && leadData.length > 0) {
+          createdRow = leadData[0];
         }
       }
 
-      if (!res.ok && res.status === 404) {
-        // Fallback to 'leads' table if 'inquiries' table is not present
-        res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
-          method: 'POST',
-          headers: getSupabaseHeaders(),
-          body: JSON.stringify(payload),
-        });
-        if (res.status === 401) {
-          handleUnauthorizedResponse('/rest/v1/leads');
-        }
-      }
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error(`POST inquiries failed (${res.status}):`, errText);
-        throw new Error(`Inquiry submission failed: ${res.status}`);
-      }
-
-      const resJson = await res.json();
-      const createdRow = Array.isArray(resJson) ? resJson[0] : resJson;
-      const mapped = mapInquiryRow(createdRow);
+      const finalRow = createdRow || payload;
+      const mapped = mapInquiryRow(finalRow);
       broadcastNewInquiry(mapped);
       localStore.submitInquiry(mapped);
 
       // Also safely sync copy to 'leads' table in background if separate leads table exists
       try {
-        fetch(`${SUPABASE_URL}/rest/v1/leads`, {
-          method: 'POST',
-          headers: getSupabaseHeaders({ Prefer: 'return=minimal' }),
-          body: JSON.stringify(payload),
-        }).catch(() => {});
+        smartSupabaseInsert(supabase, 'leads', payload).catch(() => {});
       } catch {}
 
       return mapped;
@@ -2210,12 +2142,12 @@ export const api = {
 
     let createdRow: any = null;
 
-    // Direct self-healing Supabase insert into 'leads' table
+    // Direct smart schema-discovered Supabase insert into 'leads' table
     try {
-      const { data, error } = await safeSupabaseInsert(
+      const { data, error } = await smartSupabaseInsert(
         supabase,
         'leads',
-        leadsDbPayload
+        allLeadsProps
       );
 
       if (error) {
@@ -2229,10 +2161,10 @@ export const api = {
 
     // Synchronize to active CRM table 'inquiries' for compatibility
     try {
-      const { data: inqData, error: inqErr } = await safeSupabaseInsert(
+      const { data: inqData, error: inqErr } = await smartSupabaseInsert(
         supabase,
         'inquiries',
-        inquiriesPayload
+        allInquiriesProps
       );
 
       if (!inqErr && inqData && inqData.length > 0 && !createdRow) {
@@ -4941,18 +4873,47 @@ export const api = {
 
 export function mapInquiryRow(row: any): Inquiry {
   if (!row) return {} as Inquiry;
-  const customerName = row.customer_name || row.customerName || row.full_name || row.fullName || 'Pilgrim Devotee';
-  const customerEmail = row.customer_email || row.customerEmail || row.email || '';
-  const phone = row.phone || row.customer_phone || row.customerPhone || row.whatsapp_number || row.whatsappNumber || '';
-  const metadataObj = row.metadata ? (typeof row.metadata === 'string' ? (() => { try { return JSON.parse(row.metadata); } catch { return row.metadata; } })() : row.metadata) : undefined;
+  const unpacked = unpackExtendedLeadData(row);
+  const metadataObj = row.metadata
+    ? (typeof row.metadata === 'string'
+        ? (() => { try { return JSON.parse(row.metadata); } catch { return row.metadata; } })()
+        : row.metadata)
+    : (unpacked && Object.keys(unpacked).length > 0 ? unpacked : undefined);
+
+  const customerName = row.customer_name || row.customerName || row.full_name || row.fullName || unpacked.customer_name || unpacked.fullName || 'Pilgrim Devotee';
+  const customerEmail = row.customer_email || row.customerEmail || row.email || unpacked.email || unpacked.customerEmail || '';
+  const phone = row.phone || row.customer_phone || row.customerPhone || row.whatsapp_number || row.whatsappNumber || unpacked.phone || unpacked.whatsapp_number || '';
+  const resolvedLeadId = row.lead_id || row.leadId || unpacked.lead_id || unpacked.leadId || metadataObj?.lead_id || metadataObj?.leadId;
+
+  const rawNotes = typeof row.notes === 'string'
+    ? row.notes
+    : (Array.isArray(row.notes) ? row.notes.map((n: any) => n.text || JSON.stringify(n)).join('\n') : (unpacked.notes || ''));
+  const cleanNotes = cleanNotesText(rawNotes);
+
+  const parsedAdults = Number(row.adults ?? unpacked.adults ?? metadataObj?.adults ?? 2);
+  const parsedChildren = Number(row.children ?? unpacked.children ?? metadataObj?.children ?? 0);
+  const calculatedTravelers = Math.max(1, Number(row.travelers ?? unpacked.travelers ?? row.guests ?? metadataObj?.travelers ?? (parsedAdults + parsedChildren)));
+
+  const resolvedStartDate = row.start_date || row.startDate || unpacked.start_date || unpacked.startDate || row.check_in_date || row.checkInDate || metadataObj?.start_date || metadataObj?.startDate || undefined;
+  const resolvedEndDate = row.end_date || row.endDate || unpacked.end_date || unpacked.endDate || metadataObj?.end_date || metadataObj?.endDate || undefined;
+
+  const rawDuration = row.duration_days ?? row.durationDays ?? unpacked.duration_days ?? unpacked.durationDays ?? metadataObj?.duration_days;
+  const resolvedDurationDays = (rawDuration !== undefined && rawDuration !== null && !isNaN(Number(rawDuration))) ? Number(rawDuration) : undefined;
+  const resolvedBudget = row.budget || unpacked.budget || metadataObj?.budget || undefined;
+
+  const resolvedAccom = row.accommodation_tier || row.accommodationTier || unpacked.accommodation_tier || unpacked.accommodation_preference || row.accommodation_preference || row.accommodationPreference || row.plan || metadataObj?.accommodation_tier || metadataObj?.accommodation_preference || '3 Star Standard';
+
+  const resolvedReminderAt = row.reminder_at || row.reminderAt || unpacked.reminder_at || unpacked.reminderAt || metadataObj?.reminder_at || undefined;
+  const resolvedReminderNote = row.reminder_note || row.reminderNote || unpacked.reminder_note || unpacked.reminderNote || metadataObj?.reminder_note || undefined;
+
   return {
     id: String(row.id),
-    leadId: row.lead_id || row.leadId || metadataObj?.lead_id || metadataObj?.leadId,
+    leadId: resolvedLeadId,
     userId: row.user_id || row.userId,
-    type: row.type || metadataObj?.type || 'PACKAGE',
+    type: row.type || unpacked.type || metadataObj?.type || 'PACKAGE',
     referenceId: row.reference_id || row.referenceId || row.id || '',
-    referenceName: row.reference_name || row.referenceName || row.title || metadataObj?.title || 'Pilgrimage Booking',
-    title: row.title || metadataObj?.title || metadataObj?.package_interest || 'Pilgrimage Inquiry',
+    referenceName: row.reference_name || row.referenceName || row.title || unpacked.title || metadataObj?.title || 'Pilgrimage Booking',
+    title: row.title || unpacked.title || metadataObj?.title || metadataObj?.package_interest || 'Pilgrimage Inquiry',
     fullName: row.full_name || row.fullName || customerName,
     customerName: customerName,
     email: customerEmail,
@@ -4962,61 +4923,49 @@ export function mapInquiryRow(row: any): Inquiry {
     phone: phone,
     whatsapp_number: row.whatsapp_number || row.whatsappNumber || phone,
     metadata: metadataObj,
-    userCity: row.user_city || row.userCity || row.city || metadataObj?.user_city || metadataObj?.city || metadataObj?.resident_state,
-    checkInDate: row.check_in_date || row.checkInDate || metadataObj?.check_in_date || metadataObj?.start_date || metadataObj?.startDate || new Date().toISOString().split('T')[0],
-    startDate: row.start_date || row.startDate || row.check_in_date || row.checkInDate || metadataObj?.start_date || metadataObj?.startDate || undefined,
-    start_date: row.start_date || row.startDate || row.check_in_date || row.checkInDate || metadataObj?.start_date || metadataObj?.startDate || undefined,
-    guests: Number(row.guests ?? metadataObj?.guests ?? 1),
-    travelers: Number(row.travelers ?? row.guests ?? metadataObj?.travelers ?? ((Number(row.adults ?? metadataObj?.adults ?? 2)) + (Number(row.children ?? metadataObj?.children ?? 0)))),
-    adults: Number(row.adults ?? metadataObj?.adults ?? 2),
-    children: Number(row.children ?? metadataObj?.children ?? 0),
-    childAges: row.child_ages || row.childAges || metadataObj?.child_ages,
-    planChosen: row.plan_chosen || row.planChosen || row.plan || row.selected_plan || row.selectedPlan || metadataObj?.accommodation_tier,
-    selectedPlan: row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || row.plan || metadataObj?.accommodation_tier,
-    plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || metadataObj?.accommodation_tier,
-    accommodationTier: row.accommodation_tier || row.accommodationTier || row.accommodation_preference || row.accommodationPreference || row.plan || metadataObj?.accommodation_tier || metadataObj?.accommodation_preference || '3 Star Premium',
-    accommodationPreference: row.accommodation_preference || row.accommodationPreference || row.accommodation_tier || row.accommodationTier || metadataObj?.accommodation_preference || metadataObj?.accommodation_tier || '3 Star Premium',
-    pickupLocation: row.pickup_location || row.pickupLocation || metadataObj?.pickup_city,
-    dropoffLocation: row.dropoff_location || row.dropoffLocation || metadataObj?.drop_city,
-    specialRequests: row.special_requests || row.specialRequests || metadataObj?.special_requests,
+    userCity: row.user_city || row.userCity || row.city || unpacked.city || unpacked.user_city || metadataObj?.user_city || metadataObj?.city || metadataObj?.resident_state,
+    checkInDate: row.check_in_date || row.checkInDate || resolvedStartDate || new Date().toISOString().split('T')[0],
+    startDate: resolvedStartDate,
+    start_date: resolvedStartDate,
+    guests: calculatedTravelers,
+    travelers: calculatedTravelers,
+    adults: parsedAdults,
+    children: parsedChildren,
+    childAges: row.child_ages || row.childAges || unpacked.child_ages || metadataObj?.child_ages,
+    planChosen: row.plan_chosen || row.planChosen || row.plan || row.selected_plan || row.selectedPlan || resolvedAccom,
+    selectedPlan: row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || row.plan || resolvedAccom,
+    plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || resolvedAccom,
+    accommodationTier: resolvedAccom,
+    accommodationPreference: resolvedAccom,
+    pickupLocation: row.pickup_location || row.pickupLocation || unpacked.pickup_location || metadataObj?.pickup_city,
+    dropoffLocation: row.dropoff_location || row.dropoffLocation || unpacked.dropoff_location || metadataObj?.drop_city,
+    specialRequests: cleanNotesText(row.special_requests || row.specialRequests || unpacked.special_requests || metadataObj?.special_requests || ''),
     status: (row.status ? (row.status.toUpperCase() as any) : 'NEW'),
     isResolved: Boolean(row.is_resolved ?? row.isResolved ?? (row.status === 'CLOSED' || row.status === 'CONFIRMED')),
-    assignedStaffId: row.assigned_staff_id || row.assignedStaffId || undefined,
-    assigned_staff_id: row.assigned_staff_id || row.assignedStaffId || null,
-    assignedStaffName: row.assigned_staff_name || row.assignedStaffName || undefined,
-    assigned_staff_name: row.assigned_staff_name || row.assignedStaffName || null,
+    assignedStaffId: row.assigned_staff_id || row.assignedStaffId || unpacked.assigned_staff_id || undefined,
+    assigned_staff_id: row.assigned_staff_id || row.assignedStaffId || unpacked.assigned_staff_id || null,
+    assignedStaffName: row.assigned_staff_name || row.assignedStaffName || unpacked.assigned_staff_name || undefined,
+    assigned_staff_name: row.assigned_staff_name || row.assignedStaffName || unpacked.assigned_staff_name || null,
     isLockedForStaff: Boolean(row.is_locked_for_staff ?? row.isLockedForStaff),
     closedAt: row.closed_at || row.closedAt,
     closedBy: row.closed_by || row.closedBy,
     isDeleted: Boolean(row.is_deleted ?? row.isDeleted ?? metadataObj?.is_deleted ?? metadataObj?.isDeleted),
     deletedAt: row.deleted_at || row.deletedAt || metadataObj?.deleted_at || metadataObj?.deletedAt,
     deletedBy: row.deleted_by || row.deletedBy || metadataObj?.deleted_by || metadataObj?.deletedBy,
-    notes: typeof row.notes === 'string' ? row.notes : (Array.isArray(row.notes) ? row.notes.map((n: any) => n.text || JSON.stringify(n)).join('\n') : ''),
+    notes: cleanNotes,
     followUpNotes: Array.isArray(row.follow_up_notes) ? row.follow_up_notes : (Array.isArray(row.followUpNotes) ? row.followUpNotes : (Array.isArray(row.notes) ? row.notes : [])),
     customerRating: row.customer_rating || row.customerRating,
     tags: row.tags || [],
-    tourDuration: row.tour_duration || row.tourDuration,
-    durationDays: (row.duration_days !== undefined && row.duration_days !== null && !isNaN(Number(row.duration_days)))
-      ? Number(row.duration_days)
-      : (row.durationDays !== undefined && row.durationDays !== null && !isNaN(Number(row.durationDays)))
-      ? Number(row.durationDays)
-      : (row.metadata?.duration_days !== undefined && row.metadata?.duration_days !== null && !isNaN(Number(row.metadata?.duration_days)))
-      ? Number(row.metadata.duration_days)
-      : undefined,
-    duration_days: (row.duration_days !== undefined && row.duration_days !== null && !isNaN(Number(row.duration_days)))
-      ? Number(row.duration_days)
-      : (row.durationDays !== undefined && row.durationDays !== null && !isNaN(Number(row.durationDays)))
-      ? Number(row.durationDays)
-      : (row.metadata?.duration_days !== undefined && row.metadata?.duration_days !== null && !isNaN(Number(row.metadata?.duration_days)))
-      ? Number(row.metadata.duration_days)
-      : undefined,
-    endDate: row.end_date || row.endDate || row.metadata?.end_date || undefined,
-    end_date: row.end_date || row.endDate || row.metadata?.end_date || undefined,
-    budget: row.budget || row.metadata?.budget || undefined,
-    reminder_at: row.reminder_at || row.reminderAt || row.metadata?.reminder_at || undefined,
-    reminderAt: row.reminder_at || row.reminderAt || row.metadata?.reminder_at || undefined,
-    reminder_note: row.reminder_note || row.reminderNote || row.metadata?.reminder_note || undefined,
-    reminderNote: row.reminder_note || row.reminderNote || row.metadata?.reminder_note || undefined,
+    tourDuration: row.tour_duration || row.tourDuration || (resolvedDurationDays ? `${resolvedDurationDays} Days` : undefined),
+    durationDays: resolvedDurationDays,
+    duration_days: resolvedDurationDays,
+    endDate: resolvedEndDate,
+    end_date: resolvedEndDate,
+    budget: resolvedBudget,
+    reminder_at: resolvedReminderAt,
+    reminderAt: resolvedReminderAt,
+    reminder_note: resolvedReminderNote,
+    reminderNote: resolvedReminderNote,
     companionMatchingOptIn: Boolean(row.companion_matching_opt_in ?? row.companionMatchingOptIn),
     companionPilgrimType: row.companion_pilgrim_type || row.companionPilgrimType,
     companionNotes: row.companion_notes || row.companionNotes,

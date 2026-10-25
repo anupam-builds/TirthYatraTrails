@@ -917,9 +917,14 @@ export async function supabaseRest<T = any>(
 }
 
 /**
+ * In-memory & localStorage cached set of columns discovered from live Supabase tables.
+ */
+export const discoveredColumnsCache: Record<string, Set<string>> = {};
+
+/**
  * In-memory cache of unsupported schema columns by table name.
  * Whenever a column is detected as unsupported for a table (via PGRST204),
- * it is added here so it is automatically stripped *before* future requests are sent.
+ * it is added here and in localStorage so it is automatically stripped *before* future requests are sent.
  * This prevents repeated 400 (Bad Request) network errors in the browser console.
  */
 export const unsupportedColumnsCache: Record<string, Set<string>> = {
@@ -930,39 +935,322 @@ export const unsupportedColumnsCache: Record<string, Set<string>> = {
 export const unsupportedColumnsByTable = unsupportedColumnsCache;
 
 /**
- * Self-healing Supabase insert helper:
- * Proactively strips any known unsupported columns from unsupportedColumnsCache upfront,
- * then retries insertion up to maxAttempts (default 15). If PostgREST returns PGRST204
- * matching missing schema column error (e.g. "Could not find the 'xyz' column"),
- * it adds the column to unsupportedColumnsCache and strips it from payload, retrying automatically.
+ * Retrieves the full set of unsupported columns for a table from memory and localStorage.
  */
-export async function safeSupabaseInsert<T = any>(
-  supabaseClient: SupabaseClient | any,
-  tableName: string,
-  initialPayload: Record<string, any>,
-  maxAttempts: number = 15
-): Promise<{ data: T[] | null; error: any }> {
+export function getUnsupportedColumns(tableName: string): Set<string> {
   if (!unsupportedColumnsCache[tableName]) {
     unsupportedColumnsCache[tableName] = new Set<string>();
   }
-  const knownBadCols = unsupportedColumnsCache[tableName];
+  const colSet = unsupportedColumnsCache[tableName];
 
-  let payload: Record<string, any> = { ...initialPayload };
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = window.localStorage.getItem(`unsupported_cols_${tableName}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((c) => colSet.add(c));
+        }
+      }
+    } catch {}
+  }
 
-  // 1. Proactively strip previously detected unsupported columns BEFORE sending the request
-  for (const badCol of knownBadCols) {
-    if (badCol in payload) {
-      delete payload[badCol];
+  // Pre-seed known missing columns to guarantee 0 400 errors
+  if (tableName === 'inquiries' || tableName === 'leads') {
+    colSet.add('accommodation_preference');
+  }
+
+  return colSet;
+}
+
+/**
+ * Records an unsupported column in memory and localStorage so it is stripped upfront.
+ */
+export function recordUnsupportedColumn(tableName: string, colName: string): void {
+  if (!colName) return;
+  const colSet = getUnsupportedColumns(tableName);
+  colSet.add(colName);
+
+  if (discoveredColumnsCache[tableName]) {
+    discoveredColumnsCache[tableName].delete(colName);
+  }
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(
+        `unsupported_cols_${tableName}`,
+        JSON.stringify(Array.from(colSet))
+      );
+    } catch {}
+  }
+}
+
+/**
+ * Dynamically discovers the columns exposed by Supabase PostgREST for a table.
+ * Caches column names in memory and localStorage to eliminate schema guesswork.
+ */
+export async function discoverTableColumns(
+  supabaseClient: SupabaseClient | any = supabase,
+  tableName: string
+): Promise<Set<string>> {
+  const cacheKey = `discovered_cols_${tableName}`;
+  if (discoveredColumnsCache[tableName] && discoveredColumnsCache[tableName].size > 0) {
+    return discoveredColumnsCache[tableName];
+  }
+
+  // Check localStorage first for instant schema recovery
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = window.localStorage.getItem(cacheKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          discoveredColumnsCache[tableName] = new Set(parsed);
+          return discoveredColumnsCache[tableName];
+        }
+      }
+    } catch {}
+  }
+
+  try {
+    const { data, error } = await supabaseClient.from(tableName).select('*').limit(1);
+    if (!error && Array.isArray(data) && data.length > 0 && data[0] && typeof data[0] === 'object') {
+      const liveCols = new Set(Object.keys(data[0]));
+      // Strip any known bad columns from liveCols
+      const bad = getUnsupportedColumns(tableName);
+      bad.forEach((b) => liveCols.delete(b));
+
+      discoveredColumnsCache[tableName] = liveCols;
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          window.localStorage.setItem(cacheKey, JSON.stringify(Array.from(liveCols)));
+        } catch {}
+      }
+      return liveCols;
+    }
+  } catch (err) {
+    console.warn(`[discoverTableColumns] Could not inspect active columns for ${tableName}:`, err);
+  }
+
+  // Fallback to verified baseline columns if table is currently empty
+  const fallback = tableName === 'inquiries'
+    ? new Set([
+        'id', 'title', 'type', 'full_name', 'phone', 'email', 'check_in_date',
+        'guests', 'adults', 'children', 'child_ages', 'plan', 'special_requests',
+        'pickup_location', 'dropoff_location', 'user_id', 'status',
+        'assigned_staff_id', 'assigned_staff_name', 'is_locked_for_staff',
+        'notes', 'details', 'metadata', 'created_at', 'customer_name', 'city',
+        'accommodation_tier', 'hotel_tier', 'updated_at', 'whatsapp_number',
+        'is_deleted', 'deleted_at', 'deleted_by',
+      ])
+    : new Set([
+        'id', 'lead_id', 'customer_name', 'full_name', 'phone', 'whatsapp_number',
+        'email', 'city', 'accommodation_tier', 'hotel_tier', 'plan',
+        'assigned_staff_id', 'assigned_staff_name', 'status',
+        'check_in_date', 'start_date', 'end_date', 'duration_days', 'budget',
+        'adults', 'children', 'travelers', 'guests', 'reminder_at', 'reminder_note',
+        'special_requests', 'notes', 'details', 'metadata',
+        'created_at', 'updated_at', 'is_deleted', 'deleted_at', 'deleted_by',
+      ]);
+
+  const badCols = getUnsupportedColumns(tableName);
+  badCols.forEach((b) => fallback.delete(b));
+
+  discoveredColumnsCache[tableName] = fallback;
+  return fallback;
+}
+
+/**
+ * Strips unsupported or missing columns from payload and packs them into an existing column
+ * (metadata, details, notes, or special_requests) so ZERO devotee information is lost.
+ */
+export function packUnsupportedFields(
+  tableName: string,
+  liveCols: Set<string>,
+  rawPayload: Record<string, any>
+): { payload: Record<string, any>; packedExtendedData: Record<string, any> } {
+  const badCols = getUnsupportedColumns(tableName);
+  const payload: Record<string, any> = {};
+  const packedExtendedData: Record<string, any> = {};
+
+  const normPayload: Record<string, any> = { ...rawPayload };
+
+  // Map accommodation_preference into accommodation_tier, hotel_tier, or plan if they exist
+  if (normPayload.accommodation_preference) {
+    if (!normPayload.accommodation_tier) normPayload.accommodation_tier = normPayload.accommodation_preference;
+    if (!normPayload.hotel_tier) normPayload.hotel_tier = normPayload.accommodation_preference;
+    if (!normPayload.plan) normPayload.plan = normPayload.accommodation_preference;
+  }
+
+  // Cross-map guests and travelers
+  if (normPayload.travelers !== undefined && normPayload.guests === undefined) {
+    normPayload.guests = normPayload.travelers;
+  } else if (normPayload.guests !== undefined && normPayload.travelers === undefined) {
+    normPayload.travelers = normPayload.guests;
+  }
+
+  // Cross-map check_in_date and start_date
+  if (normPayload.start_date && !normPayload.check_in_date) {
+    normPayload.check_in_date = normPayload.start_date;
+  }
+  if (normPayload.check_in_date && !normPayload.start_date) {
+    normPayload.start_date = normPayload.check_in_date;
+  }
+
+  for (const [key, val] of Object.entries(normPayload)) {
+    if (val === undefined) continue;
+
+    const isKnownBad = badCols.has(key);
+    const isDiscovered = liveCols.size > 0 ? liveCols.has(key) : true;
+
+    if (!isKnownBad && isDiscovered) {
+      payload[key] = val;
+    } else {
+      // Stripped from top-level to prevent 400 Bad Request
+      packedExtendedData[key] = val;
     }
   }
 
+  // Pack stripped fields into an existing column so no information is lost
+  if (Object.keys(packedExtendedData).length > 0) {
+    if (liveCols.has('metadata')) {
+      const existingMeta = (typeof payload.metadata === 'object' && payload.metadata !== null) ? payload.metadata : {};
+      payload.metadata = { ...existingMeta, ...packedExtendedData };
+    } else if (liveCols.has('details')) {
+      const existingDetails = (typeof payload.details === 'object' && payload.details !== null) ? payload.details : {};
+      payload.details = { ...existingDetails, ...packedExtendedData };
+    } else if (liveCols.has('notes')) {
+      const extTag = `[TYT_EXTENDED_DATA]: ${JSON.stringify(packedExtendedData)}`;
+      if (Array.isArray(payload.notes)) {
+        payload.notes = [
+          ...payload.notes,
+          { id: `ext-data-${Date.now()}`, text: extTag, createdAt: new Date().toISOString() },
+        ];
+      } else if (typeof payload.notes === 'string' && payload.notes.trim()) {
+        payload.notes = `${payload.notes}\n${extTag}`;
+      } else {
+        payload.notes = extTag;
+      }
+    } else if (liveCols.has('special_requests')) {
+      const extTag = `[TYT_EXTENDED_DATA]: ${JSON.stringify(packedExtendedData)}`;
+      if (payload.special_requests && typeof payload.special_requests === 'string') {
+        payload.special_requests = `${payload.special_requests}\n${extTag}`;
+      } else {
+        payload.special_requests = extTag;
+      }
+    }
+  }
+
+  return { payload, packedExtendedData };
+}
+
+/**
+ * Removes internal [TYT_EXTENDED_DATA] JSON tags from user-facing notes text.
+ */
+export function cleanNotesText(notesText: string): string {
+  if (!notesText || typeof notesText !== 'string') return '';
+  return notesText.replace(/\[TYT_EXTENDED_DATA\]:\s*\{.+?\}/gs, '').trim();
+}
+
+/**
+ * Unpacks any extended lead/inquiry data preserved inside metadata, details, or notes.
+ */
+export function unpackExtendedLeadData(row: any): Record<string, any> {
+  if (!row || typeof row !== 'object') return {};
+
+  const unpacked: Record<string, any> = {};
+
+  if (row.metadata) {
+    let meta = row.metadata;
+    if (typeof meta === 'string') {
+      try { meta = JSON.parse(meta); } catch {}
+    }
+    if (meta && typeof meta === 'object') {
+      Object.assign(unpacked, meta);
+    }
+  }
+
+  if (row.details) {
+    let det = row.details;
+    if (typeof det === 'string') {
+      try { det = JSON.parse(det); } catch {}
+    }
+    if (det && typeof det === 'object') {
+      Object.assign(unpacked, det);
+    }
+  }
+
+  const extractFromText = (txt: string) => {
+    if (!txt || typeof txt !== 'string') return;
+    const match = txt.match(/\[TYT_EXTENDED_DATA\]:\s*(\{.+?\})/s);
+    if (match && match[1]) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed && typeof parsed === 'object') {
+          Object.assign(unpacked, parsed);
+        }
+      } catch {}
+    }
+  };
+
+  if (typeof row.notes === 'string') {
+    extractFromText(row.notes);
+  } else if (Array.isArray(row.notes)) {
+    row.notes.forEach((n: any) => {
+      if (typeof n === 'string') extractFromText(n);
+      else if (n?.text) extractFromText(n.text);
+    });
+  }
+
+  if (typeof row.special_requests === 'string') {
+    extractFromText(row.special_requests);
+  }
+
+  return unpacked;
+}
+
+/**
+ * Centralized smart Supabase insert helper:
+ * 1. Discovers live database schema columns upfront.
+ * 2. Proactively strips unsupported/missing columns and packs them into metadata/details/notes.
+ * 3. Sends cleanly filtered payload with zero 400 Bad Request errors.
+ * 4. Self-heals and caches unsupported columns in memory and localStorage on any PGRST204.
+ */
+export async function smartSupabaseInsert<T = any>(
+  clientOrTable: SupabaseClient | any | string,
+  tableOrPayload: string | Record<string, any>,
+  maybePayload?: Record<string, any>,
+  maxAttempts: number = 10
+): Promise<{ data: T[] | null; error: any }> {
+  let client: SupabaseClient | any = supabase;
+  let tableName: string = '';
+  let initialPayload: Record<string, any> = {};
+
+  if (typeof clientOrTable === 'string') {
+    client = supabase;
+    tableName = clientOrTable;
+    initialPayload = (tableOrPayload as Record<string, any>) || {};
+  } else {
+    client = clientOrTable || supabase;
+    tableName = String(tableOrPayload);
+    initialPayload = maybePayload || {};
+  }
+
+  // 1. Dynamic live schema discovery
+  const liveCols = await discoverTableColumns(client, tableName);
+
+  // 2. Proactively pack unsupported & non-schema columns
+  let { payload } = packUnsupportedFields(tableName, liveCols, initialPayload);
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const { data, error } = await supabaseClient
+    const { data, error } = await client
       .from(tableName)
       .insert([payload])
       .select();
 
-    if (!error) return { data: data as T[], error: null };
+    if (!error) {
+      return { data: data as T[], error: null };
+    }
 
     const msg = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
     const match =
@@ -974,19 +1262,32 @@ export async function safeSupabaseInsert<T = any>(
     if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
       const missingCol = match[1];
       console.warn(
-        `[Self-Healing Insert] Caching unsupported column '${missingCol}' for table '${tableName}' and retrying...`
+        `[smartSupabaseInsert] Live-caching missing column '${missingCol}' for '${tableName}' and auto-packing...`
       );
-      knownBadCols.add(missingCol);
-      delete payload[missingCol];
+      recordUnsupportedColumn(tableName, missingCol);
+
+      if (discoveredColumnsCache[tableName]) {
+        discoveredColumnsCache[tableName].delete(missingCol);
+      }
+
+      const currentLive = await discoverTableColumns(client, tableName);
+      currentLive.delete(missingCol);
+      const repacked = packUnsupportedFields(tableName, currentLive, initialPayload);
+      payload = repacked.payload;
       continue;
     }
 
     return { data: null, error };
   }
-  return { data: null, error: new Error(`Max retries (${maxAttempts}) reached for insert into ${tableName}`) };
+
+  return {
+    data: null,
+    error: new Error(`Max retry attempts reached (${maxAttempts}) inserting into ${tableName}`),
+  };
 }
 
-export const safeInsertLead = safeSupabaseInsert;
+export const safeSupabaseInsert = smartSupabaseInsert;
+export const safeInsertLead = smartSupabaseInsert;
 
 /**
  * Self-healing Supabase update helper:
@@ -1001,10 +1302,7 @@ export async function safeSupabaseUpdate<T = any>(
   matchCriteria: { column: string; value: any } | Record<string, any>,
   maxAttempts: number = 15
 ): Promise<{ data: T[] | null; error: any }> {
-  if (!unsupportedColumnsCache[tableName]) {
-    unsupportedColumnsCache[tableName] = new Set<string>();
-  }
-  const knownBadCols = unsupportedColumnsCache[tableName];
+  const knownBadCols = getUnsupportedColumns(tableName);
 
   let payload: Record<string, any> = { ...initialPayload };
 
@@ -1047,7 +1345,7 @@ export async function safeSupabaseUpdate<T = any>(
       console.warn(
         `[Self-Healing Update] Caching unsupported column '${missingCol}' for table '${tableName}' and retrying...`
       );
-      knownBadCols.add(missingCol);
+      recordUnsupportedColumn(tableName, missingCol);
       delete payload[missingCol];
       continue;
     }

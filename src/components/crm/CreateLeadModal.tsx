@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember, Package } from '../../types.js';
 import { api, mapInquiryRow } from '../../services/api.js';
-import { supabase, safeSupabaseInsert } from '../../lib/supabase.js';
+import { supabase, smartSupabaseInsert, safeSupabaseInsert } from '../../lib/supabase.js';
 import { localStore } from '../../services/localStore.js';
 import { broadcastNewInquiry } from '../../services/soundNotification.js';
 import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
@@ -307,20 +307,13 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         'updated_at',
       ]);
 
-      const cleanPayload: Record<string, any> = {};
-      for (const [k, v] of Object.entries(rawPayload)) {
-        if (ALLOWED_LEADS_COLUMNS.has(k) && v !== undefined && k !== 'accommodation_preference') {
-          cleanPayload[k] = v;
-        }
-      }
+      console.log('🚀 [CreateLeadModal] Direct smart Supabase insertion into leads table:', rawPayload);
 
-      console.log('🚀 [CreateLeadModal] Direct self-healing Supabase insertion into leads table:', cleanPayload);
-
-      // Direct self-healing insertion into Supabase leads table
-      const { data, error: insertError } = await safeSupabaseInsert(
+      // Direct smart schema-discovered insertion into Supabase leads table
+      const { data, error: insertError } = await smartSupabaseInsert(
         supabase,
         'leads',
-        cleanPayload
+        rawPayload
       );
 
       if (insertError) {
@@ -330,14 +323,12 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         return;
       }
 
-      // Non-blocking self-healing mirror into inquiries table for cross-view query tolerance
+      // Non-blocking smart schema-discovered mirror into inquiries table for cross-view query tolerance
       try {
-        const inqPayload = { ...cleanPayload };
-        delete inqPayload.accommodation_preference;
-        await safeSupabaseInsert(supabase, 'inquiries', inqPayload);
+        await smartSupabaseInsert(supabase, 'inquiries', rawPayload);
       } catch {}
 
-      const createdRow = data && data.length > 0 ? data[0] : cleanPayload;
+      const createdRow = data && data.length > 0 ? data[0] : rawPayload;
       const mapped = mapInquiryRow(createdRow);
       mapped.id = leadUuid;
       mapped.leadId = nextLeadId;
@@ -356,10 +347,10 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
       mapped.reminder_at = reminderAt ? new Date(reminderAt).toISOString() : undefined;
       mapped.reminderNote = reminderNote.trim() || undefined;
       mapped.reminder_note = reminderNote.trim() || undefined;
-      mapped.assignedStaffId = cleanPayload.assigned_staff_id || undefined;
-      mapped.assigned_staff_id = cleanPayload.assigned_staff_id || null;
-      mapped.assignedStaffName = cleanPayload.assigned_staff_name || undefined;
-      mapped.assigned_staff_name = cleanPayload.assigned_staff_name || null;
+      mapped.assignedStaffId = rawPayload.assigned_staff_id || undefined;
+      mapped.assigned_staff_id = rawPayload.assigned_staff_id || null;
+      mapped.assignedStaffName = rawPayload.assigned_staff_name || undefined;
+      mapped.assigned_staff_name = rawPayload.assigned_staff_name || null;
 
       // Synchronize in-memory/local stores and sound notification
       try {
@@ -368,7 +359,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
       } catch {}
 
       console.log('✅ [CreateLeadModal] Lead created successfully in Supabase:', mapped);
-      setSuccessMsg(`Lead ${mapped.leadId || cleanPayload.lead_id} created successfully!`);
+      setSuccessMsg(`Lead ${mapped.leadId || rawPayload.lead_id} created successfully!`);
 
       // Immediately append new lead to UI state and close modal
       onSuccess(mapped);
