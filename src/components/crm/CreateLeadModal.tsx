@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember, Package } from '../../types.js';
 import { api, mapInquiryRow } from '../../services/api.js';
-import { supabase } from '../../lib/supabase.js';
+import { supabase, safeSupabaseInsert } from '../../lib/supabase.js';
 import { localStore } from '../../services/localStore.js';
 import { broadcastNewInquiry } from '../../services/soundNotification.js';
 import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
@@ -302,13 +302,14 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         }
       }
 
-      console.log('🚀 [CreateLeadModal] Direct Supabase insertion into leads table:', cleanPayload);
+      console.log('🚀 [CreateLeadModal] Direct self-healing Supabase insertion into leads table:', cleanPayload);
 
-      // Direct insertion into Supabase leads table
-      const { data, error: insertError } = await supabase
-        .from('leads')
-        .insert([cleanPayload])
-        .select();
+      // Direct self-healing insertion into Supabase leads table
+      const { data, error: insertError } = await safeSupabaseInsert(
+        supabase,
+        'leads',
+        cleanPayload
+      );
 
       if (insertError) {
         console.error('❌ [CreateLeadModal] Direct Supabase lead insertion error:', insertError);
@@ -317,9 +318,9 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         return;
       }
 
-      // Non-blocking mirror into inquiries table for cross-view query tolerance
+      // Non-blocking self-healing mirror into inquiries table for cross-view query tolerance
       try {
-        await supabase.from('inquiries').insert([cleanPayload]);
+        await safeSupabaseInsert(supabase, 'inquiries', cleanPayload);
       } catch {}
 
       const createdRow = data && data.length > 0 ? data[0] : cleanPayload;

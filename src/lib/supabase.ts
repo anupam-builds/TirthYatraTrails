@@ -916,4 +916,105 @@ export async function supabaseRest<T = any>(
   }
 }
 
+/**
+ * Self-healing Supabase insert helper:
+ * Retries insertion up to maxAttempts (default 15). If PostgREST returns PGRST204
+ * matching missing schema column error (e.g. "Could not find the 'xyz' column"),
+ * it strips that missing column key from the payload and retries automatically until it succeeds.
+ */
+export async function safeSupabaseInsert<T = any>(
+  supabaseClient: SupabaseClient | any,
+  tableName: string,
+  initialPayload: Record<string, any>,
+  maxAttempts: number = 15
+): Promise<{ data: T[] | null; error: any }> {
+  let payload: Record<string, any> = { ...initialPayload };
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .insert([payload])
+      .select();
+
+    if (!error) return { data: data as T[], error: null };
+
+    const msg = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
+    const match =
+      msg.match(/Could not find the '([^']+)' column/i) ||
+      msg.match(/Could not find the "([^"]+)" column/i) ||
+      msg.match(/column ["']([^"']+)["'] of relation/i) ||
+      msg.match(/column ["']([^"']+)["'] does not exist/i);
+
+    if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
+      const missingCol = match[1];
+      console.warn(
+        `[Self-Healing Insert] Stripping unsupported column '${missingCol}' from ${tableName} payload and retrying...`
+      );
+      delete payload[missingCol];
+      continue;
+    }
+
+    return { data: null, error };
+  }
+  return { data: null, error: new Error(`Max retries (${maxAttempts}) reached for insert into ${tableName}`) };
+}
+
+export const safeInsertLead = safeSupabaseInsert;
+
+/**
+ * Self-healing Supabase update helper:
+ * Retries update up to maxAttempts (default 15). If PostgREST returns PGRST204
+ * matching missing schema column error, it strips that column from the update payload
+ * and retries until it succeeds.
+ */
+export async function safeSupabaseUpdate<T = any>(
+  supabaseClient: SupabaseClient | any,
+  tableName: string,
+  initialPayload: Record<string, any>,
+  matchCriteria: { column: string; value: any } | Record<string, any>,
+  maxAttempts: number = 15
+): Promise<{ data: T[] | null; error: any }> {
+  let payload: Record<string, any> = { ...initialPayload };
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let query = supabaseClient.from(tableName).update(payload);
+
+    if (
+      typeof matchCriteria === 'object' &&
+      matchCriteria !== null &&
+      'column' in matchCriteria &&
+      'value' in matchCriteria
+    ) {
+      query = query.eq((matchCriteria as any).column, (matchCriteria as any).value);
+    } else if (typeof matchCriteria === 'object' && matchCriteria !== null) {
+      for (const [col, val] of Object.entries(matchCriteria)) {
+        query = query.eq(col, val);
+      }
+    }
+
+    const { data, error } = await query.select();
+
+    if (!error) return { data: data as T[], error: null };
+
+    const msg = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
+    const match =
+      msg.match(/Could not find the '([^']+)' column/i) ||
+      msg.match(/Could not find the "([^"]+)" column/i) ||
+      msg.match(/column ["']([^"']+)["'] of relation/i) ||
+      msg.match(/column ["']([^"']+)["'] does not exist/i);
+
+    if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
+      const missingCol = match[1];
+      console.warn(
+        `[Self-Healing Update] Stripping unsupported column '${missingCol}' from ${tableName} payload and retrying...`
+      );
+      delete payload[missingCol];
+      continue;
+    }
+
+    return { data: null, error };
+  }
+  return { data: null, error: new Error(`Max retries (${maxAttempts}) reached for update on ${tableName}`) };
+}
+
+export const safeUpdateLead = safeSupabaseUpdate;
+
 export default supabase;

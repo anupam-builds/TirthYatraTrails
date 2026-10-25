@@ -1,6 +1,8 @@
 import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
+
+export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead };
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
 import { resolveBase64ToUrl, uploadImageFile, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
@@ -300,15 +302,15 @@ export async function resilientPatchRecord(
     }
   }
 
-  // 2. SDK fallback: Strictly targets primary key column 'id' using exact record ID
+  // 2. SDK fallback: Strictly targets primary key column 'id' using self-healing update
   for (const table of tables) {
     for (const cid of candidateIds) {
       try {
-        const { data, error } = await supabase.from(table).update(cleanPayload).eq('id', cid).select().maybeSingle();
+        const { data, error } = await safeSupabaseUpdate(supabase, table, cleanPayload, { id: cid });
         if (error) {
           console.error(`SDK update failed details (${table}.id=${cid}):`, error);
-        } else if (data) {
-          return data;
+        } else if (data && data.length > 0) {
+          return data[0];
         }
       } catch {}
     }
@@ -751,17 +753,17 @@ export async function updateLeadOrInquiryStatus(
           tablePayload.reminder_note = cleanReminderNote;
         }
 
-        const { data, error } = await supabase
-          .from(table)
-          .update(tablePayload)
-          .eq('id', resolvedId)
-          .select()
-          .maybeSingle();
+        const { data: updateData, error } = await safeSupabaseUpdate(
+          supabase,
+          table,
+          tablePayload,
+          { id: resolvedId }
+        );
 
         if (error) {
           console.error(`❌ [updateLeadOrInquiryStatus] Supabase SDK update error on ${table}:`, error);
-        } else if (data) {
-          updatedRow = data;
+        } else if (updateData && updateData.length > 0) {
+          updatedRow = updateData[0];
           finalTargetTable = table;
           console.log(`✅ [API] SDK Fallback persisted update to ${table}:`, updatedRow);
           break;
@@ -2205,12 +2207,13 @@ export const api = {
 
     let createdRow: any = null;
 
-    // Direct Supabase insert into 'leads' table
+    // Direct self-healing Supabase insert into 'leads' table
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .insert([leadsDbPayload])
-        .select();
+      const { data, error } = await safeSupabaseInsert(
+        supabase,
+        'leads',
+        leadsDbPayload
+      );
 
       if (error) {
         console.error('❌ [createManualLead] Supabase leads insertion error:', error);
@@ -2223,10 +2226,11 @@ export const api = {
 
     // Synchronize to active CRM table 'inquiries' for compatibility
     try {
-      const { data: inqData, error: inqErr } = await supabase
-        .from('inquiries')
-        .insert([inquiriesPayload])
-        .select();
+      const { data: inqData, error: inqErr } = await safeSupabaseInsert(
+        supabase,
+        'inquiries',
+        inquiriesPayload
+      );
 
       if (!inqErr && inqData && inqData.length > 0 && !createdRow) {
         createdRow = inqData[0];
@@ -2591,13 +2595,15 @@ export const api = {
     // Strictly target the 'inquiries' table only.
     // Strip out non-existent fields like 'updated_at', 'metadata', or 'deleted_by'.
     // Only send fields verified to exist in the database schema:
-    const { error } = await supabase
-      .from('inquiries')
-      .update({
+    const { error } = await safeSupabaseUpdate(
+      supabase,
+      'inquiries',
+      {
         is_deleted: true,
         deleted_at: nowIso,
-      })
-      .eq('id', recordId);
+      },
+      { id: recordId }
+    );
 
     if (error) console.error("Soft delete error on inquiries:", error);
 
@@ -2639,16 +2645,16 @@ export const api = {
     const recordId = cleanId;
 
     // 1. Soft Delete Implementation:
-    // Strictly target the 'leads' table only.
-    // Strip out non-existent fields like 'updated_at', 'metadata', or 'deleted_by'.
-    // Only send fields verified to exist in the database schema:
-    const { error } = await supabase
-      .from('leads')
-      .update({
+    // Strictly target the 'leads' table only with self-healing update
+    const { error } = await safeSupabaseUpdate(
+      supabase,
+      'leads',
+      {
         is_deleted: true,
         deleted_at: nowIso,
-      })
-      .eq('id', recordId);
+      },
+      { id: recordId }
+    );
 
     if (error) console.error("Soft delete error on leads:", error);
 
@@ -2765,18 +2771,22 @@ export const api = {
       restorePayload.assigned_staff_id = sId;
     }
 
-    let { error } = await supabase
-      .from(primaryTable)
-      .update(restorePayload)
-      .eq('id', recordId);
+    let { error } = await safeSupabaseUpdate(
+      supabase,
+      primaryTable,
+      restorePayload,
+      { id: recordId }
+    );
 
     if (error) {
       console.error(`Restore error on ${primaryTable}:`, error);
       // Fallback to alternate table in case record is located there
-      const altRes = await supabase
-        .from(fallbackTable)
-        .update(restorePayload)
-        .eq('id', recordId);
+      const altRes = await safeSupabaseUpdate(
+        supabase,
+        fallbackTable,
+        restorePayload,
+        { id: recordId }
+      );
       if (altRes.error) {
         console.error(`Restore error on ${fallbackTable}:`, altRes.error);
       }
@@ -2986,17 +2996,19 @@ export const api = {
         created_at: nowIso,
       };
 
-      let { data, error } = await supabase
-        .from('admin_allowlist')
-        .insert([allowlistPayload])
-        .select();
+      let { data, error } = await safeSupabaseInsert(
+        supabase,
+        'admin_allowlist',
+        allowlistPayload
+      );
 
       if (error && (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('already exists'))) {
-        const { data: updateData } = await supabase
-          .from('admin_allowlist')
-          .update(allowlistPayload)
-          .eq('email', staffEmail)
-          .select();
+        const { data: updateData } = await safeSupabaseUpdate(
+          supabase,
+          'admin_allowlist',
+          allowlistPayload,
+          { email: staffEmail }
+        );
         if (updateData && updateData.length > 0) {
           data = updateData;
           error = null;
@@ -3033,17 +3045,19 @@ export const api = {
     };
 
     try {
-      let { data, error } = await supabase
-        .from('staff_members')
-        .insert([insertData])
-        .select();
+      let { data, error } = await safeSupabaseInsert(
+        supabase,
+        'staff_members',
+        insertData
+      );
 
       if (error && (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('already exists'))) {
-        const { data: updateData, error: updateErr } = await supabase
-          .from('staff_members')
-          .update(insertData)
-          .eq('email', staffEmail)
-          .select();
+        const { data: updateData, error: updateErr } = await safeSupabaseUpdate(
+          supabase,
+          'staff_members',
+          insertData,
+          { email: staffEmail }
+        );
         if (updateData && updateData.length > 0) {
           data = updateData;
           error = null;
@@ -3109,8 +3123,14 @@ export const api = {
       if ((staff as any).isActive !== undefined) payload.is_active = (staff as any).isActive;
       if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
 
-      // Update in staff_members
-      const { data } = await supabase.from('staff_members').update(payload).eq('id', id).select().maybeSingle();
+      // Self-healing update in staff_members
+      const { data: updateData } = await safeSupabaseUpdate(
+        supabase,
+        'staff_members',
+        payload,
+        { id }
+      );
+      const data = updateData && updateData.length > 0 ? updateData[0] : null;
 
       // Sync allowlist if email or role changed
       if (staff.email || staff.role) {
@@ -3118,9 +3138,9 @@ export const api = {
         if (staff.role) allowUpdates.role = staff.role;
         if (staff.email) allowUpdates.email = staff.email;
         if (isValidUUID(id)) {
-          await supabase.from('admin_allowlist').update(allowUpdates).eq('id', id);
+          await safeSupabaseUpdate(supabase, 'admin_allowlist', allowUpdates, { id });
         } else if (staff.email) {
-          await supabase.from('admin_allowlist').update(allowUpdates).eq('email', staff.email);
+          await safeSupabaseUpdate(supabase, 'admin_allowlist', allowUpdates, { email: staff.email });
         }
       }
 

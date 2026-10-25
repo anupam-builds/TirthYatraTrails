@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api, updateLeadOrInquiryStatus, cleanUnassignedValue, matchLeadId, mergeUpdatedLeadFields, mapInquiryRow, isValidEntityId } from '../../services/api.js';
-import { supabase } from '../../lib/supabase.js';
+import { supabase, safeSupabaseUpdate } from '../../lib/supabase.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../services/soundNotification.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -591,15 +591,17 @@ export const AdminInquiries: React.FC = () => {
       const isLead = cleanId.startsWith('lead-') || (inq as any)?.type === 'lead';
       const targetTable = isLead ? 'leads' : 'inquiries';
 
-      // 1. Direct Supabase update: set is_deleted back to false and clear deletion timestamps
-      const { error } = await supabase
-        .from(targetTable)
-        .update({
+      // 1. Direct Supabase self-healing update: set is_deleted back to false and clear deletion timestamps
+      const { error } = await safeSupabaseUpdate(
+        supabase,
+        targetTable,
+        {
           is_deleted: false,
           deleted_at: null,
           deleted_by: null,
-        })
-        .eq('id', cleanId);
+        },
+        { id: cleanId }
+      );
 
       if (error) console.error("Restore error:", error);
 
