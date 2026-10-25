@@ -17,17 +17,22 @@ ALTER TABLE IF EXISTS public.inquiries
   ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'PACKAGE',
   ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'NEW',
   ADD COLUMN IF NOT EXISTS check_in_date DATE,
+  ADD COLUMN IF NOT EXISTS check_out_date DATE,
   ADD COLUMN IF NOT EXISTS start_date DATE,
+  ADD COLUMN IF NOT EXISTS tour_start_date DATE,
   ADD COLUMN IF NOT EXISTS end_date DATE,
+  ADD COLUMN IF NOT EXISTS tour_end_date DATE,
   ADD COLUMN IF NOT EXISTS duration_days INTEGER,
   ADD COLUMN IF NOT EXISTS budget TEXT,
   ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
   ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
   ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
   ADD COLUMN IF NOT EXISTS plan TEXT,
+  ADD COLUMN IF NOT EXISTS package_name TEXT,
   ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
   ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
   ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
+  ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
   ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
   ADD COLUMN IF NOT EXISTS child_ages JSONB,
   ADD COLUMN IF NOT EXISTS pickup_location TEXT,
@@ -61,17 +66,22 @@ ALTER TABLE IF EXISTS public.leads
   ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'PACKAGE',
   ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'NEW',
   ADD COLUMN IF NOT EXISTS check_in_date DATE,
+  ADD COLUMN IF NOT EXISTS check_out_date DATE,
   ADD COLUMN IF NOT EXISTS start_date DATE,
+  ADD COLUMN IF NOT EXISTS tour_start_date DATE,
   ADD COLUMN IF NOT EXISTS end_date DATE,
+  ADD COLUMN IF NOT EXISTS tour_end_date DATE,
   ADD COLUMN IF NOT EXISTS duration_days INTEGER,
   ADD COLUMN IF NOT EXISTS budget TEXT,
   ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
   ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
   ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
   ADD COLUMN IF NOT EXISTS plan TEXT,
+  ADD COLUMN IF NOT EXISTS package_name TEXT,
   ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
   ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
   ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
+  ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
   ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
   ADD COLUMN IF NOT EXISTS child_ages JSONB,
   ADD COLUMN IF NOT EXISTS pickup_location TEXT,
@@ -119,5 +129,66 @@ CREATE INDEX IF NOT EXISTS idx_leads_assigned_staff ON public.leads(assigned_sta
 CREATE INDEX IF NOT EXISTS idx_inquiries_reminder_at ON public.inquiries(reminder_at);
 CREATE INDEX IF NOT EXISTS idx_leads_reminder_at ON public.leads(reminder_at);
 
--- 5. Force PostgREST to reload its schema cache
+-- 5. Optional RPC Helper for automated schema synchronization
+CREATE OR REPLACE FUNCTION public.sync_schema()
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Re-applies all missing columns idempotently
+  ALTER TABLE IF EXISTS public.leads
+    ADD COLUMN IF NOT EXISTS check_in_date DATE,
+    ADD COLUMN IF NOT EXISTS check_out_date DATE,
+    ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS plan TEXT,
+    ADD COLUMN IF NOT EXISTS package_name TEXT,
+    ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
+    ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
+    ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
+    ADD COLUMN IF NOT EXISTS start_date DATE,
+    ADD COLUMN IF NOT EXISTS tour_start_date DATE,
+    ADD COLUMN IF NOT EXISTS end_date DATE,
+    ADD COLUMN IF NOT EXISTS tour_end_date DATE,
+    ADD COLUMN IF NOT EXISTS duration_days INTEGER,
+    ADD COLUMN IF NOT EXISTS budget TEXT,
+    ADD COLUMN IF NOT EXISTS reminder_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS reminder_note TEXT,
+    ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+  ALTER TABLE IF EXISTS public.inquiries
+    ADD COLUMN IF NOT EXISTS check_in_date DATE,
+    ADD COLUMN IF NOT EXISTS check_out_date DATE,
+    ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
+    ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS plan TEXT,
+    ADD COLUMN IF NOT EXISTS package_name TEXT,
+    ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
+    ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
+    ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
+    ADD COLUMN IF NOT EXISTS start_date DATE,
+    ADD COLUMN IF NOT EXISTS tour_start_date DATE,
+    ADD COLUMN IF NOT EXISTS end_date DATE,
+    ADD COLUMN IF NOT EXISTS tour_end_date DATE,
+    ADD COLUMN IF NOT EXISTS duration_days INTEGER,
+    ADD COLUMN IF NOT EXISTS budget TEXT,
+    ADD COLUMN IF NOT EXISTS reminder_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS reminder_note TEXT,
+    ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+  NOTIFY pgrst, 'reload schema';
+  RETURN true;
+END;
+$$;
+
+-- 6. Force PostgREST to reload its schema cache
 NOTIFY pgrst, 'reload schema';

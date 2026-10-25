@@ -390,60 +390,7 @@ export function invalidateTableColumnsCache() {
  * Merges discovered columns with safe baseline columns, preventing 400 PGRST204 errors.
  */
 export async function getTableColumns(table: 'inquiries' | 'leads'): Promise<Set<string>> {
-  const now = Date.now();
-  if (table === 'inquiries' && cachedInquiriesCols && now - lastColsCheck < 45000) {
-    return cachedInquiriesCols;
-  }
-  if (table === 'leads' && cachedLeadsCols && now - lastColsCheck < 45000) {
-    return cachedLeadsCols;
-  }
-
-  // Baseline verified schema columns guaranteed to exist (excluding non-existent 'metadata')
-  const baselineInquiries = new Set([
-    'id', 'title', 'type', 'full_name', 'phone', 'email', 'check_in_date',
-    'guests', 'adults', 'children', 'child_ages', 'plan', 'special_requests',
-    'pickup_location', 'dropoff_location', 'user_id', 'status',
-    'assigned_staff_id', 'assigned_staff_name', 'is_locked_for_staff',
-    'notes', 'created_at', 'customer_name', 'city', 'accommodation_tier',
-    'updated_at', 'whatsapp_number',
-    'is_deleted', 'deleted_at', 'deleted_by',
-  ]);
-
-  const baselineLeads = new Set([
-    'id', 'customer_name', 'full_name', 'phone', 'whatsapp_number', 'email',
-    'city', 'accommodation_tier', 'hotel_tier', 'plan',
-    'assigned_staff_id', 'assigned_staff_name', 'status',
-    'created_at', 'updated_at',
-    'is_deleted', 'deleted_at', 'deleted_by',
-  ]);
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?limit=1`, {
-      headers: getSupabaseHeaders(),
-    });
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
-        const liveCols = new Set(Object.keys(data[0]));
-        liveCols.delete('metadata');
-        const merged = table === 'inquiries'
-          ? new Set([...baselineInquiries, ...liveCols])
-          : new Set([...baselineLeads, ...liveCols]);
-
-        merged.delete('metadata');
-        if (table === 'inquiries') cachedInquiriesCols = merged;
-        else cachedLeadsCols = merged;
-        lastColsCheck = now;
-        return merged;
-      }
-    }
-  } catch (err) {
-    console.warn(`[getTableColumns] Could not inspect active columns for ${table}, using baseline:`, err);
-  }
-
-  const fallback = table === 'inquiries' ? new Set(baselineInquiries) : new Set(baselineLeads);
-  fallback.delete('metadata');
-  return fallback;
+  return discoverTableColumns(supabase, table);
 }
 
 /**
@@ -4892,16 +4839,16 @@ export function mapInquiryRow(row: any): Inquiry {
 
   const parsedAdults = Number(row.adults ?? unpacked.adults ?? metadataObj?.adults ?? 2);
   const parsedChildren = Number(row.children ?? unpacked.children ?? metadataObj?.children ?? 0);
-  const calculatedTravelers = Math.max(1, Number(row.travelers ?? unpacked.travelers ?? row.guests ?? metadataObj?.travelers ?? (parsedAdults + parsedChildren)));
+  const calculatedTravelers = Math.max(1, Number(row.travelers ?? unpacked.travelers ?? row.total_travelers ?? unpacked.total_travelers ?? row.guests ?? unpacked.guests ?? metadataObj?.travelers ?? metadataObj?.guests ?? (parsedAdults + parsedChildren)));
 
-  const resolvedStartDate = row.start_date || row.startDate || unpacked.start_date || unpacked.startDate || row.check_in_date || row.checkInDate || metadataObj?.start_date || metadataObj?.startDate || undefined;
-  const resolvedEndDate = row.end_date || row.endDate || unpacked.end_date || unpacked.endDate || metadataObj?.end_date || metadataObj?.endDate || undefined;
+  const resolvedStartDate = row.start_date || row.startDate || unpacked.start_date || unpacked.startDate || row.tour_start_date || unpacked.tour_start_date || row.check_in_date || row.checkInDate || unpacked.check_in_date || metadataObj?.start_date || metadataObj?.startDate || metadataObj?.check_in_date || undefined;
+  const resolvedEndDate = row.end_date || row.endDate || unpacked.end_date || unpacked.endDate || row.tour_end_date || unpacked.tour_end_date || row.check_out_date || unpacked.check_out_date || metadataObj?.end_date || metadataObj?.endDate || metadataObj?.check_out_date || undefined;
 
   const rawDuration = row.duration_days ?? row.durationDays ?? unpacked.duration_days ?? unpacked.durationDays ?? metadataObj?.duration_days;
   const resolvedDurationDays = (rawDuration !== undefined && rawDuration !== null && !isNaN(Number(rawDuration))) ? Number(rawDuration) : undefined;
   const resolvedBudget = row.budget || unpacked.budget || metadataObj?.budget || undefined;
 
-  const resolvedAccom = row.accommodation_tier || row.accommodationTier || unpacked.accommodation_tier || unpacked.accommodation_preference || row.accommodation_preference || row.accommodationPreference || row.plan || metadataObj?.accommodation_tier || metadataObj?.accommodation_preference || '3 Star Standard';
+  const resolvedAccom = row.accommodation_tier || row.accommodationTier || unpacked.accommodation_tier || unpacked.accommodation_preference || row.accommodation_preference || row.accommodationPreference || row.hotel_tier || unpacked.hotel_tier || row.plan || unpacked.plan || row.package_name || unpacked.package_name || metadataObj?.accommodation_tier || metadataObj?.accommodation_preference || metadataObj?.plan || '3 Star Standard';
 
   const resolvedReminderAt = row.reminder_at || row.reminderAt || unpacked.reminder_at || unpacked.reminderAt || metadataObj?.reminder_at || undefined;
   const resolvedReminderNote = row.reminder_note || row.reminderNote || unpacked.reminder_note || unpacked.reminderNote || metadataObj?.reminder_note || undefined;
@@ -4912,8 +4859,8 @@ export function mapInquiryRow(row: any): Inquiry {
     userId: row.user_id || row.userId,
     type: row.type || unpacked.type || metadataObj?.type || 'PACKAGE',
     referenceId: row.reference_id || row.referenceId || row.id || '',
-    referenceName: row.reference_name || row.referenceName || row.title || unpacked.title || metadataObj?.title || 'Pilgrimage Booking',
-    title: row.title || unpacked.title || metadataObj?.title || metadataObj?.package_interest || 'Pilgrimage Inquiry',
+    referenceName: row.reference_name || row.referenceName || row.title || unpacked.title || unpacked.package_name || metadataObj?.title || 'Pilgrimage Booking',
+    title: row.title || unpacked.title || unpacked.package_name || metadataObj?.title || metadataObj?.package_interest || 'Pilgrimage Inquiry',
     fullName: row.full_name || row.fullName || customerName,
     customerName: customerName,
     email: customerEmail,
@@ -4924,7 +4871,7 @@ export function mapInquiryRow(row: any): Inquiry {
     whatsapp_number: row.whatsapp_number || row.whatsappNumber || phone,
     metadata: metadataObj,
     userCity: row.user_city || row.userCity || row.city || unpacked.city || unpacked.user_city || metadataObj?.user_city || metadataObj?.city || metadataObj?.resident_state,
-    checkInDate: row.check_in_date || row.checkInDate || resolvedStartDate || new Date().toISOString().split('T')[0],
+    checkInDate: row.check_in_date || row.checkInDate || unpacked.check_in_date || resolvedStartDate || new Date().toISOString().split('T')[0],
     startDate: resolvedStartDate,
     start_date: resolvedStartDate,
     guests: calculatedTravelers,
@@ -4932,9 +4879,9 @@ export function mapInquiryRow(row: any): Inquiry {
     adults: parsedAdults,
     children: parsedChildren,
     childAges: row.child_ages || row.childAges || unpacked.child_ages || metadataObj?.child_ages,
-    planChosen: row.plan_chosen || row.planChosen || row.plan || row.selected_plan || row.selectedPlan || resolvedAccom,
-    selectedPlan: row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || row.plan || resolvedAccom,
-    plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || resolvedAccom,
+    planChosen: row.plan_chosen || row.planChosen || row.plan || unpacked.plan || row.package_name || unpacked.package_name || resolvedAccom,
+    selectedPlan: row.selected_plan || row.selectedPlan || row.plan || unpacked.plan || row.package_name || unpacked.package_name || resolvedAccom,
+    plan: row.plan || row.selected_plan || row.selectedPlan || row.plan_chosen || row.planChosen || unpacked.plan || resolvedAccom,
     accommodationTier: resolvedAccom,
     accommodationPreference: resolvedAccom,
     pickupLocation: row.pickup_location || row.pickupLocation || unpacked.pickup_location || metadataObj?.pickup_city,

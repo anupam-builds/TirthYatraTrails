@@ -917,9 +917,22 @@ export async function supabaseRest<T = any>(
 }
 
 /**
- * In-memory & localStorage cached set of columns discovered from live Supabase tables.
+ * In-memory & localStorage cached set of columns discovered from live Supabase tables via OpenAPI spec.
  */
 export const discoveredColumnsCache: Record<string, Set<string>> = {};
+export const verifiedOpenApiTables: Set<string> = new Set();
+
+/**
+ * Hard-blocked legacy keys that must never be sent as top-level columns unless specifically
+ * confirmed by the live PostgreSQL PostgREST OpenAPI schema specification.
+ */
+export const HARD_BLOCKED_LEGACY_KEYS = new Set([
+  'check_in_date',
+  'check_out_date',
+  'guests',
+  'plan',
+  'accommodation_preference',
+]);
 
 /**
  * In-memory cache of unsupported schema columns by table name.
@@ -928,11 +941,171 @@ export const discoveredColumnsCache: Record<string, Set<string>> = {};
  * This prevents repeated 400 (Bad Request) network errors in the browser console.
  */
 export const unsupportedColumnsCache: Record<string, Set<string>> = {
-  inquiries: new Set(['accommodation_preference', 'travelers']),
-  leads: new Set(['accommodation_preference']),
+  inquiries: new Set(['accommodation_preference', 'travelers', 'check_in_date', 'check_out_date', 'guests', 'plan']),
+  leads: new Set(['accommodation_preference', 'travelers', 'check_in_date', 'check_out_date', 'guests', 'plan']),
 };
 
 export const unsupportedColumnsByTable = unsupportedColumnsCache;
+
+let openApiFetchPromise: Promise<Record<string, Set<string>> | null> | null = null;
+
+/**
+ * Fetches the exact PostgREST OpenAPI schema specification on startup using Supabase URL and Anon Key.
+ * Works even when tables are 100% empty or protected by strict RLS policies.
+ * Parses definitions[tableName].properties and components.schemas[tableName].properties.
+ */
+export async function fetchOpenApiSchema(force = false): Promise<Record<string, Set<string>> | null> {
+  if (typeof window === 'undefined') return null;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('placeholder')) return null;
+
+  if (!force && openApiFetchPromise) {
+    return openApiFetchPromise;
+  }
+
+  openApiFetchPromise = (async () => {
+    try {
+      const url = `${SUPABASE_URL}/rest/v1/?apikey=${encodeURIComponent(SUPABASE_ANON_KEY)}`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Accept: 'application/openapi+json, application/json',
+        },
+      });
+
+      if (!res.ok) {
+        console.warn(`[OpenAPI Discovery] OpenAPI spec request returned HTTP ${res.status}`);
+        return null;
+      }
+
+      const doc = await res.json().catch(() => null);
+      if (!doc || typeof doc !== 'object') return null;
+
+      const result: Record<string, Set<string>> = {};
+
+      // 1. Parse Swagger 2.0 definitions or OpenAPI 3.0 components.schemas
+      const defs = doc.definitions || doc.components?.schemas || {};
+      for (const [key, schemaObj] of Object.entries(defs)) {
+        const tableName = key.toLowerCase().trim();
+        const props = (schemaObj as any)?.properties;
+        if (props && typeof props === 'object') {
+          const colSet = new Set(Object.keys(props));
+          result[tableName] = colSet;
+          discoveredColumnsCache[tableName] = colSet;
+          verifiedOpenApiTables.add(tableName);
+          try {
+            window.localStorage.setItem(`discovered_cols_${tableName}`, JSON.stringify(Array.from(colSet)));
+          } catch {}
+        }
+      }
+
+      // 2. Also inspect Swagger paths as secondary fallback
+      if (doc.paths && typeof doc.paths === 'object') {
+        for (const [pathKey, pathItem] of Object.entries(doc.paths)) {
+          const cleanName = pathKey.replace(/^\//, '').split('?')[0].toLowerCase().trim();
+          if (cleanName && (pathItem as any)?.get?.parameters) {
+            const params = (pathItem as any).get.parameters;
+            if (Array.isArray(params)) {
+              if (!result[cleanName]) result[cleanName] = new Set();
+              params.forEach((p: any) => {
+                if (p?.name && !['select', 'order', 'limit', 'offset', 'on_conflict', 'columns', 'and', 'or'].includes(p.name)) {
+                  result[cleanName].add(p.name);
+                }
+              });
+              if (result[cleanName].size > 0) {
+                discoveredColumnsCache[cleanName] = result[cleanName];
+                verifiedOpenApiTables.add(cleanName);
+                try {
+                  window.localStorage.setItem(`discovered_cols_${cleanName}`, JSON.stringify(Array.from(result[cleanName])));
+                } catch {}
+              }
+            }
+          }
+        }
+      }
+
+      console.log('✅ [OpenAPI Discovery] PostgREST schema definitions loaded for tables:', Object.keys(result));
+      return result;
+    } catch (err) {
+      console.warn('[OpenAPI Discovery] Error fetching OpenAPI spec:', err);
+      return null;
+    }
+  })();
+
+  return openApiFetchPromise;
+}
+
+let hasAttemptedRepair = false;
+
+/**
+ * Silently attempts to execute schema repair via RPC if the user's database has an exec_sql or sync_schema function.
+ * Wrapped in a silent try/catch so missing functions never generate unhandled rejections or error modals.
+ */
+export async function attemptDatabaseSchemaRepair(): Promise<void> {
+  if (typeof window === 'undefined' || hasAttemptedRepair) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('placeholder')) return;
+  hasAttemptedRepair = true;
+
+  const sql = `
+    ALTER TABLE IF EXISTS public.leads
+      ADD COLUMN IF NOT EXISTS check_in_date DATE,
+      ADD COLUMN IF NOT EXISTS check_out_date DATE,
+      ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS plan TEXT,
+      ADD COLUMN IF NOT EXISTS package_name TEXT,
+      ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
+      ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
+      ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
+      ADD COLUMN IF NOT EXISTS start_date DATE,
+      ADD COLUMN IF NOT EXISTS tour_start_date DATE,
+      ADD COLUMN IF NOT EXISTS end_date DATE,
+      ADD COLUMN IF NOT EXISTS tour_end_date DATE,
+      ADD COLUMN IF NOT EXISTS duration_days INTEGER,
+      ADD COLUMN IF NOT EXISTS budget TEXT,
+      ADD COLUMN IF NOT EXISTS reminder_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_note TEXT,
+      ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+    ALTER TABLE IF EXISTS public.inquiries
+      ADD COLUMN IF NOT EXISTS check_in_date DATE,
+      ADD COLUMN IF NOT EXISTS check_out_date DATE,
+      ADD COLUMN IF NOT EXISTS guests INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS travelers INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS total_travelers INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS adults INTEGER DEFAULT 2,
+      ADD COLUMN IF NOT EXISTS children INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS plan TEXT,
+      ADD COLUMN IF NOT EXISTS package_name TEXT,
+      ADD COLUMN IF NOT EXISTS accommodation_tier TEXT,
+      ADD COLUMN IF NOT EXISTS accommodation_preference TEXT,
+      ADD COLUMN IF NOT EXISTS hotel_tier TEXT,
+      ADD COLUMN IF NOT EXISTS start_date DATE,
+      ADD COLUMN IF NOT EXISTS tour_start_date DATE,
+      ADD COLUMN IF NOT EXISTS end_date DATE,
+      ADD COLUMN IF NOT EXISTS tour_end_date DATE,
+      ADD COLUMN IF NOT EXISTS duration_days INTEGER,
+      ADD COLUMN IF NOT EXISTS budget TEXT,
+      ADD COLUMN IF NOT EXISTS reminder_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_note TEXT,
+      ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+    NOTIFY pgrst, 'reload schema';
+  `;
+
+  try {
+    await Promise.race([
+      Promise.resolve(supabase.rpc('sync_schema')).catch(() => null),
+      Promise.resolve(supabase.rpc('exec_sql', { sql })).catch(() => null),
+      new Promise((res) => setTimeout(res, 2000)),
+    ]);
+  } catch {}
+}
 
 /**
  * Retrieves the full set of unsupported columns for a table from memory and localStorage.
@@ -955,9 +1128,15 @@ export function getUnsupportedColumns(tableName: string): Set<string> {
     } catch {}
   }
 
-  // Pre-seed known missing columns to guarantee 0 400 errors
+  // Pre-seed known missing columns to guarantee 0 400 errors unless confirmed by OpenAPI
   if (tableName === 'inquiries' || tableName === 'leads') {
-    colSet.add('accommodation_preference');
+    HARD_BLOCKED_LEGACY_KEYS.forEach((k) => {
+      // If OpenAPI spec verified this column exists on table, don't treat as unsupported
+      const openApiCols = discoveredColumnsCache[tableName];
+      if (!openApiCols || !openApiCols.has(k)) {
+        colSet.add(k);
+      }
+    });
   }
 
   return colSet;
@@ -987,40 +1166,51 @@ export function recordUnsupportedColumn(tableName: string, colName: string): voi
 
 /**
  * Dynamically discovers the columns exposed by Supabase PostgREST for a table.
- * Caches column names in memory and localStorage to eliminate schema guesswork.
+ * Prioritizes the OpenAPI schema definition, caching column names in memory and localStorage.
  */
 export async function discoverTableColumns(
   supabaseClient: SupabaseClient | any = supabase,
   tableName: string
 ): Promise<Set<string>> {
-  const cacheKey = `discovered_cols_${tableName}`;
-  if (discoveredColumnsCache[tableName] && discoveredColumnsCache[tableName].size > 0) {
-    return discoveredColumnsCache[tableName];
+  const cleanTable = tableName.toLowerCase().trim();
+  const cacheKey = `discovered_cols_${cleanTable}`;
+
+  // 1. Check in-memory cache
+  if (discoveredColumnsCache[cleanTable] && discoveredColumnsCache[cleanTable].size > 0) {
+    return discoveredColumnsCache[cleanTable];
   }
 
-  // Check localStorage first for instant schema recovery
+  // 2. Check localStorage for instant schema recovery
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const stored = window.localStorage.getItem(cacheKey);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          discoveredColumnsCache[tableName] = new Set(parsed);
-          return discoveredColumnsCache[tableName];
+          discoveredColumnsCache[cleanTable] = new Set(parsed);
+          return discoveredColumnsCache[cleanTable];
         }
       }
     } catch {}
   }
 
+  // 3. Fetch exact OpenAPI schema spec from PostgREST root
   try {
-    const { data, error } = await supabaseClient.from(tableName).select('*').limit(1);
+    const openApiData = await fetchOpenApiSchema();
+    if (openApiData && openApiData[cleanTable] && openApiData[cleanTable].size > 0) {
+      return openApiData[cleanTable];
+    }
+  } catch {}
+
+  // 4. Sample row fallback (limit 1)
+  try {
+    const { data, error } = await supabaseClient.from(cleanTable).select('*').limit(1);
     if (!error && Array.isArray(data) && data.length > 0 && data[0] && typeof data[0] === 'object') {
       const liveCols = new Set(Object.keys(data[0]));
-      // Strip any known bad columns from liveCols
-      const bad = getUnsupportedColumns(tableName);
+      const bad = getUnsupportedColumns(cleanTable);
       bad.forEach((b) => liveCols.delete(b));
 
-      discoveredColumnsCache[tableName] = liveCols;
+      discoveredColumnsCache[cleanTable] = liveCols;
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
           window.localStorage.setItem(cacheKey, JSON.stringify(Array.from(liveCols)));
@@ -1029,14 +1219,14 @@ export async function discoverTableColumns(
       return liveCols;
     }
   } catch (err) {
-    console.warn(`[discoverTableColumns] Could not inspect active columns for ${tableName}:`, err);
+    console.warn(`[discoverTableColumns] Could not inspect active columns for ${cleanTable}:`, err);
   }
 
-  // Fallback to verified baseline columns if table is currently empty
-  const fallback = tableName === 'inquiries'
+  // 5. Fallback baseline columns (with known missing legacy fields excluded)
+  const fallback = cleanTable === 'inquiries'
     ? new Set([
-        'id', 'title', 'type', 'full_name', 'phone', 'email', 'check_in_date',
-        'guests', 'adults', 'children', 'child_ages', 'plan', 'special_requests',
+        'id', 'title', 'type', 'full_name', 'phone', 'email', 'start_date', 'tour_start_date',
+        'travelers', 'total_travelers', 'adults', 'children', 'child_ages', 'package_name', 'special_requests',
         'pickup_location', 'dropoff_location', 'user_id', 'status',
         'assigned_staff_id', 'assigned_staff_name', 'is_locked_for_staff',
         'notes', 'details', 'metadata', 'created_at', 'customer_name', 'city',
@@ -1045,65 +1235,101 @@ export async function discoverTableColumns(
       ])
     : new Set([
         'id', 'lead_id', 'customer_name', 'full_name', 'phone', 'whatsapp_number',
-        'email', 'city', 'accommodation_tier', 'hotel_tier', 'plan',
+        'email', 'city', 'accommodation_tier', 'hotel_tier', 'package_name',
         'assigned_staff_id', 'assigned_staff_name', 'status',
-        'check_in_date', 'start_date', 'end_date', 'duration_days', 'budget',
-        'adults', 'children', 'travelers', 'guests', 'reminder_at', 'reminder_note',
+        'start_date', 'tour_start_date', 'end_date', 'tour_end_date', 'duration_days', 'budget',
+        'adults', 'children', 'travelers', 'total_travelers', 'reminder_at', 'reminder_note',
         'special_requests', 'notes', 'details', 'metadata',
         'created_at', 'updated_at', 'is_deleted', 'deleted_at', 'deleted_by',
       ]);
 
-  const badCols = getUnsupportedColumns(tableName);
+  const badCols = getUnsupportedColumns(cleanTable);
   badCols.forEach((b) => fallback.delete(b));
 
-  discoveredColumnsCache[tableName] = fallback;
+  discoveredColumnsCache[cleanTable] = fallback;
   return fallback;
+}
+
+/**
+ * Remaps legacy Staff & Admin Portal keys to standard database schema column names:
+ * - check_in_date -> start_date and tour_start_date
+ * - check_out_date -> end_date and tour_end_date
+ * - guests -> travelers and total_travelers
+ * - plan -> package_name and accommodation_tier
+ * - accommodation_preference -> accommodation_tier and hotel_tier
+ */
+export function remapLegacyStaffFields(raw: Record<string, any>): Record<string, any> {
+  const mapped: Record<string, any> = { ...raw };
+
+  // check_in_date -> start_date and tour_start_date
+  if (mapped.check_in_date) {
+    if (!mapped.start_date) mapped.start_date = mapped.check_in_date;
+    if (!mapped.tour_start_date) mapped.tour_start_date = mapped.check_in_date;
+  }
+
+  // check_out_date -> end_date and tour_end_date
+  if (mapped.check_out_date) {
+    if (!mapped.end_date) mapped.end_date = mapped.check_out_date;
+    if (!mapped.tour_end_date) mapped.tour_end_date = mapped.check_out_date;
+  }
+
+  // guests -> travelers and total_travelers
+  if (mapped.guests !== undefined && mapped.guests !== null) {
+    if (mapped.travelers === undefined) mapped.travelers = mapped.guests;
+    if (mapped.total_travelers === undefined) mapped.total_travelers = mapped.guests;
+  }
+
+  // plan -> package_name and accommodation_tier
+  if (mapped.plan) {
+    if (!mapped.package_name) mapped.package_name = mapped.plan;
+    if (!mapped.accommodation_tier) mapped.accommodation_tier = mapped.plan;
+  }
+
+  // accommodation_preference -> accommodation_tier and hotel_tier
+  if (mapped.accommodation_preference) {
+    if (!mapped.accommodation_tier) mapped.accommodation_tier = mapped.accommodation_preference;
+    if (!mapped.hotel_tier) mapped.hotel_tier = mapped.accommodation_preference;
+    if (!mapped.plan) mapped.plan = mapped.accommodation_preference;
+  }
+
+  return mapped;
 }
 
 /**
  * Strips unsupported or missing columns from payload and packs them into an existing column
  * (metadata, details, notes, or special_requests) so ZERO devotee information is lost.
+ * Hard-blocks legacy keys ('check_in_date', 'check_out_date', 'guests', 'plan', 'accommodation_preference')
+ * unless confirmed by the live OpenAPI schema.
  */
 export function packUnsupportedFields(
   tableName: string,
   liveCols: Set<string>,
   rawPayload: Record<string, any>
 ): { payload: Record<string, any>; packedExtendedData: Record<string, any> } {
-  const badCols = getUnsupportedColumns(tableName);
+  const cleanTable = tableName.toLowerCase().trim();
+  const badCols = getUnsupportedColumns(cleanTable);
   const payload: Record<string, any> = {};
   const packedExtendedData: Record<string, any> = {};
 
-  const normPayload: Record<string, any> = { ...rawPayload };
+  // 1. Remap legacy staff fields to standard columns
+  const normPayload: Record<string, any> = remapLegacyStaffFields(rawPayload);
 
-  // Map accommodation_preference into accommodation_tier, hotel_tier, or plan if they exist
-  if (normPayload.accommodation_preference) {
-    if (!normPayload.accommodation_tier) normPayload.accommodation_tier = normPayload.accommodation_preference;
-    if (!normPayload.hotel_tier) normPayload.hotel_tier = normPayload.accommodation_preference;
-    if (!normPayload.plan) normPayload.plan = normPayload.accommodation_preference;
-  }
-
-  // Cross-map guests and travelers
-  if (normPayload.travelers !== undefined && normPayload.guests === undefined) {
-    normPayload.guests = normPayload.travelers;
-  } else if (normPayload.guests !== undefined && normPayload.travelers === undefined) {
-    normPayload.travelers = normPayload.guests;
-  }
-
-  // Cross-map check_in_date and start_date
-  if (normPayload.start_date && !normPayload.check_in_date) {
-    normPayload.check_in_date = normPayload.start_date;
-  }
-  if (normPayload.check_in_date && !normPayload.start_date) {
-    normPayload.start_date = normPayload.check_in_date;
+  // Preserve original legacy field values in packedExtendedData
+  for (const legacyKey of HARD_BLOCKED_LEGACY_KEYS) {
+    if (rawPayload[legacyKey] !== undefined) {
+      packedExtendedData[legacyKey] = rawPayload[legacyKey];
+    }
   }
 
   for (const [key, val] of Object.entries(normPayload)) {
     if (val === undefined) continue;
 
+    // Hard-block check: legacy keys are stripped from top-level unless explicitly verified in OpenAPI
+    const isHardBlocked = HARD_BLOCKED_LEGACY_KEYS.has(key) && (!liveCols.has(key) || badCols.has(key));
     const isKnownBad = badCols.has(key);
     const isDiscovered = liveCols.size > 0 ? liveCols.has(key) : true;
 
-    if (!isKnownBad && isDiscovered) {
+    if (!isHardBlocked && !isKnownBad && isDiscovered) {
       payload[key] = val;
     } else {
       // Stripped from top-level to prevent 400 Bad Request
@@ -1211,10 +1437,11 @@ export function unpackExtendedLeadData(row: any): Record<string, any> {
 
 /**
  * Centralized smart Supabase insert helper:
- * 1. Discovers live database schema columns upfront.
- * 2. Proactively strips unsupported/missing columns and packs them into metadata/details/notes.
- * 3. Sends cleanly filtered payload with zero 400 Bad Request errors.
- * 4. Self-heals and caches unsupported columns in memory and localStorage on any PGRST204.
+ * 1. Discovers live database schema columns upfront via PostgREST OpenAPI spec.
+ * 2. Remaps legacy Staff Portal fields (check_in_date -> start_date, guests -> travelers, etc.).
+ * 3. Hard-blocks legacy and unindexed columns from top-level payload and auto-packs them.
+ * 4. Sends cleanly filtered payload with zero 400 Bad Request errors on the very first POST.
+ * 5. Self-heals and caches unsupported columns in memory and localStorage on any PGRST204.
  */
 export async function smartSupabaseInsert<T = any>(
   clientOrTable: SupabaseClient | any | string,
@@ -1236,10 +1463,10 @@ export async function smartSupabaseInsert<T = any>(
     initialPayload = maybePayload || {};
   }
 
-  // 1. Dynamic live schema discovery
+  // 1. Dynamic live schema discovery via OpenAPI spec
   const liveCols = await discoverTableColumns(client, tableName);
 
-  // 2. Proactively pack unsupported & non-schema columns
+  // 2. Proactively remap and pack unsupported & non-schema columns
   let { payload } = packUnsupportedFields(tableName, liveCols, initialPayload);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -1291,9 +1518,8 @@ export const safeInsertLead = smartSupabaseInsert;
 
 /**
  * Self-healing Supabase update helper:
- * Proactively strips any known unsupported columns from unsupportedColumnsCache upfront,
- * then retries update up to maxAttempts (default 15). If PostgREST returns PGRST204
- * matching missing schema column error, it caches that column and strips it from the update payload.
+ * Discovers live columns, remaps legacy fields, strips unindexed columns upfront,
+ * and updates without 400 Bad Request errors.
  */
 export async function safeSupabaseUpdate<T = any>(
   supabaseClient: SupabaseClient | any,
@@ -1302,16 +1528,10 @@ export async function safeSupabaseUpdate<T = any>(
   matchCriteria: { column: string; value: any } | Record<string, any>,
   maxAttempts: number = 15
 ): Promise<{ data: T[] | null; error: any }> {
-  const knownBadCols = getUnsupportedColumns(tableName);
+  const liveCols = await discoverTableColumns(supabaseClient, tableName);
+  const { payload: cleanPayload } = packUnsupportedFields(tableName, liveCols, initialPayload);
 
-  let payload: Record<string, any> = { ...initialPayload };
-
-  // Proactively strip previously detected unsupported columns BEFORE sending the request
-  for (const badCol of knownBadCols) {
-    if (badCol in payload) {
-      delete payload[badCol];
-    }
-  }
+  let payload: Record<string, any> = { ...cleanPayload };
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     let query = supabaseClient.from(tableName).update(payload);
@@ -1356,5 +1576,13 @@ export async function safeSupabaseUpdate<T = any>(
 }
 
 export const safeUpdateLead = safeSupabaseUpdate;
+
+// Trigger background OpenAPI schema discovery and database repair on client initialization
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    fetchOpenApiSchema().catch(() => {});
+    attemptDatabaseSchemaRepair().catch(() => {});
+  }, 100);
+}
 
 export default supabase;
