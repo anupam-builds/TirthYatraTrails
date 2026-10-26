@@ -148,7 +148,7 @@ export function isValidEntityId(id: unknown): id is string | number {
  */
 export function broadcastContentSync(event: string, payload: Record<string, any>) {
   try {
-    const channel = supabase.channel('public:content-sync-channel');
+    const channel = supabase.channel('public:content-broadcast-channel');
     channel.send({
       type: 'broadcast',
       event,
@@ -3506,14 +3506,7 @@ export const api = {
     } catch {}
 
     // 5. Broadcast deletion across Supabase Realtime channel to notify all open browser sessions
-    try {
-      const channel = supabase.channel('public:content-sync-channel');
-      channel.send({
-        type: 'broadcast',
-        event: 'hotel_deleted',
-        payload: { id: cleanId },
-      }).catch(() => {});
-    } catch {}
+    broadcastContentSync('hotel_deleted', { id: cleanId });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', hotelId: cleanId, target: cleanId } }));
@@ -3906,14 +3899,7 @@ export const api = {
     } catch {}
 
     // 5. Broadcast deletion across Supabase Realtime channel to notify all open browser sessions
-    try {
-      const channel = supabase.channel('public:content-sync-channel');
-      channel.send({
-        type: 'broadcast',
-        event: 'package_deleted',
-        payload: { id },
-      }).catch(() => {});
-    } catch {}
+    broadcastContentSync('package_deleted', { id });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'delete', id, target: id } }));

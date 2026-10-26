@@ -133,9 +133,9 @@ export const AdminHotels: React.FC = () => {
     };
   }, [loadData]);
 
-  // Real-time multi-admin synchronization via static channel
+  // Real-time multi-admin synchronization via isolated unique channel
   useEffect(() => {
-    const channelName = 'public:content-sync-channel';
+    const channelName = `content-sync-hotels-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase.channel(channelName);
 
     channel

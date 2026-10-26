@@ -141,7 +141,7 @@ export const AdminAccessPortal: React.FC = () => {
 
     // Realtime Postgres changes subscription on admin_allowlist table
     const allowlistChannel = supabase
-      .channel('admin-allowlist-realtime')
+      .channel(`admin-allowlist-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'admin_allowlist' },

@@ -55,7 +55,7 @@ export const HotelInventoryGrid: React.FC<HotelInventoryGridProps> = ({ hotel, o
 
   // Real-time synchronization with Postgres delta tracking (REPLICA IDENTITY FULL)
   useEffect(() => {
-    const channelName = 'public:content-sync-channel';
+    const channelName = `content-sync-inventory-${hotel.id}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase.channel(channelName);
 
     channel

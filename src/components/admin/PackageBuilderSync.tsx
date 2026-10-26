@@ -64,7 +64,7 @@ export const PackageBuilderSync: React.FC<PackageBuilderSyncProps> = ({ initialP
 
   // 2. Realtime State Merging & Channel Subscription
   useEffect(() => {
-    const channelName = 'public:content-sync-channel';
+    const channelName = `content-sync-builder-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase.channel(channelName);
 
     const handlePayload = (payload: any) => {

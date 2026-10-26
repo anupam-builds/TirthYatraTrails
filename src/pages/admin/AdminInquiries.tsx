@@ -95,7 +95,7 @@ export const AdminInquiries: React.FC = () => {
 
   // Active postgres_changes subscription specifically listening for event: 'UPDATE' on both 'leads' and 'inquiries' tables
   useEffect(() => {
-    const channelName = 'admin-desk-update-sync';
+    const channelName = `admin-desk-update-sync-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     console.log(`🔌 [AdminInquiries] Registering active UPDATE postgres_changes listeners on ${channelName}`);
 
     const handleRemoteUpdate = (payload: any) => {
@@ -236,7 +236,7 @@ export const AdminInquiries: React.FC = () => {
 
     // Dedup channel subscriptions cleanly in useEffect cleanup
     return () => {
-      safeRemoveChannel(updateChannel, 200);
+      safeRemoveChannel(updateChannel);
     };
   }, [setLeads]);
 

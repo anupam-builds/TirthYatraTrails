@@ -215,7 +215,7 @@ export function useAdminPresence() {
               const toRemove = sharedChannel;
               sharedChannel = null;
               toRemove.untrack().catch(() => {});
-              safeRemoveChannel(toRemove, 100);
+              safeRemoveChannel(toRemove);
               currentPresences = [];
               currentEmails = new Set();
               currentIds = new Set();

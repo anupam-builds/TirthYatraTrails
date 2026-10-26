@@ -81,9 +81,9 @@ export const AdminCities: React.FC = () => {
     };
   }, []);
 
-  // Real-time subscription multiplexed on 'public:content-sync-channel'
+  // Real-time subscription on isolated unique channel
   useEffect(() => {
-    const channelName = 'public:content-sync-channel';
+    const channelName = `content-sync-cities-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase.channel(channelName);
 
     channel

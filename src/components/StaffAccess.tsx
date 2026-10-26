@@ -207,7 +207,7 @@ export const StaffAccess: React.FC = () => {
     // Supabase Realtime channel for live presence on profiles, staff_members, staff_sessions,
     // and live inquiry/lead mutations for immediate metrics reactivity
     const channel = supabase
-      .channel('schema-db-changes-staff-component')
+      .channel(`staff-access-sync-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'staff_members' },

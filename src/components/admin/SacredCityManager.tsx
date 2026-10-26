@@ -165,7 +165,7 @@ export const SacredCityManager: React.FC<SacredCityManagerProps> = ({
     fetchCities();
 
     const channel: RealtimeChannel = supabase
-      .channel('sacred-cities-realtime')
+      .channel(`sacred-cities-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`)
       .on(
         'postgres_changes',
         {

@@ -190,7 +190,7 @@ function registerChannelListener(
 
 export interface RealtimeSyncOptions<T> {
   table: string | string[]; // Single table or multiple tables multiplexed
-  channelName?: string; // Defaults to 'public:content-sync-channel'
+  channelName?: string; // Defaults to 'content-sync'
   idKey?: keyof T;
   mapRow?: (raw: any) => T;
   onInsert?: (record: T, table: string) => void;
@@ -213,7 +213,7 @@ export interface RealtimeSyncResult<T> {
 
 export function useRealtimeSync<T extends Record<string, any>>({
   table,
-  channelName = 'public:content-sync-channel',
+  channelName = 'content-sync',
   idKey = 'id' as keyof T,
   mapRow = (raw: any) => raw as T,
   onInsert,
@@ -374,7 +374,7 @@ export function useRealtimePackages(options?: {
 }) {
   return useRealtimeSync<Package>({
     table: 'packages',
-    channelName: 'public:content-sync-channel',
+    channelName: 'content-sync-packages',
     autoFetch: () => api.getPackages(options?.category, options?.query),
     onInsert: options?.onInsert,
     onUpdate: (pkg) => options?.onUpdate?.(pkg),
@@ -409,7 +409,7 @@ export function useRealtimeCitiesAndHubs(options?: {
   }, [refetch]);
 
   useEffect(() => {
-    const unsubCities = registerChannelListener('public:content-sync-channel', 'cities', (payload) => {
+    const unsubCities = registerChannelListener('content-sync-cities', 'cities', (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = String(payload.oldRecord?.id || payload.newRecord?.id);
         setCities((prev) => {
@@ -461,7 +461,7 @@ export function useRealtimeCitiesAndHubs(options?: {
 export function useRealtimeHotelInventory(hotelId?: string) {
   return useRealtimeSync<HotelInventory>({
     table: 'hotel_inventory',
-    channelName: 'public:content-sync-channel',
+    channelName: 'content-sync-inventory',
     autoFetch: () => api.getHotelInventory(hotelId),
     mapRow: (raw: any): HotelInventory => ({
       id: String(raw.id),
@@ -489,7 +489,7 @@ export function useRealtimeHotelInventory(hotelId?: string) {
 export function useRealtimeTravelStories() {
   return useRealtimeSync<TravelStory>({
     table: 'travel_stories',
-    channelName: 'public:content-sync-channel',
+    channelName: 'content-sync-stories',
     autoFetch: () => api.getTravelStories(),
     mapRow: (raw: any): TravelStory => ({
       id: String(raw.id),
@@ -536,7 +536,7 @@ export function useIsolatedLeadsRealtime<T extends Record<string, any> = any>(
   });
 
   useEffect(() => {
-    const channelName = options?.channelName || 'public:leads-realtime';
+    const channelName = options?.channelName || `leads-realtime-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
     const handlePayload = (payload: any) => {
       setLeads((currentLeads) => {
@@ -654,8 +654,9 @@ export function useStaffPresenceRealtime(onProfileUpdate?: (profile: any) => voi
   });
 
   useEffect(() => {
+    const channelName = `staff-presence-sync-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase
-      .channel('public:staff-presence-realtime')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles' },

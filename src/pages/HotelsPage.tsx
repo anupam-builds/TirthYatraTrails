@@ -152,7 +152,7 @@ export const HotelsPage: React.FC = () => {
     window.addEventListener('tirth-hotel-changed', handleDataChange);
 
     // Supabase Real-time Channel for cross-device updates (background sync without spinner flicker)
-    const channelName = 'public:content-sync-channel';
+    const channelName = `content-sync-hotels-page-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase.channel(channelName);
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => {

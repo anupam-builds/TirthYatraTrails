@@ -7,8 +7,9 @@ export function useStaffLeadsRealtime(currentStaffId?: string) {
   useEffect(() => {
     if (!currentStaffId) return;
 
+    const channelName = `staff-leads-hook-${currentStaffId}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase
-      .channel('staff-leads-realtime')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },

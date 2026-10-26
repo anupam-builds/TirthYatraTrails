@@ -99,7 +99,7 @@ export const StaffLeadsView: React.FC<StaffLeadsViewProps> = ({
   useEffect(() => {
     fetchAssignedLeads();
 
-    const channelName = `staff-leads-${currentStaffId || HARDCODED_STAFF_ID}`;
+    const channelName = `staff-leads-view-${currentStaffId || HARDCODED_STAFF_ID}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase
       .channel(channelName)
       .on(

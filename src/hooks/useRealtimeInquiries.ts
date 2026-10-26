@@ -189,8 +189,8 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
 
   // Realtime Supabase Channel Subscription
   useEffect(() => {
-    const leadsChannelName = options.channelName || 'public:leads-realtime';
-    const presenceChannelName = 'public:staff-presence-realtime';
+    const leadsChannelName = options.channelName || `leads-realtime-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const presenceChannelName = `staff-profile-sync-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     setConnectionStatus('CONNECTING');
 
     // 1. Dedicated isolated channel for leads/inquiries with explicit event listeners

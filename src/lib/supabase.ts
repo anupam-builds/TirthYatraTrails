@@ -721,72 +721,101 @@ export const supabase: SupabaseClient = createClient(
 );
 
 /**
- * Safely tears down a Supabase Realtime channel without triggering premature WebSocket closure warnings.
- * Debounces channel teardown by default (150ms) so that React StrictMode mount/unmount cycles
- * cancel teardown and prevent "WebSocket is closed before the connection is established" / "socket closed: 1000".
+ * Safely tears down a Supabase Realtime channel without throwing or logging uncaught exceptions.
+ * Immediately and synchronously calls supabase.removeChannel(channel).
  */
-const pendingChannelRemovals = new Map<string, ReturnType<typeof setTimeout>>();
-
-export function cancelChannelRemoval(topic: string) {
-  if (!topic) return;
-  const timer = pendingChannelRemovals.get(topic);
-  if (timer) {
-    clearTimeout(timer);
-    pendingChannelRemovals.delete(topic);
+export function safeRemoveChannel(channel: any, _delay?: number): Promise<string> {
+  if (!channel) return Promise.resolve('ok');
+  try {
+    if (channel.state === 'closed') {
+      return Promise.resolve('ok');
+    }
+    return supabase.removeChannel(channel).catch(() => 'ok');
+  } catch {
+    return Promise.resolve('ok');
   }
 }
 
 const _originalRemoveChannel = supabase.removeChannel.bind(supabase);
 const _originalChannel = supabase.channel.bind(supabase);
 
-// Intercept supabase.channel to cancel any pending channel teardowns immediately when a channel is recreated/remounted
-(supabase as any).channel = (name: string, opts?: any) => {
-  if (name) {
-    cancelChannelRemoval(name);
-    cancelChannelRemoval(`realtime:${name}`);
-  }
-  return _originalChannel(name, opts);
-};
-
-export function safeRemoveChannel(channel: any, delay: number = 150): Promise<string> {
-  if (!channel) return Promise.resolve('ok');
-  try {
-    const topic = channel.topic || channel.subTopic || (typeof channel === 'string' ? channel : '');
-    if (topic) {
-      cancelChannelRemoval(topic);
-    }
-
-    if (channel.state === 'closed') {
-      return Promise.resolve('ok');
-    }
-
-    return new Promise<string>((resolve) => {
-      const doTeardown = () => {
-        if (topic) pendingChannelRemovals.delete(topic);
-        try {
-          if (channel.state === 'closed' || channel.state === 'leaving') {
-            resolve('ok');
-            return;
-          }
-          _originalRemoveChannel(channel).then(resolve).catch(() => resolve('ok'));
-        } catch {
-          resolve('ok');
-        }
-      };
-
-      const timer = setTimeout(doTeardown, delay);
-      if (topic) {
-        pendingChannelRemovals.set(topic, timer);
-      }
-    });
-  } catch {
-    return Promise.resolve('ok');
-  }
+/**
+ * Creates a unique channel topic name to guarantee zero collisions for postgres_changes subscriptions.
+ */
+export function createUniqueChannelName(prefix: string = 'rt-sync'): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
-// Safely intercept supabase.removeChannel to use debounced teardown across all hooks and components
+// Safely intercept supabase.channel to:
+// 1. Purge any stale, already-subscribed channel with the same topic before returning a new one.
+// 2. Defensively wrap channel.on so .on('postgres_changes', ...) never throws "after subscribe()".
+// 3. Defensively wrap channel.subscribe to silence benign 1000 closure codes.
+(supabase as any).channel = (name: string, opts?: any) => {
+  if (!name) return _originalChannel(name, opts);
+
+  // Synchronously purge any existing channel with the same topic before returning a fresh channel
+  try {
+    const existingChannels = supabase.getChannels();
+    for (const ch of existingChannels) {
+      if (ch.topic === `realtime:${name}` || ch.topic === name) {
+        try {
+          _originalRemoveChannel(ch);
+        } catch {}
+      }
+    }
+  } catch {}
+
+  const channel = _originalChannel(name, opts);
+
+  // Wrap channel.on defensively to ensure .on('postgres_changes', ...) never crashes the app
+  const origOn = channel.on.bind(channel);
+  channel.on = (type: any, filter: any, callback: any) => {
+    try {
+      if (
+        type === 'postgres_changes' &&
+        ((channel as any).joinedOnce || channel.state === 'joined' || channel.state === 'joining')
+      ) {
+        console.warn(`[Realtime Channel] Prevented illegal postgres_changes on already-subscribed channel: ${name}.`);
+        return channel;
+      }
+      return origOn(type, filter, callback);
+    } catch (e: any) {
+      console.warn(`[Realtime Channel] Caught .on(${type}) on channel ${name}:`, e?.message);
+      return channel;
+    }
+  };
+
+  // Wrap channel.subscribe defensively to silence normal 1000 closure codes
+  const origSubscribe = channel.subscribe.bind(channel);
+  channel.subscribe = (callback?: (status: string, err?: any) => void, timeout?: number) => {
+    const safeCallback = (status: string, err?: any) => {
+      const errMsg = err?.message || String(err || '');
+      if (
+        errMsg.includes('1000') ||
+        errMsg.includes('socket closed') ||
+        errMsg.includes('closed before') ||
+        status === 'CLOSED'
+      ) {
+        // Normal WebSocket closure/reconnect in React StrictMode
+        return;
+      }
+      if (callback) {
+        callback(status, err);
+      }
+    };
+    try {
+      return origSubscribe(safeCallback, timeout);
+    } catch (e: any) {
+      console.warn(`[Realtime Channel] Handled .subscribe on channel ${name}:`, e?.message);
+      return channel;
+    }
+  };
+
+  return channel;
+};
+
 (supabase as any).removeChannel = (channel: any): Promise<string> => {
-  return safeRemoveChannel(channel, 150);
+  return safeRemoveChannel(channel);
 };
 
 export const SUPABASE_SERVICE_ROLE_KEY: string = (
@@ -1458,28 +1487,44 @@ let staffPresenceChannelInstance: any = null;
  * Returns a shared Supabase Realtime channel for staff presence ('public:staff-presence-realtime').
  */
 export function getStaffPresenceChannel() {
-  if (!staffPresenceChannelInstance && typeof window !== 'undefined' && supabase) {
-    staffPresenceChannelInstance = supabase.channel('public:staff-presence-realtime');
+  if (typeof window === 'undefined' || !supabase) return null;
 
-    staffPresenceChannelInstance
-      .on('presence', { event: 'sync' }, () => {
-        try {
-          const state = staffPresenceChannelInstance.presenceState();
-          const activePresences: any[] = [];
-          Object.values(state).forEach((presList: any) => {
-            if (Array.isArray(presList)) {
-              activePresences.push(...presList);
-            }
-          });
-          window.dispatchEvent(
-            new CustomEvent('tirth-staff-presence-changed', {
-              detail: { presences: activePresences },
-            })
-          );
-        } catch {}
-      })
-      .subscribe();
+  if (staffPresenceChannelInstance && staffPresenceChannelInstance.state !== 'closed') {
+    return staffPresenceChannelInstance;
   }
+
+  // Remove any stale local instances before creating fresh presence channel
+  try {
+    supabase
+      .getChannels()
+      .filter((c) => c.topic && c.topic.includes('staff-presence-realtime'))
+      .forEach((c) => {
+        try {
+          supabase.removeChannel(c);
+        } catch {}
+      });
+  } catch {}
+
+  staffPresenceChannelInstance = supabase.channel('public:staff-presence-realtime');
+  staffPresenceChannelInstance
+    .on('presence', { event: 'sync' }, () => {
+      try {
+        const state = staffPresenceChannelInstance.presenceState();
+        const activePresences: any[] = [];
+        Object.values(state).forEach((presList: any) => {
+          if (Array.isArray(presList)) {
+            activePresences.push(...presList);
+          }
+        });
+        window.dispatchEvent(
+          new CustomEvent('tirth-staff-presence-changed', {
+            detail: { presences: activePresences },
+          })
+        );
+      } catch {}
+    })
+    .subscribe();
+
   return staffPresenceChannelInstance;
 }
 

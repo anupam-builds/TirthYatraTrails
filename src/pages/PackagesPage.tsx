@@ -63,7 +63,7 @@ export const PackagesPage: React.FC = () => {
     }
 
     // Real-time Supabase Channel
-    const channelName = 'public:content-sync-channel';
+    const channelName = `content-sync-packages-page-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase.channel(channelName);
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, () => {

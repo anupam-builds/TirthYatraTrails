@@ -86,9 +86,9 @@ export const AdminReviews: React.FC = () => {
     loadReviews();
   }, []);
 
-  // Real-time subscription on public:content-sync-channel
+  // Real-time subscription on isolated unique channel
   useEffect(() => {
-    const channelName = 'public:content-sync-channel';
+    const channelName = `content-sync-reviews-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const channel = supabase.channel(channelName);
 
     const handlePayload = (payload: any) => {
