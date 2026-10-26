@@ -149,13 +149,20 @@ export function isValidEntityId(id: unknown): id is string | number {
 export function broadcastContentSync(event: string, payload: Record<string, any>) {
   try {
     const channel = supabase.channel('public:content-broadcast-channel');
-    channel.send({
-      type: 'broadcast',
+    const message = {
+      type: 'broadcast' as const,
       event,
       payload,
-    }).catch((err) => {
-      console.debug('[broadcastContentSync] Channel broadcast notice:', err);
-    });
+    };
+    if ((channel as any).state === 'joined') {
+      channel.send(message).catch?.((err: any) => {
+        console.debug('[broadcastContentSync] Channel broadcast notice:', err);
+      });
+    } else if (typeof (channel as any).httpSend === 'function') {
+      (channel as any).httpSend(message).catch?.((err: any) => {
+        console.debug('[broadcastContentSync] HTTP broadcast notice:', err);
+      });
+    }
   } catch (err) {
     console.debug('[broadcastContentSync] Exception broadcasting:', err);
   }
@@ -3740,7 +3747,6 @@ export const api = {
           patchMatched = true;
           const mapped = mapPackageRow(row);
           localStore.updatePackage(rawId, mapped);
-          broadcastContentSync('package_updated', { package: mapped, id: rawId });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
           }
@@ -3755,7 +3761,6 @@ export const api = {
         if (isStatementTimeoutError(errText)) {
           console.debug(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${rawId}. Safeguarding local state.`);
           const fallbackMapped = localStore.updatePackage(rawId, pkg);
-          broadcastContentSync('package_updated', { package: fallbackMapped, id: rawId });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
           }
@@ -3767,7 +3772,6 @@ export const api = {
       if (isStatementTimeoutError(fetchErr)) {
         console.debug(`[Supabase updatePackage] Statement timeout caught in fetch. Preserving local package.`);
         const fallbackMapped = localStore.updatePackage(rawId, pkg);
-        broadcastContentSync('package_updated', { package: fallbackMapped, id: rawId });
         return fallbackMapped;
       }
       console.debug('Direct fetch updatePackage network notice:', fetchErr);
@@ -3789,7 +3793,6 @@ export const api = {
         if (!upsertErr && upsertData) {
           const mapped = mapPackageRow(upsertData);
           localStore.updatePackage(rawId, mapped);
-          broadcastContentSync('package_updated', { package: mapped, id: rawId });
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
           }
@@ -3812,7 +3815,6 @@ export const api = {
           if (upsertRow) {
             const mapped = mapPackageRow(upsertRow);
             localStore.updatePackage(rawId, mapped);
-            broadcastContentSync('package_updated', { package: mapped, id: rawId });
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
             }
@@ -3823,7 +3825,6 @@ export const api = {
         if (isStatementTimeoutError(upsertCatchErr)) {
           console.debug('[Supabase updatePackage] Statement timeout caught during upsert fallback. Safeguarding local state.');
           const fallbackMapped = localStore.updatePackage(rawId, pkg);
-          broadcastContentSync('package_updated', { package: fallbackMapped, id: rawId });
           return fallbackMapped;
         }
         console.debug('[Supabase updatePackage] Upsert fallback notice:', upsertCatchErr);
@@ -3836,7 +3837,6 @@ export const api = {
         const inserted = await this.createPackage({ ...pkg, ...insertOnlyPayload });
         if (inserted) {
           localStore.updatePackage(rawId, inserted);
-          broadcastContentSync('package_updated', { package: inserted, id: rawId });
           return inserted;
         }
       } catch (insertErr) {
@@ -3846,7 +3846,6 @@ export const api = {
 
     // 3. Fallback to local storage update so package is never lost
     const updated = localStore.updatePackage(rawId, pkg);
-    broadcastContentSync('package_updated', { package: updated, id: rawId });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: updated }));
     }
