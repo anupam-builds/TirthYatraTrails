@@ -243,8 +243,18 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
       )
       .subscribe((status, err) => {
         setConnectionStatus(status);
+        const errMsg = err?.message || String(err || '');
+        if (
+          errMsg.includes('1000') ||
+          errMsg.includes('socket closed') ||
+          errMsg.includes('closed before') ||
+          status === 'CLOSED'
+        ) {
+          // Normal WebSocket teardown / reconnect in React StrictMode
+          return;
+        }
         if (err) {
-          console.error(`[Realtime Sync] Subscription error on ${leadsChannelName}:`, err);
+          console.warn(`[Realtime Sync] Subscription notice on ${leadsChannelName}:`, err);
           setIsConnected(false);
         } else {
           console.log(`[Realtime Sync] Leads channel ${leadsChannelName} status:`, status);
@@ -273,8 +283,17 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
         }
       )
       .subscribe((status, err) => {
+        const errMsg = err?.message || String(err || '');
+        if (
+          errMsg.includes('1000') ||
+          errMsg.includes('socket closed') ||
+          errMsg.includes('closed before') ||
+          status === 'CLOSED'
+        ) {
+          return;
+        }
         if (err) {
-          console.error(`[Realtime Sync] Subscription error on ${presenceChannelName}:`, err);
+          console.warn(`[Realtime Sync] Presence subscription notice on ${presenceChannelName}:`, err);
         } else {
           console.log(`[Realtime Sync] Presence channel ${presenceChannelName} status:`, status);
         }

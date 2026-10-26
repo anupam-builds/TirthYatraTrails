@@ -22,6 +22,7 @@ let currentPresences: AdminPresenceInfo[] = [];
 let currentEmails = new Set<string>();
 let currentIds = new Set<string>();
 const listeners = new Set<(presences: AdminPresenceInfo[], emails: Set<string>, ids: Set<string>) => void>();
+let adminPresenceCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
 function notifyListeners() {
   listeners.forEach((listener) => {
@@ -178,6 +179,11 @@ export function useAdminPresence() {
   );
 
   useEffect(() => {
+    if (adminPresenceCleanupTimer) {
+      clearTimeout(adminPresenceCleanupTimer);
+      adminPresenceCleanupTimer = null;
+    }
+
     listeners.add(handleUpdate);
     subscribersCount++;
 
@@ -199,17 +205,22 @@ export function useAdminPresence() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handleBeforeUnload);
 
-      // If no more components are subscribed, cleanup the channel
+      // If no more components are subscribed, debounce cleanup to survive React StrictMode remounts
       if (subscribersCount <= 0) {
         subscribersCount = 0;
         if (sharedChannel) {
-          const toRemove = sharedChannel;
-          sharedChannel = null;
-          toRemove.untrack().catch(() => {});
-          supabase.removeChannel(toRemove).catch(() => {});
-          currentPresences = [];
-          currentEmails = new Set();
-          currentIds = new Set();
+          if (adminPresenceCleanupTimer) clearTimeout(adminPresenceCleanupTimer);
+          adminPresenceCleanupTimer = setTimeout(() => {
+            if (subscribersCount <= 0 && sharedChannel) {
+              const toRemove = sharedChannel;
+              sharedChannel = null;
+              toRemove.untrack().catch(() => {});
+              safeRemoveChannel(toRemove, 100);
+              currentPresences = [];
+              currentEmails = new Set();
+              currentIds = new Set();
+            }
+          }, 250);
         }
       }
     };

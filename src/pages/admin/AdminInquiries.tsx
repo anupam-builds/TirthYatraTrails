@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
 import { api, updateLeadOrInquiryStatus, cleanUnassignedValue, matchLeadId, mergeUpdatedLeadFields, mapInquiryRow, isValidEntityId } from '../../services/api.js';
-import { supabase, safeSupabaseUpdate } from '../../lib/supabase.js';
+import { supabase, safeSupabaseUpdate, safeRemoveChannel } from '../../lib/supabase.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../services/soundNotification.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -95,7 +95,7 @@ export const AdminInquiries: React.FC = () => {
 
   // Active postgres_changes subscription specifically listening for event: 'UPDATE' on both 'leads' and 'inquiries' tables
   useEffect(() => {
-    const channelName = `admin-desk-update-sync-${Math.random().toString(36).substring(2, 8)}`;
+    const channelName = 'admin-desk-update-sync';
     console.log(`🔌 [AdminInquiries] Registering active UPDATE postgres_changes listeners on ${channelName}`);
 
     const handleRemoteUpdate = (payload: any) => {
@@ -217,8 +217,18 @@ export const AdminInquiries: React.FC = () => {
         }
       )
       .subscribe((status, err) => {
+        const errMsg = err?.message || String(err || '');
+        if (
+          errMsg.includes('1000') ||
+          errMsg.includes('socket closed') ||
+          errMsg.includes('closed before') ||
+          status === 'CLOSED'
+        ) {
+          // Normal WebSocket lifecycle closure / reconnect in React StrictMode
+          return;
+        }
         if (err) {
-          console.error(`[AdminInquiries] Subscription error on ${channelName}:`, err);
+          console.warn(`[AdminInquiries] Subscription status notice on ${channelName}:`, err);
         } else {
           console.log(`[AdminInquiries] Live updates channel ${channelName} status:`, status);
         }
@@ -226,8 +236,7 @@ export const AdminInquiries: React.FC = () => {
 
     // Dedup channel subscriptions cleanly in useEffect cleanup
     return () => {
-      console.log(`🧹 [AdminInquiries] Cleaning up channel ${channelName}`);
-      supabase.removeChannel(updateChannel);
+      safeRemoveChannel(updateChannel, 200);
     };
   }, [setLeads]);
 

@@ -722,107 +722,71 @@ export const supabase: SupabaseClient = createClient(
 
 /**
  * Safely tears down a Supabase Realtime channel without triggering premature WebSocket closure warnings.
- * Checks whether the channel or underlying WebSocket is still in the 'joining' or 'connecting' phase,
- * and defers teardown until the connection is established.
+ * Debounces channel teardown by default (150ms) so that React StrictMode mount/unmount cycles
+ * cancel teardown and prevent "WebSocket is closed before the connection is established" / "socket closed: 1000".
  */
-export function safeRemoveChannel(channel: any): Promise<string> {
+const pendingChannelRemovals = new Map<string, ReturnType<typeof setTimeout>>();
+
+export function cancelChannelRemoval(topic: string) {
+  if (!topic) return;
+  const timer = pendingChannelRemovals.get(topic);
+  if (timer) {
+    clearTimeout(timer);
+    pendingChannelRemovals.delete(topic);
+  }
+}
+
+const _originalRemoveChannel = supabase.removeChannel.bind(supabase);
+const _originalChannel = supabase.channel.bind(supabase);
+
+// Intercept supabase.channel to cancel any pending channel teardowns immediately when a channel is recreated/remounted
+(supabase as any).channel = (name: string, opts?: any) => {
+  if (name) {
+    cancelChannelRemoval(name);
+    cancelChannelRemoval(`realtime:${name}`);
+  }
+  return _originalChannel(name, opts);
+};
+
+export function safeRemoveChannel(channel: any, delay: number = 150): Promise<string> {
   if (!channel) return Promise.resolve('ok');
   try {
+    const topic = channel.topic || channel.subTopic || (typeof channel === 'string' ? channel : '');
+    if (topic) {
+      cancelChannelRemoval(topic);
+    }
+
     if (channel.state === 'closed') {
       return Promise.resolve('ok');
     }
 
-    const socket = (channel as any).socket;
-    const isSocketConnecting =
-      socket?.conn?.readyState === 0 || // WebSocket.CONNECTING
-      (typeof socket?.connectionState === 'function' && socket.connectionState() === 'connecting') ||
-      channel.state === 'joining';
-
-    if (isSocketConnecting) {
-      return new Promise<string>((resolve) => {
-        let hasResolved = false;
-        const doTeardown = () => {
-          if (hasResolved) return;
-          hasResolved = true;
-          try {
-            if (channel.state !== 'closed' && channel.state !== 'leaving') {
-              supabase.removeChannel(channel).then(resolve).catch(() => resolve('ok'));
-            } else {
-              resolve('ok');
-            }
-          } catch {
+    return new Promise<string>((resolve) => {
+      const doTeardown = () => {
+        if (topic) pendingChannelRemovals.delete(topic);
+        try {
+          if (channel.state === 'closed' || channel.state === 'leaving') {
             resolve('ok');
+            return;
           }
-        };
-
-        const timer = setTimeout(doTeardown, 350);
-
-        if (socket?.conn && typeof socket.conn.addEventListener === 'function') {
-          try {
-            socket.conn.addEventListener('open', () => {
-              clearTimeout(timer);
-              setTimeout(doTeardown, 50);
-            }, { once: true });
-          } catch {}
+          _originalRemoveChannel(channel).then(resolve).catch(() => resolve('ok'));
+        } catch {
+          resolve('ok');
         }
-      });
-    }
+      };
 
-    return supabase.removeChannel(channel).catch(() => 'ok');
+      const timer = setTimeout(doTeardown, delay);
+      if (topic) {
+        pendingChannelRemovals.set(topic, timer);
+      }
+    });
   } catch {
     return Promise.resolve('ok');
   }
 }
 
-// Safely intercept supabase.removeChannel to prevent premature WebSocket closure warnings across all hooks
-const _originalRemoveChannel = supabase.removeChannel.bind(supabase);
+// Safely intercept supabase.removeChannel to use debounced teardown across all hooks and components
 (supabase as any).removeChannel = (channel: any): Promise<string> => {
-  if (!channel) return Promise.resolve('ok');
-  try {
-    if (channel.state === 'closed') {
-      return Promise.resolve('ok');
-    }
-
-    const socket = (channel as any).socket;
-    const isSocketConnecting =
-      socket?.conn?.readyState === 0 || // WebSocket.CONNECTING
-      (typeof socket?.connectionState === 'function' && socket.connectionState() === 'connecting') ||
-      channel.state === 'joining';
-
-    if (isSocketConnecting) {
-      return new Promise<string>((resolve) => {
-        let hasResolved = false;
-        const doTeardown = () => {
-          if (hasResolved) return;
-          hasResolved = true;
-          try {
-            if (channel.state !== 'closed' && channel.state !== 'leaving') {
-              _originalRemoveChannel(channel).then(resolve).catch(() => resolve('ok'));
-            } else {
-              resolve('ok');
-            }
-          } catch {
-            resolve('ok');
-          }
-        };
-
-        const timer = setTimeout(doTeardown, 350);
-
-        if (socket?.conn && typeof socket.conn.addEventListener === 'function') {
-          try {
-            socket.conn.addEventListener('open', () => {
-              clearTimeout(timer);
-              setTimeout(doTeardown, 50);
-            }, { once: true });
-          } catch {}
-        }
-      });
-    }
-
-    return _originalRemoveChannel(channel);
-  } catch {
-    return _originalRemoveChannel(channel);
-  }
+  return safeRemoveChannel(channel, 150);
 };
 
 export const SUPABASE_SERVICE_ROLE_KEY: string = (
@@ -1318,6 +1282,15 @@ export function normalizePayloadInMemory(
     }
   }
 
+  // For staff_members table, strip non-existent columns (updated_at, last_active, is_online, last_seen, etc.)
+  if (cleanTable === 'staff_members') {
+    delete payload.updated_at;
+    delete payload.last_active;
+    delete payload.is_online;
+    delete payload.last_seen;
+    delete payload.last_active_at;
+  }
+
   // Strip any columns cached as unsupported for this table (from previous PGRST204)
   const badCols = getUnsupportedColumns(cleanTable);
   badCols.forEach((col) => {
@@ -1513,10 +1486,9 @@ export function getStaffPresenceChannel() {
 /**
  * Conflict-free staff heartbeat tracker:
  * 1. Debounced in-memory: runs at most once every 60 seconds per staff session,
- *    preventing React StrictMode double-mounts from firing duplicate network requests.
- * 2. Supabase Realtime Presence: tracks live online status without any database writes.
- * 3. PATCH update only: sends HTTP PATCH to staff_members (and staff_sessions if present).
- *    NEVER sends HTTP POST (.insert/.upsert), eliminating 409 Conflict entirely.
+ *    preventing React StrictMode double-mounts from firing duplicate calls.
+ * 2. Supabase Realtime Presence: tracks live online status without any database REST writes,
+ *    completely eliminating 400 Bad Request on staff_members and 409 Conflict network errors.
  */
 export async function trackStaffHeartbeat(staffId?: string, staffEmail?: string): Promise<void> {
   if (!staffId) return;
@@ -1537,7 +1509,7 @@ export async function trackStaffHeartbeat(staffId?: string, staffEmail?: string)
   const timestamp = new Date().toISOString();
   const cleanEmail = (staffEmail || '').trim().toLowerCase();
 
-  // 1. Supabase Realtime Presence (zero database writes, zero conflicts)
+  // Rely exclusively on Supabase Realtime Presence (zero database writes, zero network errors)
   try {
     const channel = getStaffPresenceChannel();
     if (channel && typeof channel.track === 'function') {
@@ -1547,38 +1519,6 @@ export async function trackStaffHeartbeat(staffId?: string, staffEmail?: string)
         online_at: timestamp,
       }).catch?.(() => {});
     }
-  } catch {}
-
-  // 2. Conflict-free PATCH updates ONLY (Zero POST / Zero 409 Conflicts):
-  // HTTP PATCH returns 200/204 with 0 rows affected if row doesn't exist, and CAN NEVER throw 409 Conflict.
-  try {
-    const updates: Promise<any>[] = [
-      Promise.resolve(
-        supabase
-          .from('staff_members')
-          .update({ updated_at: timestamp })
-          .eq('id', cleanId)
-      ),
-      Promise.resolve(
-        supabase
-          .from('staff_sessions')
-          .update({ last_active: timestamp })
-          .eq('staff_id', cleanId)
-      ),
-    ];
-
-    if (cleanEmail) {
-      updates.push(
-        Promise.resolve(
-          supabase
-            .from('staff_members')
-            .update({ updated_at: timestamp })
-            .eq('email', cleanEmail)
-        )
-      );
-    }
-
-    Promise.allSettled(updates).catch(() => {});
   } catch {}
 }
 
