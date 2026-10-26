@@ -336,7 +336,14 @@ export const AdminPackages: React.FC = () => {
       'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80'
     ]);
     setOverview(p.overview);
-    setHighlightsString(p.highlights.join(', '));
+    const rawHighlights = p.highlights;
+    if (Array.isArray(rawHighlights)) {
+      setHighlightsString(rawHighlights.join(', '));
+    } else if (typeof rawHighlights === 'string') {
+      setHighlightsString(rawHighlights);
+    } else {
+      setHighlightsString('');
+    }
 
     // Itinerary days from package
     const rawItin = p.itinerary || [];
@@ -616,6 +623,8 @@ export const AdminPackages: React.FC = () => {
       imageUrl: primaryCover,
       galleryImages: validImages,
       overview,
+      highlights,
+      cancellationPolicy: editingPackage?.cancellationPolicy,
       packageType: packageType.trim() || 'All-Inclusive Guided Yatra',
       experienceLevel: experienceLevel.trim() || 'Comfortable • Senior Friendly',
       hotelsLevel: hotelsLevel.trim() || '3 & 4 Star Deluxe Stays',
@@ -655,15 +664,12 @@ export const AdminPackages: React.FC = () => {
       setIsModalOpen(false);
       setTimeout(() => setToast(null), 5000);
     } catch (err: any) {
-      console.error('Error saving package:', err);
-      const isTimeout = err?.message?.includes('timeout') || err?.message?.includes('57014');
+      console.error('[Package Update Error]:', err);
       setToast({
         id: String(Date.now()),
-        type: isTimeout ? 'info' : 'error',
-        title: isTimeout ? 'Saved Locally (Database Busy)' : 'Save Failed',
-        message: isTimeout
-          ? 'Remote database statement timed out. Your package changes were safely saved locally.'
-          : (err?.message || 'Failed saving package. Please check the fields and try again.'),
+        type: 'error',
+        title: 'Save Failed',
+        message: err?.message || 'Failed saving package to database. Please check console for details.',
       });
       setTimeout(() => setToast(null), 6000);
     }

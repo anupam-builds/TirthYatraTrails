@@ -103,7 +103,55 @@ ALTER TABLE IF EXISTS public.leads
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
--- 3. Ensure public.staff_sessions table, primary key, and RLS policies exist
+-- 3. Ensure public.packages table and columns exist
+CREATE TABLE IF NOT EXISTS public.packages (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  category TEXT,
+  duration TEXT,
+  location TEXT,
+  starting_price NUMERIC,
+  booked_rank TEXT,
+  image_url TEXT,
+  gallery_images JSONB DEFAULT '[]'::jsonb,
+  overview TEXT,
+  highlights JSONB DEFAULT '[]'::jsonb,
+  cancellation_policy TEXT,
+  package_type TEXT,
+  experience_level TEXT,
+  hotels_level TEXT,
+  transfers TEXT,
+  itinerary JSONB DEFAULT '[]'::jsonb,
+  inclusions JSONB DEFAULT '[]'::jsonb,
+  exclusions JSONB DEFAULT '[]'::jsonb,
+  quick_summary JSONB DEFAULT '[]'::jsonb,
+  is_published BOOLEAN DEFAULT TRUE,
+  is_deleted BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE IF EXISTS public.packages
+  ADD COLUMN IF NOT EXISTS highlights JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS quick_summary JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS gallery_images JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS itinerary JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS inclusions JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS exclusions JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS booked_rank TEXT,
+  ADD COLUMN IF NOT EXISTS cancellation_policy TEXT,
+  ADD COLUMN IF NOT EXISTS package_type TEXT,
+  ADD COLUMN IF NOT EXISTS experience_level TEXT,
+  ADD COLUMN IF NOT EXISTS hotels_level TEXT,
+  ADD COLUMN IF NOT EXISTS transfers TEXT,
+  ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE public.packages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public all on packages" ON public.packages;
+CREATE POLICY "Allow public all on packages" ON public.packages FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. Ensure public.staff_sessions table, primary key, and RLS policies exist
 CREATE TABLE IF NOT EXISTS public.staff_sessions (
   id UUID DEFAULT gen_random_uuid(),
   staff_id TEXT PRIMARY KEY,

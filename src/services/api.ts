@@ -3667,35 +3667,31 @@ export const api = {
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
     const rawId = String(id || pkg.id || '').trim();
-    const hasValidDbId = isValidDatabasePackageId(rawId);
-
-    // 1. Validation Check: Check whether the package has a valid database ID before sending a PATCH request.
-    // If the package ID is missing or temporary, fallback to an insert/upsert operation so it saves correctly
-    // to Supabase instead of throwing a "not found" error.
-    if (!hasValidDbId) {
-      console.debug(`[updatePackage] Package ID "${rawId}" is missing or temporary. Falling back to insert/upsert operation.`);
-      const pkgToInsert = { ...pkg };
-      delete pkgToInsert.id;
-      return await this.createPackage(pkgToInsert);
+    if (!rawId) {
+      const err = new Error('Package ID is required for update');
+      console.error('[Package Update Error]:', err);
+      throw err;
     }
 
     pkg = await sanitizeEntityImages(pkg, 'packages');
     const payload = packageToRow(pkg);
     delete payload.id;
 
-    // Ensure JSONB fields (itinerary, transfers, highlights, gallery_images) are passed as native arrays/objects, never double-stringified JSON text
+    // Explicitly format highlights from comma-separated string or array
+    if (pkg.highlights !== undefined) {
+      if (typeof pkg.highlights === 'string') {
+        payload.highlights = (pkg.highlights as string).split(',').map((s) => s.trim()).filter(Boolean);
+      } else if (Array.isArray(pkg.highlights)) {
+        payload.highlights = pkg.highlights.map((s) => String(s).trim()).filter(Boolean);
+      }
+    }
+
+    // Ensure array/JSONB fields are native arrays
     if (typeof payload.itinerary === 'string') {
       try { payload.itinerary = JSON.parse(payload.itinerary); } catch { payload.itinerary = []; }
     }
     if (payload.itinerary !== undefined && !Array.isArray(payload.itinerary)) {
       payload.itinerary = [payload.itinerary];
-    }
-
-    if (typeof payload.highlights === 'string') {
-      try { payload.highlights = JSON.parse(payload.highlights); } catch { payload.highlights = []; }
-    }
-    if (payload.highlights !== undefined && !Array.isArray(payload.highlights)) {
-      payload.highlights = [payload.highlights];
     }
 
     if (typeof payload.gallery_images === 'string') {
@@ -3726,130 +3722,58 @@ export const api = {
       payload.quick_summary = [payload.quick_summary];
     }
 
-    const explicitHeaders = getSupabaseHeaders();
-
-    console.debug(`Sending package update payload for ID "${rawId}"`);
-
-    // 1. Direct PostgREST PATCH with explicit headers
-    let patchMatched = false;
-    try {
-      const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(rawId)}`;
-      const response = await fetch(restUrl, {
-        method: 'PATCH',
-        headers: explicitHeaders,
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const row = Array.isArray(data) ? data[0] : data;
-        if (row) {
-          patchMatched = true;
-          const mapped = mapPackageRow(row);
-          localStore.updatePackage(rawId, mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
-          }
-          return mapped;
-        } else {
-          console.debug(`[Supabase updatePackage] PostgREST PATCH matched 0 rows for "${rawId}". Falling back to upsert.`);
-        }
-      } else if (response.status === 404) {
-        console.debug(`[Supabase updatePackage] PostgREST PATCH returned 404 for "${rawId}". Falling back to upsert.`);
-      } else {
-        const errText = await response.text();
-        if (isStatementTimeoutError(errText)) {
-          console.debug(`[Supabase updatePackage] Statement timeout (code 57014) intercepted on PostgREST PATCH for ${rawId}. Safeguarding local state.`);
-          const fallbackMapped = localStore.updatePackage(rawId, pkg);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackMapped }));
-          }
-          return fallbackMapped;
-        }
-        console.debug(`Direct fetch updatePackage returned (${response.status}):`, errText);
-      }
-    } catch (fetchErr: any) {
-      if (isStatementTimeoutError(fetchErr)) {
-        console.debug(`[Supabase updatePackage] Statement timeout caught in fetch. Preserving local package.`);
-        const fallbackMapped = localStore.updatePackage(rawId, pkg);
-        return fallbackMapped;
-      }
-      console.debug('Direct fetch updatePackage network notice:', fetchErr);
-    }
-
-    // 2. Fallback to Upsert/Insert if the package ID does not exist in Supabase yet
-    if (!patchMatched) {
-      console.debug(`[Supabase updatePackage] Package "${rawId}" not found in database. Performing upsert/insert.`);
-      const upsertPayload = { ...payload, id: rawId };
-
-      try {
-        // Try Supabase SDK upsert
-        const { data: upsertData, error: upsertErr } = await supabase
-          .from('packages')
-          .upsert([upsertPayload])
-          .select()
-          .maybeSingle();
-
-        if (!upsertErr && upsertData) {
-          const mapped = mapPackageRow(upsertData);
-          localStore.updatePackage(rawId, mapped);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
-          }
-          return mapped;
-        }
-
-        // Try direct PostgREST upsert with resolution=merge-duplicates
-        const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/packages`, {
-          method: 'POST',
-          headers: {
-            ...explicitHeaders,
-            'Prefer': 'resolution=merge-duplicates,return=representation',
-          },
-          body: JSON.stringify(upsertPayload),
-        });
-
-        if (upsertRes.ok) {
-          const upsertJson = await upsertRes.json();
-          const upsertRow = Array.isArray(upsertJson) ? upsertJson[0] : upsertJson;
-          if (upsertRow) {
-            const mapped = mapPackageRow(upsertRow);
-            localStore.updatePackage(rawId, mapped);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
-            }
-            return mapped;
-          }
-        }
-      } catch (upsertCatchErr: any) {
-        if (isStatementTimeoutError(upsertCatchErr)) {
-          console.debug('[Supabase updatePackage] Statement timeout caught during upsert fallback. Safeguarding local state.');
-          const fallbackMapped = localStore.updatePackage(rawId, pkg);
-          return fallbackMapped;
-        }
-        console.debug('[Supabase updatePackage] Upsert fallback notice:', upsertCatchErr);
-      }
-
-      // If upsert could not be completed, fallback to insert
-      try {
-        console.debug(`[Supabase updatePackage] Performing clean insert fallback for package "${rawId}".`);
-        const { id: _, ...insertOnlyPayload } = upsertPayload;
-        const inserted = await this.createPackage({ ...pkg, ...insertOnlyPayload });
-        if (inserted) {
-          localStore.updatePackage(rawId, inserted);
-          return inserted;
-        }
-      } catch (insertErr) {
-        console.debug('[Supabase updatePackage] Clean insert fallback notice:', insertErr);
+    // Strip undefined keys before database call
+    for (const k of Object.keys(payload)) {
+      if (payload[k] === undefined) {
+        delete payload[k];
       }
     }
 
-    // 3. Fallback to local storage update so package is never lost
-    const updated = localStore.updatePackage(rawId, pkg);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: updated }));
+    // 1. Direct Supabase SDK update query with explicit target row filter: .eq('id', rawId)
+    const { data, error } = await supabase
+      .from('packages')
+      .update(payload)
+      .eq('id', rawId)
+      .select();
+
+    if (error) {
+      console.error('[Package Update Error]:', error);
+      throw new Error(error.message || `Failed to update package in Supabase: ${JSON.stringify(error)}`);
     }
-    return updated;
+
+    if (data && data.length > 0) {
+      const mapped = mapPackageRow(data[0]);
+      localStore.updatePackage(rawId, mapped);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+      }
+      return mapped;
+    }
+
+    // 2. If 0 rows matched (row does not yet exist in remote database), perform upsert
+    console.debug(`[Supabase updatePackage] 0 rows matched for id="${rawId}". Upserting package...`);
+    const { data: upsertData, error: upsertErr } = await supabase
+      .from('packages')
+      .upsert([{ ...payload, id: rawId }])
+      .select();
+
+    if (upsertErr) {
+      console.error('[Package Update Error]:', upsertErr);
+      throw new Error(upsertErr.message || 'Failed to upsert package in Supabase');
+    }
+
+    if (upsertData && upsertData.length > 0) {
+      const mapped = mapPackageRow(upsertData[0]);
+      localStore.updatePackage(rawId, mapped);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
+      }
+      return mapped;
+    }
+
+    const notFoundErr = new Error(`Package with ID "${rawId}" was not found or updated in Supabase.`);
+    console.error('[Package Update Error]:', notFoundErr);
+    throw notFoundErr;
   },
 
   async deletePackage(idOrQuery: string): Promise<boolean> {
@@ -5269,7 +5193,18 @@ export function mapPackageRow(row: any): Package {
     galleryImages: Array.isArray(row.gallery_images) ? row.gallery_images : (Array.isArray(row.galleryImages) ? row.galleryImages : []),
     startingPrice: Number(row.starting_price ?? row.startingPrice ?? 24000),
     overview: row.overview || '',
-    highlights: Array.isArray(row.highlights) ? row.highlights : [],
+    highlights: Array.isArray(row.highlights)
+      ? row.highlights
+      : (typeof row.highlights === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(row.highlights);
+                return Array.isArray(parsed) ? parsed : [row.highlights];
+              } catch {
+                return row.highlights.split(',').map((s: string) => s.trim()).filter(Boolean);
+              }
+            })()
+          : []),
     cancellationPolicy: row.cancellation_policy || row.cancellationPolicy || '',
     category: row.category || 'Char Dham',
     packageType: row.package_type || row.packageType || 'All-Inclusive Guided Yatra',
@@ -5425,13 +5360,19 @@ export function packageToRow(pkg: Partial<Package>): Record<string, any> {
   if (pkg.startingPrice !== undefined || (pkg as any).starting_price !== undefined) {
     row.starting_price = Number(pkg.startingPrice ?? (pkg as any).starting_price ?? 0);
   }
-  if (pkg.overview !== undefined) row.overview = pkg.overview;
   if (pkg.highlights !== undefined) {
-    let rawHls = pkg.highlights;
+    let rawHls: any = pkg.highlights;
     if (typeof rawHls === 'string') {
-      try { rawHls = JSON.parse(rawHls); } catch { rawHls = []; }
+      try {
+        const parsed = JSON.parse(rawHls);
+        rawHls = Array.isArray(parsed) ? parsed : [rawHls];
+      } catch {
+        rawHls = rawHls.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
     }
-    row.highlights = Array.isArray(rawHls) ? rawHls : [];
+    row.highlights = Array.isArray(rawHls)
+      ? rawHls.map((s: any) => String(s).trim()).filter(Boolean)
+      : [];
   }
   if (pkg.cancellationPolicy !== undefined || (pkg as any).cancellation_policy !== undefined) {
     row.cancellation_policy = pkg.cancellationPolicy ?? (pkg as any).cancellation_policy;
