@@ -25,6 +25,9 @@ export interface UseRealtimeInquiriesResult {
 
 type HookInput = ((updatedInquiry: Inquiry) => void) | UseRealtimeInquiriesOptions | undefined;
 
+// Module-level deduplication set to avoid processing duplicate Realtime payloads
+const seenRealtimeEvents = new Set<string>();
+
 export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesResult {
   // Normalize parameter to support both callback function and options object
   const options: UseRealtimeInquiriesOptions =
@@ -65,7 +68,26 @@ export function useRealtimeInquiries(param?: HookInput): UseRealtimeInquiriesRes
 
   // Handle lead/inquiry row mutation payload
   const handleLeadChange = useCallback((payload: any) => {
+    if (!payload) return;
     const eventType = payload.eventType || payload.event;
+    const eventKey = `${payload.table}:${payload.eventType}:${payload.new?.id}:${payload.commit_timestamp}`;
+
+    // Deduplicate Realtime events across channels & mount cycles
+    if (seenRealtimeEvents.has(eventKey)) {
+      return;
+    }
+    seenRealtimeEvents.add(eventKey);
+
+    // Keep Set memory bounded
+    if (seenRealtimeEvents.size > 2000) {
+      const it = seenRealtimeEvents.values();
+      for (let i = 0; i < 500; i++) {
+        const next = it.next();
+        if (next.done) break;
+        seenRealtimeEvents.delete(next.value);
+      }
+    }
+
     console.log(`📡 [Realtime Sync] Lead/Inquiry change [${eventType}]:`, payload);
 
     if (eventType === 'DELETE') {

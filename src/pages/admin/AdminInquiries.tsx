@@ -97,10 +97,14 @@ export const AdminInquiries: React.FC = () => {
   useEffect(() => {
     const channelName = `admin-desk-update-sync-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     console.log(`🔌 [AdminInquiries] Registering active UPDATE postgres_changes listeners on ${channelName}`);
+    const seenEvents = new Set<string>();
 
     const handleRemoteUpdate = (payload: any) => {
       const newRow = payload?.new;
       if (!newRow || !newRow.id) return;
+      const eventKey = `${payload.table || 'leads'}:${payload.eventType || 'UPDATE'}:${newRow.id}:${payload.commit_timestamp}`;
+      if (seenEvents.has(eventKey)) return;
+      seenEvents.add(eventKey);
 
       const isDeleted = Boolean(
         newRow.is_deleted === true ||

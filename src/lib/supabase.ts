@@ -1232,14 +1232,64 @@ export function unpackExtendedLeadData(row: any): Record<string, any> {
   return unpacked;
 }
 
+export const LEAD_INQUIRY_WHITELIST = new Set([
+  'id',
+  'lead_id',
+  'customer_name',
+  'full_name',
+  'phone',
+  'whatsapp_number',
+  'email',
+  'city',
+  'user_city',
+  'title',
+  'package_title',
+  'type',
+  'status',
+  'start_date',
+  'tour_start_date',
+  'end_date',
+  'tour_end_date',
+  'duration_days',
+  'budget',
+  'accommodation_tier',
+  'hotel_tier',
+  'package_name',
+  'adults',
+  'children',
+  'travelers',
+  'total_travelers',
+  'child_ages',
+  'pickup_location',
+  'dropoff_location',
+  'special_requests',
+  'notes',
+  'details',
+  'metadata',
+  'assigned_staff_id',
+  'assigned_staff_name',
+  'is_locked_for_staff',
+  'reminder_at',
+  'reminder_note',
+  'is_deleted',
+  'deleted_at',
+  'deleted_by',
+  'created_at',
+  'updated_at',
+  'user_id',
+]);
+
 /**
  * Pure synchronous in-memory payload normalization for Supabase tables.
  * Eliminates all schema discovery network calls to guarantee zero 401 Unauthorized or 400 Bad Request errors.
+ * - Maps title -> package_title (if missing)
  * - Maps check_in_date -> start_date and tour_start_date, then deletes payload.check_in_date
  * - Maps check_out_date -> end_date and tour_end_date, then deletes payload.check_out_date
  * - Maps guests -> travelers and total_travelers, then deletes payload.guests
  * - Maps plan -> package_name and accommodation_tier, then deletes payload.plan
  * - Maps accommodation_preference -> accommodation_tier and hotel_tier, then deletes payload.accommodation_preference
+ * - Strips frontend-only camelCase keys (userId, leadId, referenceId, selectedPackage, etc.)
+ * - Whitelists columns for leads and inquiries tables
  * - Removes any keys with undefined values
  */
 export function normalizePayloadInMemory(
@@ -1257,39 +1307,93 @@ export function normalizePayloadInMemory(
     }
   }
 
-  // 1. Map check_in_date -> start_date and tour_start_date, then delete payload.check_in_date
+  // 1. Map title -> package_title (if missing)
+  if (payload.title && !payload.package_title) {
+    payload.package_title = payload.title;
+  }
+
+  // 2. Map check_in_date -> start_date and tour_start_date, then delete payload.check_in_date
   if (payload.check_in_date !== undefined) {
     if (!payload.start_date) payload.start_date = payload.check_in_date;
     if (!payload.tour_start_date) payload.tour_start_date = payload.check_in_date;
     delete payload.check_in_date;
   }
 
-  // 2. Map check_out_date -> end_date and tour_end_date, then delete payload.check_out_date
+  // 3. Map check_out_date -> end_date and tour_end_date, then delete payload.check_out_date
   if (payload.check_out_date !== undefined) {
     if (!payload.end_date) payload.end_date = payload.check_out_date;
     if (!payload.tour_end_date) payload.tour_end_date = payload.check_out_date;
     delete payload.check_out_date;
   }
 
-  // 3. Map guests -> travelers and total_travelers, then delete payload.guests
+  // 4. Map guests -> travelers and total_travelers, then delete payload.guests
   if (payload.guests !== undefined && payload.guests !== null) {
     if (payload.travelers === undefined) payload.travelers = payload.guests;
     if (payload.total_travelers === undefined) payload.total_travelers = payload.guests;
     delete payload.guests;
   }
 
-  // 4. Map plan -> package_name and accommodation_tier, then delete payload.plan
+  // 5. Map plan -> package_name and accommodation_tier, then delete payload.plan
   if (payload.plan !== undefined) {
     if (!payload.package_name) payload.package_name = payload.plan;
     if (!payload.accommodation_tier) payload.accommodation_tier = payload.plan;
     delete payload.plan;
   }
 
-  // 5. Map accommodation_preference -> accommodation_tier and hotel_tier, then delete payload.accommodation_preference
+  // 6. Map accommodation_preference -> accommodation_tier and hotel_tier, then delete payload.accommodation_preference
   if (payload.accommodation_preference !== undefined) {
     if (!payload.accommodation_tier) payload.accommodation_tier = payload.accommodation_preference;
     if (!payload.hotel_tier) payload.hotel_tier = payload.accommodation_preference;
     delete payload.accommodation_preference;
+  }
+
+  // 7. Map & strip frontend-only camelCase keys
+  if (payload.userId !== undefined) {
+    if (!payload.user_id) payload.user_id = payload.userId;
+    delete payload.userId;
+  }
+  if (payload.leadId !== undefined) {
+    if (!payload.lead_id) payload.lead_id = payload.leadId;
+    delete payload.leadId;
+  }
+  if (payload.referenceId !== undefined) {
+    packedLegacy.referenceId = payload.referenceId;
+    delete payload.referenceId;
+  }
+  if (payload.selectedPackage !== undefined) {
+    packedLegacy.selectedPackage = payload.selectedPackage;
+    if (!payload.package_name && typeof payload.selectedPackage === 'string') {
+      payload.package_name = payload.selectedPackage;
+    }
+    delete payload.selectedPackage;
+  }
+
+  // Strip additional camelCase keys to protect PostgreSQL schema
+  const camelKeysToStrip = [
+    'customerName', 'fullName', 'phoneNumber', 'whatsappNumber', 'userCity',
+    'packageName', 'packageTitle', 'checkInDate', 'checkOutDate', 'startDate',
+    'endDate', 'tourStartDate', 'tourEndDate', 'totalTravelers', 'childAges',
+    'specialRequests', 'pickupLocation', 'dropoffLocation', 'assignedStaffId',
+    'assignedStaffName', 'isLockedForStaff', 'reminderAt', 'reminderNote',
+    'isDeleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt',
+    'hotelTier', 'accommodationTier'
+  ];
+  for (const k of camelKeysToStrip) {
+    if (payload[k] !== undefined) {
+      delete payload[k];
+    }
+  }
+
+  // For leads and inquiries tables: strictly enforce whitelist so unknown columns never cause 400 Bad Request
+  if (cleanTable === 'leads' || cleanTable === 'inquiries') {
+    for (const key of Object.keys(payload)) {
+      if (!LEAD_INQUIRY_WHITELIST.has(key)) {
+        if (payload[key] !== undefined) {
+          packedLegacy[key] = payload[key];
+        }
+        delete payload[key];
+      }
+    }
   }
 
   // Pack preserved legacy details into metadata/details/notes so devotee info is preserved
@@ -1308,6 +1412,8 @@ export function normalizePayloadInMemory(
       } else if (typeof payload.notes === 'string') {
         payload.notes = `${payload.notes}\n${extTag}`;
       }
+    } else {
+      payload.metadata = { ...packedLegacy };
     }
   }
 
@@ -1342,7 +1448,7 @@ export function normalizePayloadInMemory(
  * 2. Maps check_in_date -> start_date/tour_start_date, check_out_date -> end_date/tour_end_date,
  *    guests -> travelers/total_travelers, plan -> package_name, accommodation_preference -> accommodation_tier/hotel_tier.
  * 3. Deletes raw legacy keys and strips undefined values before sending .insert().
- * 4. Strictly uses the PGRST204 retry loop as a fallback if any unexpected column is rejected.
+ * 4. Strictly uses the PGRST204 retry loop as a fallback if any unexpected column is rejected without console noise.
  */
 export async function smartSupabaseInsert<T = any>(
   clientOrTable: SupabaseClient | any | string,
@@ -1386,9 +1492,6 @@ export async function smartSupabaseInsert<T = any>(
 
     if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
       const missingCol = match[1];
-      console.warn(
-        `[smartSupabaseInsert] Live-caching missing column '${missingCol}' for '${tableName}' and auto-packing...`
-      );
       recordUnsupportedColumn(tableName, missingCol);
 
       // Pack missing column into metadata / details if present
@@ -1460,9 +1563,6 @@ export async function safeSupabaseUpdate<T = any>(
 
     if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
       const missingCol = match[1];
-      console.warn(
-        `[Self-Healing Update] Caching unsupported column '${missingCol}' for table '${tableName}' and retrying...`
-      );
       recordUnsupportedColumn(tableName, missingCol);
       delete payload[missingCol];
       continue;
