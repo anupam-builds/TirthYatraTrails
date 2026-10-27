@@ -59,13 +59,13 @@ import {
 } from 'lucide-react';
 
 export const StaffPortalPage: React.FC = () => {
-  const { staffUser, isStaffAuthenticated, isStaffLoading, logoutStaff, setStaffSession } = useAuth();
+  const { staffUser, isStaffAuthenticated, isStaffLoading, isInitializing, logoutStaff, setStaffSession } = useAuth();
   const currentStaffId = staffUser?.id;
   const { navigate } = useRouter();
   const { theme, isDark, setTheme, toggleTheme } = useTheme();
 
   // Route guard: wait until supabase.auth.getSession() and email-based staff verification fully resolve
-  const [authResolving, setAuthResolving] = useState(true);
+  const [authResolving, setAuthResolving] = useState(!staffUser);
 
   useEffect(() => {
     let isCancelled = false;
@@ -126,17 +126,17 @@ export const StaffPortalPage: React.FC = () => {
       }
     }
 
-    if (!isStaffLoading) {
+    if (!isStaffLoading && !isInitializing) {
       verifyStaffRoute();
     } else {
-      // If AuthContext is still loading, keep authResolving true
+      // If AuthContext is still loading or initializing, keep authResolving true
       setAuthResolving(true);
     }
 
     return () => {
       isCancelled = true;
     };
-  }, [isStaffLoading, staffUser, setStaffSession]);
+  }, [isStaffLoading, isInitializing, staffUser, setStaffSession]);
 
   // Safety Confirmation Dialog for Logout (replicated from Admin side)
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -732,7 +732,7 @@ export const StaffPortalPage: React.FC = () => {
   };
 
   // If loading session or verifying route guard, wait until getSession has fully resolved
-  if (isStaffLoading || authResolving) {
+  if (isStaffLoading || isInitializing || authResolving) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#071322] flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-3">

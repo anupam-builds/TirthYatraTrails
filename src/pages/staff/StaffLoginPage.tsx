@@ -18,7 +18,7 @@ import {
 import { StaffMember } from '../../types.js';
 
 export const StaffLoginPage: React.FC = () => {
-  const { loginStaff, setStaffSession } = useAuth();
+  const { staffUser, isStaffAuthenticated, isStaffLoading, isInitializing, setStaffSession } = useAuth();
   const { navigate } = useRouter();
   const lampRef = useRef<CuteLampRef>(null);
 
@@ -36,6 +36,13 @@ export const StaffLoginPage: React.FC = () => {
   const setError = setErrorMessage;
   const loading = isLoading;
   const setLoading = setIsLoading;
+
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    if (!isStaffLoading && !isInitializing && isStaffAuthenticated && staffUser) {
+      navigate('/staff');
+    }
+  }, [isStaffAuthenticated, staffUser, isStaffLoading, isInitializing, navigate]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -67,32 +74,41 @@ export const StaffLoginPage: React.FC = () => {
 
     try {
       // 1. Authenticate with Supabase Auth
-      let { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: cleanPassword,
       });
 
-
-
-      if (error) {
+      if (authError) {
         const isEmailNotConfirmed =
-          error.message?.toLowerCase().includes('email not confirmed') ||
-          (error as any).code === 'email_not_confirmed';
+          authError.message?.toLowerCase().includes('email not confirmed') ||
+          (authError as any).code === 'email_not_confirmed';
 
         if (isEmailNotConfirmed) {
           setErrorMessage(
             'Email Not Confirmed: In your Supabase Dashboard, go to Authentication > Providers > Email and turn off "Confirm email", or go to Authentication > Users, click the three dots next to this staff user, and select "Confirm Email".'
           );
         } else {
-          setErrorMessage(error.message);
+          setErrorMessage(authError.message);
         }
         setIsLoading(false);
         return;
       }
 
+      // Ensure session promise fully resolves & token is ready
+      let activeSession = data?.session;
+      if (!activeSession?.access_token) {
+        try {
+          const { data: freshSession } = await supabase.auth.getSession();
+          if (freshSession?.session?.access_token) {
+            activeSession = freshSession.session;
+          }
+        } catch {}
+      }
+
       // 2. Verify Staff Table Validation:
       // After a successful Supabase Auth sign-in, check whether the user's email exists in the active staff_members table
-      const authUserEmail = (data?.user?.email || cleanEmail).toLowerCase().trim();
+      const authUserEmail = (activeSession?.user?.email || data?.user?.email || cleanEmail).toLowerCase().trim();
 
       const { data: staffMember, error: staffError } = await supabase
         .from('staff_members')
@@ -133,7 +149,7 @@ export const StaffLoginPage: React.FC = () => {
         return;
       }
 
-      // 3. Immediately establish authenticated staff session and navigate to Staff Desk without blocking
+      // 3. Immediately establish authenticated staff session and ensure token is persisted
       const mappedStaff: StaffMember & { access_token?: string } = {
         id: verifiedStaff.id,
         name: verifiedStaff.name || authUserEmail.split('@')[0],
@@ -151,20 +167,18 @@ export const StaffLoginPage: React.FC = () => {
           canAddNotes: true,
         },
         createdAt: verifiedStaff.created_at || (verifiedStaff as any).createdAt || new Date().toISOString(),
-        access_token: data?.session?.access_token,
+        access_token: activeSession?.access_token,
       };
+
+      // Synchronously persist token
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(mappedStaff)));
+        localStorage.removeItem('tyt_staff_token');
+      }
 
       if (setStaffSession) {
         setStaffSession(mappedStaff);
-      } else {
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem('tyt_staff_token', btoa(JSON.stringify(mappedStaff)));
-          localStorage.removeItem('tyt_staff_token');
-        }
       }
-
-      // Instant transition to Staff Desk
-      navigate('/staff');
 
       // Non-blocking conflict-free session and presence tracking (Zero 409 Conflicts)
       const staffId = verifiedStaff.id;
@@ -172,10 +186,11 @@ export const StaffLoginPage: React.FC = () => {
         trackStaffHeartbeat(staffId, verifiedStaff.email).catch(() => {});
       }
 
-      // Background authentication sync
-      loginStaff(cleanEmail, cleanPassword).catch((e) => {
-        console.warn('[StaffLogin] background sync note:', e?.message);
-      });
+      // Brief pause to allow React context state updates to commit cleanly before routing
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      // Seamless transition to Staff Desk
+      navigate('/staff');
     } catch (err: any) {
       setErrorMessage(err.message || 'Staff login failed. Please verify your credentials.');
     } finally {

@@ -64,6 +64,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [staffUser, setStaffUser] = useState<StaffMember | null>(null);
   const [isStaffLoading, setIsStaffLoading] = useState(true);
 
+  // Dedicated Auth Loading & Initializing State for race-condition prevention
+  const [isInitializing, setIsInitializing] = useState(true);
+  const isInitializingRef = React.useRef(true);
+
+  useEffect(() => {
+    isInitializingRef.current = isInitializing;
+  }, [isInitializing]);
+
   // Restore Customer Session
   useEffect(() => {
     async function initCustomer() {
@@ -279,6 +287,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } finally {
         if (!isCancelled) {
           setIsStaffLoading(false);
+          setIsInitializing(false);
+          isInitializingRef.current = false;
         }
       }
     }
@@ -558,6 +568,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setStaffUser(staffRecord);
     setIsStaffLoading(false);
+    setIsInitializing(false);
+    isInitializingRef.current = false;
   }, []);
 
   // Real-time Supabase auth state change listener
@@ -565,6 +577,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session?.user?.email) {
         const cleanEmail = session.user.email.toLowerCase().trim();
+        
+        // Immediately resolve loading states to prevent premature redirects
+        setIsInitializing(false);
+        isInitializingRef.current = false;
+        setIsStaffLoading(false);
+
         const isAdmin = await api.checkIsAdminEmail(cleanEmail);
         if (isAdmin) {
           const adminRecord: User = {
@@ -614,10 +632,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch {}
       } else if (event === 'SIGNED_OUT') {
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('tyt_staff_token');
+        // Prevent premature redirects if session is temporarily null during initial hydration.
+        // Only redirect to login if event === 'SIGNED_OUT' and isInitializing / isLoading is completely finished.
+        if (!isInitializingRef.current) {
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('tyt_staff_token');
+          }
+          setStaffUser(null);
         }
-        setStaffUser(null);
       }
     });
 
@@ -634,6 +656,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('tyt_staff_token');
     }
     setStaffUser(res.user);
+    setIsStaffLoading(false);
+    setIsInitializing(false);
+    isInitializingRef.current = false;
   };
 
   // Staff Logout
@@ -663,6 +688,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider
       value={{
+        isLoading: isInitializing || isStaffLoading || isAdminLoading || isCustomerLoading,
+        isInitializing,
         user,
         customerUser: user,
         isCustomerLoading,
