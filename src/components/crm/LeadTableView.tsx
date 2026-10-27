@@ -118,6 +118,22 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
     right: number;
   } | null>(null);
 
+  // Set of lead IDs whose package names are expanded in the City / Package column
+  const [expandedPackageLeadIds, setExpandedPackageLeadIds] = useState<Set<string>>(new Set());
+
+  const togglePackageExpand = (leadId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedPackageLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) {
+        next.delete(leadId);
+      } else {
+        next.add(leadId);
+      }
+      return next;
+    });
+  };
+
   // Close floating popover on click outside, scroll, resize, or escape key
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
@@ -767,13 +783,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           <table className="w-full min-w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#081220] text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <th className="py-3.5 px-4 w-[120px]">Lead ID &amp; Date</th>
-                <th className="py-3.5 px-4 w-[140px]">Assigned Staff</th>
-                <th className="py-3.5 px-4 min-w-[170px]">Customer</th>
-                <th className="py-3.5 px-4 min-w-[180px]">City / Package</th>
-                <th className="py-3.5 px-4 w-[130px]">Status</th>
-                <th className="py-3.5 px-4 w-[145px]">Dates / Duration</th>
-                <th className="py-3.5 px-4 min-w-[210px] text-right">Actions</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[110px]">Lead ID &amp; Date</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[125px]">Assigned Staff</th>
+                <th className="py-2.5 px-2.5 sm:px-3 min-w-[130px]">Customer</th>
+                <th className="py-2.5 px-2.5 sm:px-3 min-w-[150px]">City / Package</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[115px]">Status</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[125px]">Dates / Duration</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[190px] min-w-[190px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
@@ -842,7 +858,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     <React.Fragment key={inq.id}>
                       <tr className="hover:bg-slate-50/80 dark:hover:bg-[#0a192f]/50 transition-colors group">
                         {/* 1. Lead ID & Date */}
-                        <td className="py-3.5 px-4 align-middle">
+                        <td className="py-2.5 px-2.5 sm:px-3 align-middle whitespace-nowrap">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
@@ -870,7 +886,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 2. Assigned Staff - Editable ONLY by Admin */}
-                        <td className="py-3.5 px-4 align-middle">
+                        <td className="py-2.5 px-2.5 sm:px-3 align-middle whitespace-nowrap">
                           {isAdmin && onAssignStaff ? (
                             <BaseSelect
                               id={`row-assigned-staff-${lead.id}`}
@@ -931,7 +947,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   setLocalInquiries(inquiries);
                                 }
                               }}
-                              className="text-[11px] font-bold rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 max-w-[170px] truncate"
+                              className="text-[10.5px] font-bold rounded-lg px-1.5 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 max-w-[115px] sm:max-w-[125px] truncate"
                             >
                               <option value="--Unassigned--">-- Unassigned --</option>
                               {staffList.map((stf) => (
@@ -942,7 +958,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             </BaseSelect>
                           ) : (
                             <div className="flex items-center gap-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 max-w-[170px] truncate">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10.5px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 max-w-[115px] sm:max-w-[125px] truncate">
                                 <UserCheck className="w-3 h-3 text-emerald-500 shrink-0" />
                                 <span className="truncate">
                                   {inq.assignedStaffName ||
@@ -956,7 +972,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 3. Customer Details (Name & Mobile Number ONLY - Compact) */}
-                        <td className="py-3.5 px-4 align-middle">
+                        <td className="py-2.5 px-2.5 sm:px-3 align-middle">
                           <div className="space-y-0.5 min-w-0">
                             <div className="font-extrabold text-slate-900 dark:text-white text-xs flex items-center gap-1 truncate">
                               <span className="truncate" title={inq.customerName || inq.fullName}>
@@ -966,15 +982,15 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <Lock className="w-3 h-3 text-rose-500 shrink-0" title="Locked lead" />
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-mono flex items-center gap-1 truncate">
+                            <div className="text-[10.5px] text-slate-600 dark:text-slate-300 font-mono flex items-center gap-1 truncate">
                               <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                               <span className="truncate">{phoneCandidate || 'No phone'}</span>
                             </div>
                           </div>
                         </td>
 
-                        {/* 4. City / Package (Concise & Combined) */}
-                        <td className="py-3.5 px-4 align-middle">
+                        {/* 4. City / Package (Concise & Combined with Collapsible Accordion) */}
+                        <td className="py-2.5 px-2.5 sm:px-3 align-middle">
                           <div className="space-y-0.5 min-w-0">
                             <div className="flex items-center gap-1 text-slate-800 dark:text-slate-200 font-bold text-xs truncate">
                               <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
@@ -982,20 +998,57 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 {inq.userCity || 'City TBD'}
                               </span>
                             </div>
-                            <div
-                              className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-sm lg:max-w-md xl:max-w-lg"
-                              title={inq.title || inq.referenceName || ''}
-                            >
-                              {inq.title || inq.referenceName || 'Yatra Package'}
-                            </div>
+                            {(() => {
+                              const pkgTitle = inq.title || inq.referenceName || 'Yatra Package';
+                              const isLong = pkgTitle.length > 20;
+                              const isExpanded = expandedPackageLeadIds.has(String(inq.id));
+
+                              if (!isLong) {
+                                return (
+                                  <div
+                                    className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px] sm:max-w-[200px]"
+                                    title={pkgTitle}
+                                  >
+                                    {pkgTitle}
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="flex items-start gap-1">
+                                  <div
+                                    className={`text-[11px] text-slate-500 dark:text-slate-400 transition-all ${
+                                      isExpanded
+                                        ? 'whitespace-normal break-words max-w-[200px] leading-snug bg-slate-50 dark:bg-slate-800/60 p-1 rounded border border-slate-200/60 dark:border-slate-700/60'
+                                        : 'truncate max-w-[140px] sm:max-w-[170px]'
+                                    }`}
+                                    title={pkgTitle}
+                                  >
+                                    {pkgTitle}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => togglePackageExpand(String(inq.id), e)}
+                                    title={isExpanded ? 'Collapse package name' : 'Show full package name'}
+                                    className="p-0.5 text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors shrink-0 cursor-pointer rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronUp className="w-3 h-3" />
+                                    ) : (
+                                      <ChevronDown className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </td>
 
                         {/* 5. Status Dropdown */}
-                        <td className="py-3.5 px-4 align-middle">
+                        <td className="py-2.5 px-2.5 sm:px-3 align-middle whitespace-nowrap">
                           {isStaffMode && (isLocked || inq.status === 'CLOSED') ? (
                             <div
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 select-none whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10.5px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 select-none whitespace-nowrap"
                               title="This lead is Closed and permanently locked for staff."
                             >
                               <Lock className="w-3 h-3 text-rose-500 shrink-0" />
@@ -1041,7 +1094,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   setLocalInquiries(inquiries);
                                 }
                               }}
-                              className={`text-[11px] font-extrabold rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 ${
+                              className={`text-[10.5px] font-extrabold rounded-lg px-1.5 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 max-w-[110px] truncate ${
                                 statusCfg.badgeClass
                               }`}
                             >
@@ -1055,7 +1108,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 6. Dates / Duration */}
-                        <td className="py-3.5 px-4 align-middle">
+                        <td className="py-2.5 px-2.5 sm:px-3 align-middle whitespace-nowrap">
                           <div className="space-y-0.5 text-xs whitespace-nowrap">
                             <div className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
                               <Calendar className="w-3 h-3 text-orange-500 shrink-0" />
@@ -1095,8 +1148,8 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 7. Action Buttons (Side-by-Side: Detailed + WhatsApp + 3-Dots Menu) */}
-                        <td className="py-3.5 px-4 align-middle text-right whitespace-nowrap">
-                          <div className="inline-flex items-center justify-end gap-1.5 relative lead-row-menu-container">
+                        <td className="py-2.5 px-2.5 sm:px-3 align-middle text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-1 relative lead-row-menu-container">
                             {/* Detailed Inspection Drawer */}
                             <button
                               type="button"
@@ -1105,7 +1158,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 else setSelectedDetailedLead({ ...inq, leadId: seqLeadId });
                               }}
                               title="Detailed Yatra Lead Inspection"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100 hover:bg-orange-600 hover:text-white dark:bg-orange-950/70 dark:hover:bg-orange-600 dark:hover:text-white border border-orange-200 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-orange-700 dark:text-orange-300 bg-orange-100 hover:bg-orange-600 hover:text-white dark:bg-orange-950/70 dark:hover:bg-orange-600 dark:hover:text-white border border-orange-200 dark:border-orange-800 transition-all cursor-pointer shadow-2xs shrink-0"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>Detailed</span>
@@ -1123,7 +1176,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   ? `Open WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'} (+${waData.phone}) [Lead: ${seqLeadId}]`
                                   : `Open WhatsApp chat with ${inq.customerName || inq.fullName || 'Customer'}`
                               }
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-98 shadow-2xs transition-all cursor-pointer shrink-0"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-98 shadow-2xs transition-all cursor-pointer shrink-0"
                             >
                               <MessageCircle className="w-3.5 h-3.5 fill-current" />
                               <span>WhatsApp</span>
@@ -1154,7 +1207,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 }
                               }}
                               title="Actions (Set Reminder, Edit Note, Delete)"
-                              className={`lead-row-menu-btn p-1.5 rounded-lg border transition-all cursor-pointer shrink-0 ${
+                              className={`lead-row-menu-btn p-1 rounded-lg border transition-all cursor-pointer shrink-0 ${
                                 menuAnchor && menuAnchor.lead.id === lead.id
                                   ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600'
                                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border-transparent hover:border-slate-200 dark:hover:border-slate-700'

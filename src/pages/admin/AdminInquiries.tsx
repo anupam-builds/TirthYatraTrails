@@ -751,7 +751,7 @@ export const AdminInquiries: React.FC = () => {
 
   return (
     <AdminLayout activeTab="inquiries">
-      <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="w-full max-w-none mx-0 px-2 sm:px-4 py-2 space-y-6">
         {/* Action feedback toast */}
         {actionMessage && (
           <div

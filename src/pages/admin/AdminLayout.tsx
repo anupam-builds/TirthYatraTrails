@@ -289,7 +289,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
         onMouseEnter={() => !isPinned && setIsHovered(true)}
         onMouseLeave={() => !isPinned && setIsHovered(false)}
         className={`hidden md:flex fixed top-0 bottom-0 left-0 z-40 bg-white dark:bg-[#0a192f] border-r border-slate-200 dark:border-slate-800/80 flex-col justify-between transition-all duration-200 ease-in-out ${
-          isExpanded ? 'w-64 shadow-2xl' : 'w-20 shadow-xs'
+          isExpanded ? 'w-52 shadow-2xl' : 'w-20 shadow-xs'
         }`}
       >
         <div className="flex flex-col flex-1 min-h-0">
@@ -637,7 +637,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
 
       {/* 3. MAIN CONTENT AREA */}
       <main className={`flex-1 min-w-0 flex flex-col min-h-screen bg-slate-50 dark:bg-[#071322] transition-all duration-200 ease-in-out ${
-        isPinned ? 'md:ml-64' : 'md:ml-20'
+        isPinned ? 'md:ml-52' : 'md:ml-20'
       }`}>
         {/* Top Operations Header */}
         <header className="h-16 bg-white/90 dark:bg-[#0a192f]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 shadow-xs transition-colors duration-150">
