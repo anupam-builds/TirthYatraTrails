@@ -1606,23 +1606,28 @@ export function getStaffPresenceChannel() {
   } catch {}
 
   staffPresenceChannelInstance = supabase.channel('public:staff-presence-realtime');
+  const dispatchPresenceUpdate = () => {
+    try {
+      if (!staffPresenceChannelInstance) return;
+      const state = staffPresenceChannelInstance.presenceState();
+      const activePresences: any[] = [];
+      Object.values(state).forEach((presList: any) => {
+        if (Array.isArray(presList)) {
+          activePresences.push(...presList);
+        }
+      });
+      window.dispatchEvent(
+        new CustomEvent('tirth-staff-presence-changed', {
+          detail: { presences: activePresences, state },
+        })
+      );
+    } catch {}
+  };
+
   staffPresenceChannelInstance
-    .on('presence', { event: 'sync' }, () => {
-      try {
-        const state = staffPresenceChannelInstance.presenceState();
-        const activePresences: any[] = [];
-        Object.values(state).forEach((presList: any) => {
-          if (Array.isArray(presList)) {
-            activePresences.push(...presList);
-          }
-        });
-        window.dispatchEvent(
-          new CustomEvent('tirth-staff-presence-changed', {
-            detail: { presences: activePresences },
-          })
-        );
-      } catch {}
-    })
+    .on('presence', { event: 'sync' }, dispatchPresenceUpdate)
+    .on('presence', { event: 'join' }, dispatchPresenceUpdate)
+    .on('presence', { event: 'leave' }, dispatchPresenceUpdate)
     .subscribe();
 
   return staffPresenceChannelInstance;

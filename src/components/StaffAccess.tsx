@@ -1,8 +1,53 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api, mapStaffRow, computeStaffLeadMetrics, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields } from '../services/api.js';
 import { localStore } from '../services/localStore.js';
-import { supabase } from '../lib/supabase.js';
+import { supabase, getStaffPresenceChannel } from '../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor, Inquiry } from '../types.js';
+
+/**
+ * Format timestamp into dynamic human-readable relative time (e.g. "Just now", "2 mins ago", "1 hour ago", "Yesterday")
+ */
+export function formatLastActive(timestamp?: string | null): string {
+  if (!timestamp) return 'Offline';
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Offline';
+
+    const now = Date.now();
+    const diffMs = now - date.getTime();
+    if (diffMs < 0) return 'Just now';
+
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHours = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSec < 60) {
+      return 'Just now';
+    } else if (diffMin === 1) {
+      return '1 min ago';
+    } else if (diffMin < 60) {
+      return `${diffMin} mins ago`;
+    } else if (diffHours === 1) {
+      return '1 hour ago';
+    } else if (diffHours < 24) {
+      return `${diffHours} hours ago`;
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+      });
+    }
+  } catch {
+    return 'Offline';
+  }
+}
+
 import { useRouter } from '../context/RouterContext.js';
 import { BaseInput, BaseSelect } from './FormField.js';
 import {
@@ -105,6 +150,41 @@ export const StaffAccess: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [inquiriesList, setInquiriesList] = useState<Inquiry[]>([]);
 
+  // Supabase Realtime Presence State for Live Staff Status
+  const [onlineStaffMap, setOnlineStaffMap] = useState<Map<string, { onlineAt?: string; device?: string }>>(new Map());
+
+  const parsePresenceState = useCallback((state: Record<string, any[]>) => {
+    const map = new Map<string, { onlineAt?: string; device?: string }>();
+    if (!state) return map;
+    Object.values(state).forEach((presList: any) => {
+      if (Array.isArray(presList)) {
+        presList.forEach((item: any) => {
+          const staffId = String(item.staff_id || item.staffId || item.id || '').trim();
+          const email = String(item.email || '').trim().toLowerCase();
+          const onlineAt =
+            item.online_at || item.onlineAt || item.last_active || item.updated_at || new Date().toISOString();
+          const device = item.device || item.lastLoginDevice || item.currentDevice;
+          if (staffId) map.set(staffId, { onlineAt, device });
+          if (email) map.set(email, { onlineAt, device });
+        });
+      }
+    });
+    return map;
+  }, []);
+
+  const isStaffOnline = useCallback(
+    (s: StaffMember) => {
+      if (!s) return false;
+      if (s.isBlocked) return false;
+      const sId = s.id ? String(s.id).trim() : '';
+      const sEmail = s.email ? s.email.trim().toLowerCase() : '';
+      if (sId && onlineStaffMap.has(sId)) return true;
+      if (sEmail && onlineStaffMap.has(sEmail)) return true;
+      return Boolean(s.isCurrentlyLoggedIn || s.isOnline);
+    },
+    [onlineStaffMap]
+  );
+
   // Realtime handler for live lead & inquiry updates from Supabase
   const handleInquiryRealtime = useCallback((payload: any) => {
     const eventType = payload.eventType || payload.event;
@@ -141,24 +221,74 @@ export const StaffAccess: React.FC = () => {
   useEffect(() => {
     loadAllStaffData();
 
-    // Live staff presence event listener
+    // 1. Subscribe to existing Supabase Realtime presence channel ('public:staff-presence-realtime')
+    const presenceChannel = getStaffPresenceChannel() || supabase.channel('public:staff-presence-realtime');
+
+    const syncPresenceState = () => {
+      try {
+        if (presenceChannel && typeof presenceChannel.presenceState === 'function') {
+          const state = presenceChannel.presenceState();
+          const newMap = parsePresenceState(state);
+          setOnlineStaffMap(newMap);
+        }
+      } catch {}
+    };
+
+    // Immediate initial sync
+    syncPresenceState();
+
+    try {
+      presenceChannel
+        .on('presence', { event: 'sync' }, syncPresenceState)
+        .on('presence', { event: 'join' }, syncPresenceState)
+        .on('presence', { event: 'leave' }, syncPresenceState);
+    } catch {}
+
+    // Live staff presence event listener for instant multi-tab & custom events
     const handlePresence = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (!detail?.staffId) return;
-      setStaffList((prev) =>
-        prev.map((s) =>
-          String(s.id) === String(detail.staffId)
-            ? {
-                ...s,
-                isOnline: detail.isOnline,
-                isCurrentlyLoggedIn: detail.isOnline,
-                lastSeen: detail.lastSeen,
-              }
-            : s
-        )
-      );
+      if (!detail) return;
+      if (detail.state) {
+        setOnlineStaffMap(parsePresenceState(detail.state));
+      } else if (Array.isArray(detail.presences)) {
+        const map = new Map<string, { onlineAt?: string; device?: string }>();
+        detail.presences.forEach((item: any) => {
+          const staffId = String(item.staff_id || item.staffId || item.id || '').trim();
+          const email = String(item.email || '').trim().toLowerCase();
+          const onlineAt =
+            item.online_at || item.onlineAt || item.last_active || item.updated_at || new Date().toISOString();
+          const device = item.device || item.lastLoginDevice || item.currentDevice;
+          if (staffId) map.set(staffId, { onlineAt, device });
+          if (email) map.set(email, { onlineAt, device });
+        });
+        setOnlineStaffMap(map);
+      } else if (detail.staffId) {
+        const staffId = String(detail.staffId).trim();
+        setOnlineStaffMap((prev) => {
+          const next = new Map(prev);
+          if (detail.isOnline) {
+            next.set(staffId, { onlineAt: detail.lastSeen || new Date().toISOString() });
+          } else {
+            next.delete(staffId);
+          }
+          return next;
+        });
+        setStaffList((prev) =>
+          prev.map((s) =>
+            String(s.id) === staffId
+              ? {
+                  ...s,
+                  isOnline: detail.isOnline,
+                  isCurrentlyLoggedIn: detail.isOnline,
+                  lastSeen: detail.lastSeen,
+                }
+              : s
+          )
+        );
+      }
     };
     window.addEventListener('tirth-staff-presence-changed', handlePresence);
+
 
     // Cross-portal unified roster change listener
     const handleRosterSync = () => {
@@ -675,7 +805,7 @@ export const StaffAccess: React.FC = () => {
 
   const totalActive = safeStaffList.filter((s) => s?.isActive && !s?.isBlocked).length;
   const totalBlocked = safeStaffList.filter((s) => s?.isBlocked).length;
-  const currentlyOnline = safeStaffList.filter((s) => (s?.isCurrentlyLoggedIn || s?.isOnline) && !s?.isBlocked).length;
+  const currentlyOnline = safeStaffList.filter((s) => isStaffOnline(s) && !s?.isBlocked).length;
   const totalLeadsHandled = safeStaffList.reduce((acc, s) => {
     const m = computeStaffLeadMetrics(s, inquiriesList || [], safeLogsList);
     return acc + (m.contactedCount || s?.contactedCount || 0) + (m.closedCount || s?.closedCount || 0);
@@ -976,7 +1106,21 @@ export const StaffAccess: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {filteredStaff.map((staff) => {
-                const isOnline = staff.isCurrentlyLoggedIn || staff.isOnline;
+                const isOnline = isStaffOnline(staff);
+                const sIdKey = staff.id ? String(staff.id).trim() : '';
+                const sEmailKey = staff.email ? staff.email.trim().toLowerCase() : '';
+                const presenceInfo =
+                  (sIdKey && onlineStaffMap.get(sIdKey)) || (sEmailKey && onlineStaffMap.get(sEmailKey));
+                const activeDevice =
+                  staff.lastLoginDevice || (staff as any).currentDevice || presenceInfo?.device || 'Staff Portal';
+                const lastActiveTimestamp =
+                  (staff as any).last_active ||
+                  (staff as any).updated_at ||
+                  staff.lastActiveAt ||
+                  staff.lastSeen ||
+                  staff.lastLogin ||
+                  (staff as any).created_at;
+                const formattedLastActive = formatLastActive(lastActiveTimestamp);
                 const metrics = computeStaffLeadMetrics(staff, inquiriesList, activityLogs);
                 const assignedCount = metrics.assignedLeadsCount;
                 const contactedCount = metrics.contactedCount;
@@ -1028,8 +1172,8 @@ export const StaffAccess: React.FC = () => {
                                 staff.isBlocked
                                   ? 'Access Blocked'
                                   : isOnline
-                                  ? 'Online Now (Active on Staff Portal)'
-                                  : 'Offline'
+                                  ? `Online Now (Active on ${activeDevice})`
+                                  : `Last active: ${formattedLastActive}`
                               }
                             />
                           </div>
@@ -1186,20 +1330,20 @@ export const StaffAccess: React.FC = () => {
                       <div className="text-[10px] text-slate-500 dark:text-slate-400">
                         {isOnline ? (
                           <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span>Session active on {staff.lastLoginDevice || (staff as any).currentDevice || 'Staff Portal'}</span>
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">Online</span>
+                            <span className="text-slate-400 dark:text-slate-500 font-medium">
+                              • Active on {activeDevice}
+                            </span>
                           </span>
                         ) : (
                           <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                            <span className="inline-block w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
                             <span>
-                              Last active:{' '}
-                              {staff.lastActiveAt || staff.lastSeen
-                                ? new Date(staff.lastActiveAt || staff.lastSeen!).toLocaleString('en-IN', {
-                                    dateStyle: 'short',
-                                    timeStyle: 'short',
-                                  })
-                                : 'Offline'}
+                              Last active: {formattedLastActive}
                             </span>
                           </span>
                         )}
@@ -1286,7 +1430,22 @@ export const StaffAccess: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {staffList.map((staff) => {
-                    const isOnline = staff.isCurrentlyLoggedIn || staff.isOnline;
+                    const isOnline = isStaffOnline(staff);
+                    const sIdKey = staff.id ? String(staff.id).trim() : '';
+                    const sEmailKey = staff.email ? staff.email.trim().toLowerCase() : '';
+                    const presenceInfo =
+                      (sIdKey && onlineStaffMap.get(sIdKey)) || (sEmailKey && onlineStaffMap.get(sEmailKey));
+                    const activeDevice =
+                      staff.lastLoginDevice || (staff as any).currentDevice || presenceInfo?.device || 'Standard Web Browser';
+                    const lastActiveTimestamp =
+                      (staff as any).last_active ||
+                      (staff as any).updated_at ||
+                      staff.lastActiveAt ||
+                      staff.lastSeen ||
+                      staff.lastLogin ||
+                      (staff as any).created_at;
+                    const formattedLastActive = formatLastActive(lastActiveTimestamp);
+
                     return (
                       <tr
                         key={staff.id}
@@ -1328,27 +1487,35 @@ export const StaffAccess: React.FC = () => {
                               BLOCKED
                             </span>
                           ) : isOnline ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              ONLINE NOW
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                              </span>
+                              <span>ONLINE NOW</span>
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                              OFFLINE
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                              <span>OFFLINE</span>
                             </span>
                           )}
                         </td>
                         <td className="p-3 font-mono text-[11px]">
-                          <div>{staff.lastLoginDevice || 'Standard Web Browser'}</div>
+                          <div>{activeDevice}</div>
                           <div className="text-slate-400">{staff.lastLoginIp || '127.0.0.1'}</div>
                         </td>
                         <td className="p-3 text-[11px]">
-                          {staff.lastActiveAt
-                            ? new Date(staff.lastActiveAt).toLocaleString('en-IN', {
-                                dateStyle: 'short',
-                                timeStyle: 'short',
-                              })
-                            : 'N/A'}
+                          {isOnline ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>Active Now</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 dark:text-slate-400">
+                              {formattedLastActive}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3 text-right">
                           <button

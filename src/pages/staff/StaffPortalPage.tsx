@@ -327,19 +327,40 @@ export const StaffPortalPage: React.FC = () => {
     // Live staff presence event listener
     const handlePresence = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (!detail?.staffId) return;
-      setStaffList((prev) =>
-        prev.map((s) =>
-          String(s.id) === String(detail.staffId)
-            ? {
-                ...s,
-                isOnline: detail.isOnline,
-                isCurrentlyLoggedIn: detail.isOnline,
-                lastSeen: detail.lastSeen,
-              }
-            : s
-        )
-      );
+      if (!detail) return;
+      if (Array.isArray(detail.presences)) {
+        const onlineIds = new Set<string>();
+        detail.presences.forEach((item: any) => {
+          const sId = String(item.staff_id || item.staffId || item.id || '').trim();
+          const sEmail = String(item.email || '').trim().toLowerCase();
+          if (sId) onlineIds.add(sId);
+          if (sEmail) onlineIds.add(sEmail);
+        });
+        setStaffList((prev) =>
+          prev.map((s) => {
+            const isOnline =
+              onlineIds.has(String(s.id).trim()) || (s.email ? onlineIds.has(s.email.trim().toLowerCase()) : false);
+            return {
+              ...s,
+              isOnline,
+              isCurrentlyLoggedIn: isOnline,
+            };
+          })
+        );
+      } else if (detail.staffId) {
+        setStaffList((prev) =>
+          prev.map((s) =>
+            String(s.id) === String(detail.staffId)
+              ? {
+                  ...s,
+                  isOnline: detail.isOnline,
+                  isCurrentlyLoggedIn: detail.isOnline,
+                  lastSeen: detail.lastSeen,
+                }
+              : s
+          )
+        );
+      }
     };
     window.addEventListener('tirth-staff-presence-changed', handlePresence);
 
