@@ -783,13 +783,13 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           <table className="w-full min-w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#081220] text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <th className="py-2.5 px-2.5 sm:px-3 w-[110px]">Lead ID &amp; Date</th>
-                <th className="py-2.5 px-2.5 sm:px-3 w-[125px]">Assigned Staff</th>
-                <th className="py-2.5 px-2.5 sm:px-3 min-w-[130px]">Customer</th>
-                <th className="py-2.5 px-2.5 sm:px-3 min-w-[150px]">City / Package</th>
-                <th className="py-2.5 px-2.5 sm:px-3 w-[115px]">Status</th>
-                <th className="py-2.5 px-2.5 sm:px-3 w-[125px]">Dates / Duration</th>
-                <th className="py-2.5 px-2.5 sm:px-3 w-[190px] min-w-[190px] text-right">Actions</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[11%] min-w-[105px]">Lead ID &amp; Date</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[13%] min-w-[120px]">Assigned Staff</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[18%] min-w-[130px]">Customer</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[20%] min-w-[145px]">City / Package</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[12%] min-w-[110px]">Status</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[12%] min-w-[120px]">Dates / Duration</th>
+                <th className="py-2.5 px-2.5 sm:px-3 w-[14%] min-w-[185px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">

@@ -855,7 +855,9 @@ export const StaffPortalPage: React.FC = () => {
       </header>
 
       {/* 2. MAIN STAFF WORKSPACE */}
-      <main className="flex-1 w-full max-w-none mx-0 px-4 sm:px-6 lg:px-10 py-6 space-y-6">
+      <main className={`flex-1 w-full max-w-none mx-0 py-4 space-y-5 ${
+        activePortalTab === 'SETTINGS' ? 'px-4 sm:px-6 lg:px-10' : 'px-2 sm:px-3 lg:px-4'
+      }`}>
         {/* Navigation Tabs: Leads vs Settings & Alerts */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-3">
           <div className="flex items-center gap-2">

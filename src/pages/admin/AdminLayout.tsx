@@ -797,7 +797,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
         )}
 
         {/* Content Body */}
-        <div className="p-6 lg:p-8 flex-1">
+        <div className={`flex-1 ${activeTab === 'inquiries' ? 'py-4 px-2 sm:px-3 lg:px-4' : 'p-6 lg:p-8'}`}>
           {children}
         </div>
       </main>
