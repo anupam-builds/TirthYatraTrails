@@ -330,7 +330,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       {/* High-Visibility Success Notification Banner */}
       {successNotification && (
         <div
@@ -388,7 +388,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       />
 
       {/* 1. SUMMARY METRICS CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-2.5">
+      <div className="w-full grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-2.5">
         {/* Total Enquiries */}
         <div
           onClick={() => {
@@ -637,7 +637,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       </div>
 
       {/* 2. SEARCH & FILTER BAR */}
-      <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 p-4 rounded-2xl space-y-3 shadow-xs">
+      <div className="w-full bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl space-y-3 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Global Search Input */}
           <div className="relative flex-1 max-w-lg">
@@ -762,18 +762,18 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
       </div>
 
       {/* 3. COMPREHENSIVE CRM LEADS TABLE */}
-      <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      <div className="w-full bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#081220] text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <th className="py-3 px-3 w-[115px]">Lead ID &amp; Date</th>
-                <th className="py-3 px-3 w-[135px]">Assigned Staff</th>
-                <th className="py-3 px-3 w-[160px]">Customer</th>
-                <th className="py-3 px-3 min-w-[150px]">City / Package</th>
-                <th className="py-3 px-3 w-[120px]">Status</th>
-                <th className="py-3 px-3 w-[135px]">Dates / Duration</th>
-                <th className="py-3 px-3 w-[210px] text-right">Actions</th>
+                <th className="py-3.5 px-4 w-[120px]">Lead ID &amp; Date</th>
+                <th className="py-3.5 px-4 w-[140px]">Assigned Staff</th>
+                <th className="py-3.5 px-4 min-w-[170px]">Customer</th>
+                <th className="py-3.5 px-4 min-w-[180px]">City / Package</th>
+                <th className="py-3.5 px-4 w-[130px]">Status</th>
+                <th className="py-3.5 px-4 w-[145px]">Dates / Duration</th>
+                <th className="py-3.5 px-4 min-w-[210px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
@@ -842,7 +842,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                     <React.Fragment key={inq.id}>
                       <tr className="hover:bg-slate-50/80 dark:hover:bg-[#0a192f]/50 transition-colors group">
                         {/* 1. Lead ID & Date */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
@@ -870,7 +870,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 2. Assigned Staff - Editable ONLY by Admin */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           {isAdmin && onAssignStaff ? (
                             <BaseSelect
                               id={`row-assigned-staff-${lead.id}`}
@@ -931,7 +931,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   setLocalInquiries(inquiries);
                                 }
                               }}
-                              className="text-[11px] font-bold rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 max-w-[130px] truncate"
+                              className="text-[11px] font-bold rounded-lg px-2 py-1 border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-500 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 max-w-[170px] truncate"
                             >
                               <option value="--Unassigned--">-- Unassigned --</option>
                               {staffList.map((stf) => (
@@ -942,7 +942,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             </BaseSelect>
                           ) : (
                             <div className="flex items-center gap-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 max-w-[130px] truncate">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 max-w-[170px] truncate">
                                 <UserCheck className="w-3 h-3 text-emerald-500 shrink-0" />
                                 <span className="truncate">
                                   {inq.assignedStaffName ||
@@ -956,7 +956,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 3. Customer Details (Name & Mobile Number ONLY - Compact) */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           <div className="space-y-0.5 min-w-0">
                             <div className="font-extrabold text-slate-900 dark:text-white text-xs flex items-center gap-1 truncate">
                               <span className="truncate" title={inq.customerName || inq.fullName}>
@@ -974,7 +974,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 4. City / Package (Concise & Combined) */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           <div className="space-y-0.5 min-w-0">
                             <div className="flex items-center gap-1 text-slate-800 dark:text-slate-200 font-bold text-xs truncate">
                               <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
@@ -983,7 +983,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               </span>
                             </div>
                             <div
-                              className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[200px]"
+                              className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-sm lg:max-w-md xl:max-w-lg"
                               title={inq.title || inq.referenceName || ''}
                             >
                               {inq.title || inq.referenceName || 'Yatra Package'}
@@ -992,7 +992,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 5. Status Dropdown */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           {isStaffMode && (isLocked || inq.status === 'CLOSED') ? (
                             <div
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 select-none whitespace-nowrap"
@@ -1055,7 +1055,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 6. Dates / Duration */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           <div className="space-y-0.5 text-xs whitespace-nowrap">
                             <div className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
                               <Calendar className="w-3 h-3 text-orange-500 shrink-0" />
@@ -1095,7 +1095,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                         </td>
 
                         {/* 7. Action Buttons (Side-by-Side: Detailed + WhatsApp + 3-Dots Menu) */}
-                        <td className="py-3 px-3 align-middle text-right whitespace-nowrap">
+                        <td className="py-3.5 px-4 align-middle text-right whitespace-nowrap">
                           <div className="inline-flex items-center justify-end gap-1.5 relative lead-row-menu-container">
                             {/* Detailed Inspection Drawer */}
                             <button

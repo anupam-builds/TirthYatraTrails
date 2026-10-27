@@ -138,7 +138,7 @@ export const ReminderAlertBanner: React.FC<ReminderAlertBannerProps> = ({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-600 via-amber-600 to-orange-600 p-0.5 shadow-lg animate-in slide-in-from-top-3 duration-300">
+    <div className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-600 via-amber-600 to-orange-600 p-0.5 shadow-lg animate-in slide-in-from-top-3 duration-300">
       <div className="bg-white dark:bg-[#0c1829] rounded-[14px] p-3.5 sm:p-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Left: Indicator & Content */}

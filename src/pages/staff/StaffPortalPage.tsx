@@ -756,7 +756,7 @@ export const StaffPortalPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#071322] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-150">
       {/* 1. TOP STAFF OPERATIONS HEADER */}
-      <header className="h-16 bg-white/90 dark:bg-[#0a192f]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 shadow-xs">
+      <header className="h-16 bg-white/90 dark:bg-[#0a192f]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 lg:px-10 flex items-center justify-between sticky top-0 z-40 shadow-xs w-full">
         {/* Left branding */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-white shadow-xs border border-slate-200 dark:border-slate-700 p-0.5 aspect-square flex items-center justify-center shrink-0">
@@ -855,7 +855,7 @@ export const StaffPortalPage: React.FC = () => {
       </header>
 
       {/* 2. MAIN STAFF WORKSPACE */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+      <main className="flex-1 w-full max-w-none mx-0 px-4 sm:px-6 lg:px-10 py-6 space-y-6">
         {/* Navigation Tabs: Leads vs Settings & Alerts */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-3">
           <div className="flex items-center gap-2">
@@ -1264,7 +1264,7 @@ export const StaffPortalPage: React.FC = () => {
           /* ===================== EXISTING LEADS WORKSPACE ===================== */
           <>
             {/* Welcome & Workflow Rules Banner */}
-            <div className="bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-transparent border border-orange-500/20 dark:border-orange-500/30 rounded-3xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="w-full bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-transparent border border-orange-500/20 dark:border-orange-500/30 rounded-3xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
                 <h2 className="text-lg font-extrabold text-slate-900 dark:text-white font-serif">
                   Namaste, {staffUser.name} 🙏
