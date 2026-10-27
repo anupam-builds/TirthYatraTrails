@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api, mapStaffRow, computeStaffLeadMetrics, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields } from '../services/api.js';
 import { localStore } from '../services/localStore.js';
-import { supabase, getStaffPresenceChannel } from '../lib/supabase.js';
+import { supabase } from '../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor, Inquiry } from '../types.js';
 
 /**
@@ -221,8 +221,8 @@ export const StaffAccess: React.FC = () => {
   useEffect(() => {
     loadAllStaffData();
 
-    // 1. Subscribe to existing Supabase Realtime presence channel ('public:staff-presence-realtime')
-    const presenceChannel = getStaffPresenceChannel() || supabase.channel('public:staff-presence-realtime');
+    // 1. Initialize Supabase Realtime presence channel ('public:staff-presence-realtime')
+    const presenceChannel = supabase.channel('public:staff-presence-realtime');
 
     const syncPresenceState = () => {
       try {
@@ -234,15 +234,18 @@ export const StaffAccess: React.FC = () => {
       } catch {}
     };
 
-    // Immediate initial sync
-    syncPresenceState();
+    // 1. Attach all listeners FIRST (before .subscribe())
+    presenceChannel
+      .on('presence', { event: 'sync' }, syncPresenceState)
+      .on('presence', { event: 'join' }, syncPresenceState)
+      .on('presence', { event: 'leave' }, syncPresenceState);
 
-    try {
-      presenceChannel
-        .on('presence', { event: 'sync' }, syncPresenceState)
-        .on('presence', { event: 'join' }, syncPresenceState)
-        .on('presence', { event: 'leave' }, syncPresenceState);
-    } catch {}
+    // 2. Call .subscribe() LAST
+    presenceChannel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        syncPresenceState();
+      }
+    });
 
     // Live staff presence event listener for instant multi-tab & custom events
     const handlePresence = (e: Event) => {
@@ -486,6 +489,7 @@ export const StaffAccess: React.FC = () => {
       window.removeEventListener('tirth-allowlist-changed', handleRosterSync);
       window.removeEventListener('tirth-lead-changed', handleLeadEvent);
       window.removeEventListener('tirth-inquiry-changed', handleLeadEvent);
+      supabase.removeChannel(presenceChannel);
       supabase.removeChannel(channel);
     };
   }, [handleInquiryRealtime]);

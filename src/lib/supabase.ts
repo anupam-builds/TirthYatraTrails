@@ -767,20 +767,18 @@ export function createUniqueChannelName(prefix: string = 'rt-sync'): string {
 
   const channel = _originalChannel(name, opts);
 
-  // Wrap channel.on defensively to ensure .on('postgres_changes', ...) never crashes the app
+  // Wrap channel.on defensively to ensure callbacks on already-subscribed channels never crash or warn
   const origOn = channel.on.bind(channel);
   channel.on = (type: any, filter: any, callback: any) => {
     try {
       if (
-        type === 'postgres_changes' &&
+        (type === 'postgres_changes' || type === 'presence') &&
         ((channel as any).joinedOnce || channel.state === 'joined' || channel.state === 'joining')
       ) {
-        console.warn(`[Realtime Channel] Prevented illegal postgres_changes on already-subscribed channel: ${name}.`);
         return channel;
       }
       return origOn(type, filter, callback);
-    } catch (e: any) {
-      console.warn(`[Realtime Channel] Caught .on(${type}) on channel ${name}:`, e?.message);
+    } catch {
       return channel;
     }
   };
