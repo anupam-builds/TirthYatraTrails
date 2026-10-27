@@ -989,55 +989,52 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                           </div>
                         </td>
 
-                        {/* 4. City / Package (Concise & Combined with Collapsible Accordion) */}
+                        {/* 4. City / Package (City visible, Package hidden by default with click-to-reveal toggle) */}
                         <td className="py-2.5 px-2.5 sm:px-3 align-middle">
-                          <div className="space-y-0.5 min-w-0">
+                          <div className="space-y-1 min-w-0">
+                            {/* City Name - Always Visible */}
                             <div className="flex items-center gap-1 text-slate-800 dark:text-slate-200 font-bold text-xs truncate">
                               <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
                               <span className="truncate" title={inq.userCity || 'City TBD'}>
                                 {inq.userCity || 'City TBD'}
                               </span>
                             </div>
+
+                            {/* Package Details Accordion Toggle */}
                             {(() => {
                               const pkgTitle = inq.title || inq.referenceName || 'Yatra Package';
-                              const isLong = pkgTitle.length > 20;
                               const isExpanded = expandedPackageLeadIds.has(String(inq.id));
 
-                              if (!isLong) {
-                                return (
-                                  <div
-                                    className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px] sm:max-w-[200px]"
-                                    title={pkgTitle}
-                                  >
-                                    {pkgTitle}
-                                  </div>
-                                );
-                              }
-
                               return (
-                                <div className="flex items-start gap-1">
-                                  <div
-                                    className={`text-[11px] text-slate-500 dark:text-slate-400 transition-all ${
-                                      isExpanded
-                                        ? 'whitespace-normal break-words max-w-[200px] leading-snug bg-slate-50 dark:bg-slate-800/60 p-1 rounded border border-slate-200/60 dark:border-slate-700/60'
-                                        : 'truncate max-w-[140px] sm:max-w-[170px]'
-                                    }`}
-                                    title={pkgTitle}
-                                  >
-                                    {pkgTitle}
-                                  </div>
+                                <div className="min-w-0">
+                                  {/* Toggle Button with Chevron Arrow Icon */}
                                   <button
                                     type="button"
                                     onClick={(e) => togglePackageExpand(String(inq.id), e)}
-                                    title={isExpanded ? 'Collapse package name' : 'Show full package name'}
-                                    className="p-0.5 text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors shrink-0 cursor-pointer rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    title={isExpanded ? 'Hide package details' : `Reveal package: ${pkgTitle}`}
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-semibold transition-all cursor-pointer border ${
+                                      isExpanded
+                                        ? 'bg-orange-100 dark:bg-orange-950/70 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-800 shadow-2xs'
+                                        : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-orange-300 hover:text-orange-600 dark:hover:text-orange-400'
+                                    }`}
                                   >
+                                    <span>Package</span>
                                     {isExpanded ? (
-                                      <ChevronUp className="w-3 h-3" />
+                                      <ChevronUp className="w-3 h-3 text-orange-600 dark:text-orange-400 shrink-0" />
                                     ) : (
-                                      <ChevronDown className="w-3 h-3" />
+                                      <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
                                     )}
                                   </button>
+
+                                  {/* Revealed Package Details */}
+                                  {isExpanded && (
+                                    <div
+                                      className="mt-1 text-[11px] font-medium text-slate-700 dark:text-slate-200 bg-orange-50/80 dark:bg-orange-950/40 p-1.5 rounded-lg border border-orange-200 dark:border-orange-900/50 break-words whitespace-normal leading-snug animate-in fade-in duration-150 max-w-[190px]"
+                                      title={pkgTitle}
+                                    >
+                                      {pkgTitle}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })()}
