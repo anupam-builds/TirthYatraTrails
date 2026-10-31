@@ -1,6 +1,8 @@
 import { City, Hotel, Room, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
 import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat } from '../lib/supabase.js';
-import { localStore } from './localStore.js';
+import { localStore, getDeletedStaffIdSet, markStaffAsDeleted } from './localStore.js';
+
+export { getDeletedStaffIdSet, markStaffAsDeleted };
 
 export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat };
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
@@ -1719,43 +1721,19 @@ export const api = {
     const cleanId = String(hotelId || '').trim();
     if (!cleanId) return [];
 
-    try {
-      // 1. Try querying dedicated hotel_rooms table in Supabase
-      const { data, error } = await supabase
-        .from('hotel_rooms')
-        .select('*')
-        .eq('hotel_id', cleanId)
-        .order('display_order', { ascending: true });
+    // Query dedicated hotel_rooms table directly from Supabase
+    const { data, error } = await supabase
+      .from('hotel_rooms')
+      .select('*')
+      .eq('hotel_id', cleanId)
+      .order('display_order', { ascending: true });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map(mapRoomRow);
-      }
-      if (error) {
-        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
-          console.info('[api.getHotelRooms] Notice: table "public.hotel_rooms" pending execution in Supabase SQL editor. Using hotels.rooms fallback.');
-        } else {
-          console.warn('[api.getHotelRooms] hotel_rooms query notice:', error.message);
-        }
-      }
-    } catch (err: any) {
-      console.warn('[api.getHotelRooms] hotel_rooms query exception:', err?.message || err);
+    if (error) {
+      console.error('[api.getHotelRooms] Supabase error querying public.hotel_rooms:', error.message);
+      throw error;
     }
 
-    // 2. Fallback: check hotels table row.rooms
-    try {
-      const { data: hotelRow } = await supabase
-        .from('hotels')
-        .select('rooms, base_price')
-        .eq('id', cleanId)
-        .maybeSingle();
-
-      if (hotelRow?.rooms && Array.isArray(hotelRow.rooms) && hotelRow.rooms.length > 0) {
-        return hotelRow.rooms.map(mapRoomRow);
-      }
-    } catch {}
-
-    // 3. Fallback to localStore
-    return localStore.getHotelRooms(cleanId);
+    return (data || []).map(mapRoomRow);
   },
 
   async saveHotelRoom(room: Partial<Room> & { hotelId: string }): Promise<Room> {
@@ -1764,85 +1742,51 @@ export const api = {
 
     const roomId = String(room.id || room.roomId || (room as any).room_id || '').trim();
     const isIdUUID = isValidUUID(roomId);
-    const mapped = mapRoomRow({ ...room, id: roomId || `room-${Date.now()}`, hotelId: cleanHotelId });
+    const mapped = mapRoomRow({ ...room, id: roomId || undefined, hotelId: cleanHotelId });
     const dbPayload = roomToRow(mapped);
 
-    // 1. Insert or Upsert into public.hotel_rooms table in Supabase
-    try {
-      if (isIdUUID) {
-        const { data, error } = await supabase
-          .from('hotel_rooms')
-          .upsert([dbPayload], { onConflict: 'id' })
-          .select()
-          .maybeSingle();
+    let savedData: any = null;
 
-        if (error) {
-          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
-            console.info('[api.saveHotelRoom] Note: public.hotel_rooms table pending creation in Supabase. Room safely preserved via dual synchronization in hotels.rooms JSONB.');
-          } else {
-            console.warn('[api.saveHotelRoom] Supabase hotel_rooms upsert notice:', error.message);
-          }
-        } else if (data) {
-          console.log('[api.saveHotelRoom] Successfully upserted room into hotel_rooms table:', data.id);
-        }
-      } else {
-        // If roomId is not a UUID, omit id so gen_random_uuid() generates the primary key
-        delete dbPayload.id;
-        const { data, error } = await supabase
-          .from('hotel_rooms')
-          .insert([dbPayload])
-          .select()
-          .maybeSingle();
+    if (isIdUUID) {
+      const { data, error } = await supabase
+        .from('hotel_rooms')
+        .upsert([dbPayload], { onConflict: 'id' })
+        .select()
+        .single();
 
-        if (error) {
-          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
-            console.info('[api.saveHotelRoom] Note: public.hotel_rooms table pending creation in Supabase. Room safely preserved via dual synchronization in hotels.rooms JSONB.');
-          } else {
-            console.warn('[api.saveHotelRoom] Supabase hotel_rooms insert notice:', error.message);
-          }
-        } else if (data?.id) {
-          console.log('[api.saveHotelRoom] Successfully inserted room into hotel_rooms table with UUID:', data.id);
-          mapped.id = String(data.id);
-          mapped.roomId = String(data.id);
-          mapped.room_id = String(data.id);
-        }
+      if (error) {
+        console.error('[api.saveHotelRoom] Supabase upsert error on public.hotel_rooms:', error.message);
+        throw error;
       }
-    } catch (err: any) {
-      console.warn('[api.saveHotelRoom] exception on hotel_rooms upsert:', err?.message || err);
+      savedData = data;
+    } else {
+      delete dbPayload.id;
+      const { data, error } = await supabase
+        .from('hotel_rooms')
+        .insert([dbPayload])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[api.saveHotelRoom] Supabase insert error on public.hotel_rooms:', error.message);
+        throw error;
+      }
+      savedData = data;
     }
 
-    // 2. Synchronize hotels.rooms JSONB column in public.hotels
-    try {
-      const existingRooms = await this.getHotelRooms(cleanHotelId);
-      const existingIdx = existingRooms.findIndex((r) => r.id === roomId || (mapped.id && r.id === mapped.id));
-      let updatedRooms: Room[];
-      if (existingIdx >= 0) {
-        updatedRooms = existingRooms.map((r, i) => (i === existingIdx ? mapped : r));
-      } else {
-        updatedRooms = [...existingRooms, mapped];
-      }
-      await supabase
-        .from('hotels')
-        .update({ rooms: updatedRooms.map(mapRoomRow) })
-        .eq('id', cleanHotelId);
-    } catch (syncErr) {
-      console.warn('[api.saveHotelRoom] hotels.rooms sync notice:', syncErr);
-    }
+    const finalMapped = mapRoomRow(savedData || mapped);
 
-    // 3. Update localStore for resilience
-    localStore.saveHotelRoom(cleanHotelId, mapped);
-
-    // 4. Trigger Realtime events
+    // Trigger Realtime events
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-room-changed', {
-          detail: { action: 'save', hotelId: cleanHotelId, room: mapped },
+          detail: { action: 'save', hotelId: cleanHotelId, room: finalMapped },
         })
       );
     }
-    broadcastContentSync('room_updated', { hotelId: cleanHotelId, room: mapped });
+    broadcastContentSync('room_updated', { hotelId: cleanHotelId, room: finalMapped });
 
-    return mapped;
+    return finalMapped;
   },
 
   async deleteHotelRoom(roomId: string, hotelId: string): Promise<boolean> {
@@ -1850,47 +1794,19 @@ export const api = {
     const cleanRoomId = String(roomId || '').trim();
     if (!cleanRoomId || !cleanHotelId) return false;
 
-    // 1. Delete from public.hotel_rooms in Supabase
-    try {
-      if (isValidUUID(cleanRoomId)) {
-        const { error } = await supabase
-          .from('hotel_rooms')
-          .delete()
-          .eq('id', cleanRoomId);
-        if (error) {
-          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
-            console.info('[api.deleteHotelRoom] Note: public.hotel_rooms table not yet in schema cache. Deleting from dual synchronization.');
-          } else {
-            console.warn('[api.deleteHotelRoom] hotel_rooms delete notice:', error.message);
-          }
-        }
-      } else {
-        await supabase
-          .from('hotel_rooms')
-          .delete()
-          .eq('hotel_id', cleanHotelId)
-          .or(`room_id.eq.${cleanRoomId},room_name.eq.${cleanRoomId}`);
-      }
-    } catch (err: any) {
-      console.warn('[api.deleteHotelRoom] exception deleting room:', err?.message || err);
+    let query = supabase.from('hotel_rooms').delete();
+    if (isValidUUID(cleanRoomId)) {
+      query = query.eq('id', cleanRoomId);
+    } else {
+      query = query.eq('hotel_id', cleanHotelId).or(`room_id.eq.${cleanRoomId},room_name.eq.${cleanRoomId}`);
     }
 
-    // 2. Synchronize hotels.rooms JSONB column in public.hotels
-    try {
-      const existingRooms = await this.getHotelRooms(cleanHotelId);
-      const remaining = existingRooms.filter((r) => r.id !== cleanRoomId);
-      await supabase
-        .from('hotels')
-        .update({ rooms: remaining.map(mapRoomRow) })
-        .eq('id', cleanHotelId);
-    } catch (syncErr) {
-      console.warn('[api.deleteHotelRoom] hotels.rooms sync notice:', syncErr);
+    const { error } = await query;
+    if (error) {
+      console.error('[api.deleteHotelRoom] Supabase delete error on public.hotel_rooms:', error.message);
+      throw error;
     }
 
-    // 3. Update localStore
-    localStore.deleteHotelRoom(cleanHotelId, cleanRoomId);
-
-    // 4. Trigger Realtime events
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('tirth-room-changed', {
@@ -3009,13 +2925,14 @@ export const api = {
   // Staff Mgmt & Live Session Monitor via Supabase
   async getStaffMembers(): Promise<StaffMember[]> {
     try {
+      const deletedIds = getDeletedStaffIdSet();
       const [staffRes, inqRes, profRes] = await Promise.allSettled([
         supabase.from('staff_members').select('*'),
         this.getInquiries(),
         supabase.from('profiles').select('id, is_online, last_seen'),
       ]);
 
-      const staffData = staffRes.status === 'fulfilled' && staffRes.value.data ? staffRes.value.data : null;
+      const staffData = staffRes.status === 'fulfilled' && Array.isArray(staffRes.value.data) ? staffRes.value.data : null;
       const inquiries: Inquiry[] = inqRes.status === 'fulfilled' && inqRes.value ? inqRes.value : [];
       let profilesMap: Record<string, any> = {};
       if (profRes.status === 'fulfilled' && profRes.value?.data) {
@@ -3024,23 +2941,29 @@ export const api = {
         });
       }
 
-      if (staffData && staffData.length > 0) {
-        return staffData.map((s) => {
-          const prof = profilesMap[String(s.id)];
-          const isOnline = Boolean(prof?.is_online ?? s.is_online ?? s.is_currently_logged_in);
-          const lastSeen = prof?.last_seen || s.last_active_at || s.last_login;
-          const mapped = mapStaffRow({
-            ...s,
-            is_online: isOnline,
-            is_currently_logged_in: isOnline,
-            last_seen: lastSeen,
+      if (staffData !== null) {
+        return staffData
+          .filter(
+            (s) =>
+              !deletedIds.has(String(s.id || '').toLowerCase().trim()) &&
+              !deletedIds.has(String(s.email || '').toLowerCase().trim())
+          )
+          .map((s) => {
+            const prof = profilesMap[String(s.id)];
+            const isOnline = Boolean(prof?.is_online ?? s.is_online ?? s.is_currently_logged_in);
+            const lastSeen = prof?.last_seen || s.last_active_at || s.last_login;
+            const mapped = mapStaffRow({
+              ...s,
+              is_online: isOnline,
+              is_currently_logged_in: isOnline,
+              last_seen: lastSeen,
+            });
+            const metrics = computeStaffLeadMetrics(mapped, inquiries);
+            return {
+              ...mapped,
+              ...metrics,
+            };
           });
-          const metrics = computeStaffLeadMetrics(mapped, inquiries);
-          return {
-            ...mapped,
-            ...metrics,
-          };
-        });
       }
       return localStore.getStaffMembers();
     } catch {
@@ -3280,75 +3203,78 @@ export const api = {
     const email = (staffEmail || (typeof staffId === 'object' && staffId !== null ? staffId.email : undefined) || '').trim().toLowerCase();
     const id = rawId ? String(rawId).trim() : '';
 
+    // 1. Immediately register in tombstone set so ghost reappearance is blocked permanently
+    markStaffAsDeleted(id, email);
+
     try {
-      // 1. Delete active sessions associated with this staff member (using staff_id)
+      // 2. Delete active sessions associated with this staff member (using staff_id)
       if (id) {
-        const { error: sessionError } = await supabase
+        await supabase
           .from('staff_sessions')
           .delete()
           .eq('staff_id', id);
-        
-        if (sessionError) {
-          console.warn('[deleteStaffMember] staff_sessions cleanup warning:', sessionError.message);
-        }
-      }
-
-      // 2. Delete the staff member from the main admin/allowlist table
-      // CRITICAL: admin_allowlist.id is of type UUID in PostgreSQL.
-      // Passing non-UUID strings (e.g. 'stf-...') triggers PostgreSQL 22P02: invalid input syntax for type uuid.
-      // If id is a valid UUID, delete by id. If not a UUID and email is available, delete by email!
-      if (isValidUUID(id)) {
-        const { error: deleteError } = await supabase
-          .from('admin_allowlist')
-          .delete()
-          .eq('id', id);
-
-        if (deleteError) {
-          console.warn('[deleteStaffMember] admin_allowlist delete by id notice:', deleteError.message);
-        }
-      } else if (email) {
-        const { error: deleteByEmailError } = await supabase
-          .from('admin_allowlist')
-          .delete()
-          .eq('email', email);
-
-        if (deleteByEmailError) {
-          console.warn('[deleteStaffMember] admin_allowlist delete by email notice:', deleteByEmailError.message);
-        }
       }
 
       // 3. Delete from staff_members table
       if (id) {
-        const { error: staffMemberError } = await supabase
+        await supabase
           .from('staff_members')
           .delete()
           .eq('id', id);
-        if (staffMemberError && email) {
-          await supabase.from('staff_members').delete().eq('email', email);
-        }
-      } else if (email) {
-        await supabase.from('staff_members').delete().eq('email', email);
+      }
+      if (email) {
+        await supabase
+          .from('staff_members')
+          .delete()
+          .eq('email', email);
       }
 
-      // 4. Refresh local state / UI list
+      // 4. Delete from profiles table
+      if (id) {
+        await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', id);
+      }
+      if (email) {
+        await supabase
+          .from('profiles')
+          .delete()
+          .eq('email', email);
+      }
+
+      // 5. Delete from admin_allowlist table
+      if (isValidUUID(id)) {
+        await supabase
+          .from('admin_allowlist')
+          .delete()
+          .eq('id', id);
+      }
+      if (email) {
+        await supabase
+          .from('admin_allowlist')
+          .delete()
+          .eq('email', email);
+      }
+
+      // 6. Refresh local state / UI list
       if (id || email) {
         localStore.deleteStaffMember(id, email);
       }
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed', { detail: { action: 'delete', id, email } }));
+        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed', { detail: { action: 'delete', id, email } }));
       }
-      console.log('Staff member successfully deleted');
+      console.log(`Staff member ${id || email} successfully deleted`);
       return true;
     } catch (err: any) {
       console.error('Failed to delete staff member:', err?.message || err);
-      // Fallback local cleanup so the UI never blocks or leaves orphaned cards
-      if (id) {
+      if (id || email) {
         localStore.deleteStaffMember(id, email);
       }
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
-        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
+        window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed', { detail: { action: 'delete', id, email } }));
+        window.dispatchEvent(new CustomEvent('tirth-allowlist-changed', { detail: { action: 'delete', id, email } }));
       }
       return false;
     }

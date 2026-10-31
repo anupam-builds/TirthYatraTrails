@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api, mapStaffRow, computeStaffLeadMetrics, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields } from '../services/api.js';
-import { localStore } from '../services/localStore.js';
+import { localStore, getDeletedStaffIdSet, markStaffAsDeleted } from '../services/localStore.js';
 import { supabase } from '../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor, Inquiry } from '../types.js';
 
@@ -528,7 +528,15 @@ export const StaffAccess: React.FC = () => {
       setInquiriesList(inqs || []);
       setActivityLogs(logs || []);
       if (sessions) setSessionMonitor(sessions);
-      const computed = (members || []).map((m) => {
+      
+      const deletedSet = getDeletedStaffIdSet();
+      const validMembers = (members || []).filter(
+        (m) =>
+          !deletedSet.has(String(m.id || '').toLowerCase().trim()) &&
+          !deletedSet.has(String(m.email || '').toLowerCase().trim())
+      );
+
+      const computed = validMembers.map((m) => {
         const metrics = computeStaffLeadMetrics(m, inqs || [], logs || []);
         return {
           ...m,
@@ -658,14 +666,19 @@ export const StaffAccess: React.FC = () => {
     const staffName = staff.name || staff.email;
     setDeletingId(staffId);
 
+    // 1. Immediately register tombstone so ghost reappearance is blocked
+    markStaffAsDeleted(staffId, staffEmail);
+
+    // 2. Immediately update local React state
+    setStaffList((prev) =>
+      prev.filter((s) => s.id !== staffId && s.email?.toLowerCase().trim() !== staffEmail)
+    );
+
     try {
-      // 1. Delete from database & local persistence via API service
+      // 3. Delete from database & local persistence via API service
       await api.deleteStaffMember(staffId, staffEmail);
 
-      // 2. Instantly update state
-      setStaffList((prev) =>
-        prev.filter((s) => s.id !== staffId && s.email?.toLowerCase().trim() !== staffEmail)
-      );
+      // 4. Update session monitor
       setSessionMonitor((prev) =>
         prev
           ? {

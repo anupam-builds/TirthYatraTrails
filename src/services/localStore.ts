@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
   USERS: 'tyt_local_users',
   STAFF: 'tyt_local_staff',
   STAFF_LOGS: 'tyt_local_staff_logs',
+  DELETED_STAFF: 'tyt_deleted_staff',
   COMPANIONS: 'tyt_local_companions',
   COMPANION_CONNS: 'tyt_local_companion_conns',
   CUSTOM_CATEGORIES: 'tyt_local_package_categories',
@@ -30,6 +31,40 @@ const STORAGE_KEYS = {
   HOTELS_INITIALIZED: 'tyt_hotels_initialized',
   PACKAGES_INITIALIZED: 'tyt_packages_initialized',
 };
+
+export function getDeletedStaffIdSet(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_STAFF);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr.map((s: string) => String(s).toLowerCase().trim()) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function markStaffAsDeleted(id?: string, email?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const set = getDeletedStaffIdSet();
+    if (id) set.add(String(id).toLowerCase().trim());
+    if (email) set.add(String(email).toLowerCase().trim());
+    localStorage.setItem(STORAGE_KEYS.DELETED_STAFF, JSON.stringify(Array.from(set)));
+    // Also remove from stored staff list immediately
+    const raw = localStorage.getItem(STORAGE_KEYS.STAFF);
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        const filtered = list.filter((s: any) => {
+          const sId = String(s.id || '').toLowerCase().trim();
+          const sEmail = String(s.email || '').toLowerCase().trim();
+          return !set.has(sId) && !set.has(sEmail);
+        });
+        localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(filtered));
+      }
+    }
+  } catch {}
+}
 
 const INITIAL_HUBS: TransitHub[] = [
   { id: 'hub-ayj-air', cityId: 'ayodhya', cityName: 'Ayodhya', name: 'Maharishi Valmiki International Airport (AYJ)', hubType: 'AIRPORT', code: 'AYJ', distanceToTempleKm: 9.5, isPrimary: true },
@@ -889,8 +924,14 @@ export const localStore = {
       setStored(STORAGE_KEYS.INQUIRIES, list);
     }
 
-    const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
-    const defaultStaff = rawStaff[0] || INITIAL_STAFF[0];
+    const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
+    const deletedStaff = getDeletedStaffIdSet();
+    const activeStaff = rawStaff.filter(
+      (s) =>
+        !deletedStaff.has(String(s.id || '').toLowerCase().trim()) &&
+        !deletedStaff.has(String(s.email || '').toLowerCase().trim())
+    );
+    const defaultStaff = activeStaff[0] || null;
 
     // Ensure all inquiries have a TTT leadId and assigned staff
     let modified = false;
@@ -985,10 +1026,16 @@ export const localStore = {
     const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : 0;
     const nextLeadId = inquiryData.leadId || `TTT${(maxNum + 1).toString().padStart(8, '0')}`;
 
-    const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
-    const defaultStaff = rawStaff[0] || INITIAL_STAFF[0];
-    const assignedStaffId = inquiryData.assignedStaffId || defaultStaff?.id || 'stf-1';
-    const assignedStaffName = inquiryData.assignedStaffName || defaultStaff?.name || 'Priya Sharma';
+    const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
+    const deletedStaff = getDeletedStaffIdSet();
+    const activeStaff = rawStaff.filter(
+      (s) =>
+        !deletedStaff.has(String(s.id || '').toLowerCase().trim()) &&
+        !deletedStaff.has(String(s.email || '').toLowerCase().trim())
+    );
+    const defaultStaff = activeStaff[0] || null;
+    const assignedStaffId = inquiryData.assignedStaffId || defaultStaff?.id || undefined;
+    const assignedStaffName = inquiryData.assignedStaffName || defaultStaff?.name || undefined;
 
     const adultsCount = Number(inquiryData.adults) || 2;
     const childrenCount = Number(inquiryData.children) || 0;
@@ -1293,12 +1340,12 @@ export const localStore = {
       inq.deletedBy = undefined;
       if (staffId) {
         inq.assignedStaffId = staffId;
-        const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
+        const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
         inq.assignedStaffName = staffName || (rawStaff.find((s) => s.id === staffId)?.name || 'Staff');
       }
       setStored(STORAGE_KEYS.INQUIRIES, inquiries);
     } else {
-      const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, INITIAL_STAFF);
+      const rawStaff = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
       inq = {
         id,
         isDeleted: false,
@@ -1559,14 +1606,15 @@ export const localStore = {
   },
 
   getStaffMembers(): StaffMember[] {
-    const isCustomized = typeof window !== 'undefined' && localStorage.getItem('tyt_staff_customized');
-    let list = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
-    if (list.length === 0 && !isCustomized) {
-      list = [...INITIAL_STAFF];
-      setStored(STORAGE_KEYS.STAFF, list);
-    }
+    const deletedStaff = getDeletedStaffIdSet();
+    const rawList = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
+    const list = rawList.filter(
+      (s) =>
+        !deletedStaff.has(String(s.id || '').toLowerCase().trim()) &&
+        !deletedStaff.has(String(s.email || '').toLowerCase().trim())
+    );
     // Compute current assigned leads count dynamically without recursive getInquiries()
-    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, INITIAL_INQUIRIES);
+    const inquiries = getStored<Inquiry[]>(STORAGE_KEYS.INQUIRIES, []);
     return list.map((staff) => {
       const staffId = String(staff.id || '').toLowerCase().trim();
       const staffName = String(staff.name || '').toLowerCase().trim();
@@ -1799,16 +1847,18 @@ export const localStore = {
   },
 
   deleteStaffMember(id: string, email?: string): boolean {
+    markStaffAsDeleted(id, email);
     const target = (id || '').trim().toLowerCase();
     const cleanEmail = (email || '').trim().toLowerCase();
-    const list = this.getStaffMembers().filter(
+    const currentList = getStored<StaffMember[]>(STORAGE_KEYS.STAFF, []);
+    const filtered = currentList.filter(
       (s) =>
         s.id !== id &&
-        (target ? s.id.toLowerCase() !== target : true) &&
-        s.email.toLowerCase() !== target &&
-        (!cleanEmail || s.email.toLowerCase() !== cleanEmail)
+        (target ? String(s.id || '').toLowerCase() !== target : true) &&
+        String(s.email || '').toLowerCase() !== target &&
+        (!cleanEmail || String(s.email || '').toLowerCase() !== cleanEmail)
     );
-    setStored(STORAGE_KEYS.STAFF, list);
+    setStored(STORAGE_KEYS.STAFF, filtered);
     if (typeof window !== 'undefined') {
       localStorage.setItem('tyt_staff_customized', 'true');
     }

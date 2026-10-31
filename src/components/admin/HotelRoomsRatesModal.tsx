@@ -482,9 +482,48 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
           {/* Right Form */}
           <div className="flex-1 p-5 sm:p-6 overflow-y-auto">
             {errorMsg && (
-              <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errorMsg}</span>
+              <div className="mb-4 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span className="font-semibold">{errorMsg}</span>
+                </div>
+                {(errorMsg.includes('hotel_rooms') || errorMsg.includes('schema cache')) && (
+                  <div className="pt-2 border-t border-rose-200 dark:border-rose-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <span className="text-[11px] text-slate-600 dark:text-slate-400">
+                      The table <code className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/60 font-mono">public.hotel_rooms</code> needs to be created in your Supabase database.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sql = `CREATE TABLE IF NOT EXISTS public.hotel_rooms (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    hotel_id UUID NOT NULL,
+    room_name TEXT NOT NULL,
+    description TEXT,
+    bed_configuration TEXT,
+    max_occupancy TEXT,
+    price_per_night NUMERIC,
+    meal_option TEXT,
+    cancellation_policy TEXT,
+    image_url TEXT,
+    display_order INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.hotel_rooms ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read access on hotel_rooms" ON public.hotel_rooms;
+CREATE POLICY "Allow public read access on hotel_rooms" ON public.hotel_rooms FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow authenticated staff to manage hotel_rooms" ON public.hotel_rooms;
+CREATE POLICY "Allow authenticated staff to manage hotel_rooms" ON public.hotel_rooms FOR ALL USING (auth.role() = 'authenticated');
+NOTIFY pgrst, 'reload schema';`;
+                        navigator.clipboard?.writeText(sql);
+                        setSuccessMsg('SQL script copied! Run it in the Supabase SQL editor to create the table.');
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+                    >
+                      Copy SQL Script
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
