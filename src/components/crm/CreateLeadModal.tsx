@@ -564,36 +564,36 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
                 </div>
               )}
 
-              <div>
+              <div className="w-full max-w-full min-w-0">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Tour Start Date
                 </label>
-                <div className="relative">
-                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <div className="relative w-full max-w-full min-w-0">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <BaseInput
                     id="manual-lead-start-date"
                     name="manual-lead-start-date"
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium"
+                    className="w-full max-w-full min-w-0 box-border pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium"
                   />
                 </div>
               </div>
 
-              <div>
+              <div className="w-full max-w-full min-w-0">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Estimated Tour End Date
                 </label>
-                <div className="relative">
-                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <div className="relative w-full max-w-full min-w-0">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <BaseInput
                     id="manual-lead-end-date"
                     name="manual-lead-end-date"
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium"
+                    className="w-full max-w-full min-w-0 box-border pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#081220] text-slate-900 dark:text-white font-medium"
                   />
                 </div>
               </div>

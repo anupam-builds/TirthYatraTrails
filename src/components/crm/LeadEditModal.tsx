@@ -683,37 +683,37 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                 </BaseSelect>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-full min-w-0">
+                <div className="w-full max-w-full min-w-0">
                   <label htmlFor="edit-modal-checkin-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Arrival / Check-in Date
                   </label>
-                  <div className="relative">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <div className="relative w-full max-w-full min-w-0">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <BaseInput
                       id="edit-modal-checkin-date"
                       name="edit-modal-checkin-date"
                       type="date"
                       value={formData.checkInDate || ''}
                       onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="w-full max-w-full min-w-0 box-border pl-8 pr-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
                 </div>
 
-                <div>
+                <div className="w-full max-w-full min-w-0">
                   <label htmlFor="edit-modal-end-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Estimated Tour End Date
                   </label>
-                  <div className="relative">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <div className="relative w-full max-w-full min-w-0">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <BaseInput
                       id="edit-modal-end-date"
                       name="edit-modal-end-date"
                       type="date"
                       value={formData.endDate || ''}
                       onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="w-full max-w-full min-w-0 box-border pl-8 pr-2.5 py-2 rounded-xl text-xs bg-slate-50 dark:bg-[#081220] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
                 </div>

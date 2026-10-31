@@ -413,12 +413,12 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
               </div>
 
               {/* Travel Date */}
-              <div>
+              <div className="w-full max-w-full min-w-0">
                 <label htmlFor="inquiry-check-in-date" className="block text-xs font-bold text-slate-700 mb-1">
                   Estimated Travel / Check-in Date
                 </label>
-                <div className="relative">
-                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <div className="relative w-full max-w-full min-w-0">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <BaseInput
                     id="inquiry-check-in-date"
                     name="inquiry-check-in-date"
@@ -426,7 +426,7 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
                     required
                     value={checkInDate}
                     onChange={(e) => setCheckInDate(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    className="w-full max-w-full min-w-0 box-border pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none"
                   />
                 </div>
               </div>

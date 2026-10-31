@@ -56,3 +56,28 @@ body,
   scrollbar-width: none;     /* Firefox */
 }
 
+/* ==========================================================================
+   Mobile Safari / iOS Date Input Stabilization
+   Guarantees native date pickers and formatted values never clip horizontally
+   ========================================================================== */
+input[type="date"],
+input[type="datetime-local"] {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+/* Normalize iOS WebKit internal date/time text alignment & vertical centering */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.3em;
+}
+
+/* Ensure calendar picker icon fits inside touch boundary */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: 0;
+  margin-right: 2px;
+}
+

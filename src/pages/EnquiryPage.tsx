@@ -811,14 +811,14 @@ export const EnquiryPage: React.FC = () => {
                       </div>
 
                       {/* Custom Dates: Start Date & End Date row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-full min-w-0">
                         {/* Tour Start Date */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 w-full max-w-full min-w-0">
                           <label htmlFor="enquire-start-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Estimated Tour Start Date <span className="text-rose-500">*</span>
                           </label>
-                          <div className="relative">
-                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+                          <div className="relative w-full max-w-full min-w-0">
+                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             <BaseInput
                               id="enquire-start-date"
                               name="enquire-start-date"
@@ -835,18 +835,18 @@ export const EnquiryPage: React.FC = () => {
                                   setTourEndDate(d.toISOString().split('T')[0]);
                                 }
                               }}
-                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                              className="w-full max-w-full min-w-0 box-border bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
                             />
                           </div>
                         </div>
 
                         {/* Estimated Tour End Date */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 w-full max-w-full min-w-0">
                           <label htmlFor="enquire-end-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Estimated Tour End Date
                           </label>
-                          <div className="relative">
-                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+                          <div className="relative w-full max-w-full min-w-0">
+                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             <BaseInput
                               id="enquire-end-date"
                               name="enquire-end-date"
@@ -863,20 +863,20 @@ export const EnquiryPage: React.FC = () => {
                                   }
                                 }
                               }}
-                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                              className="w-full max-w-full min-w-0 box-border bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
                             />
                           </div>
                         </div>
                       </div>
 
                       {/* Custom Duration & Budget row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-full min-w-0">
                         {/* Number of Days (numeric input) */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 w-full max-w-full min-w-0">
                           <label htmlFor="enquire-duration-days" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Number of Days
                           </label>
-                          <div className="relative">
+                          <div className="relative w-full max-w-full min-w-0">
                             <Clock className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5 pointer-events-none" />
                             <BaseInput
                               id="enquire-duration-days"
@@ -895,17 +895,17 @@ export const EnquiryPage: React.FC = () => {
                                   setTourEndDate(d.toISOString().split('T')[0]);
                                 }
                               }}
-                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                              className="w-full max-w-full min-w-0 box-border bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
                             />
                           </div>
                         </div>
 
                         {/* Estimated Budget (INR / USD) */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 w-full max-w-full min-w-0">
                           <label htmlFor="enquire-budget" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Estimated Budget (INR / USD)
                           </label>
-                          <div className="relative">
+                          <div className="relative w-full max-w-full min-w-0">
                             <span className="w-4 h-4 text-orange-500 font-bold absolute left-3.5 top-2.5 text-sm pointer-events-none">₹</span>
                             <BaseInput
                               id="enquire-budget"
@@ -914,7 +914,7 @@ export const EnquiryPage: React.FC = () => {
                               placeholder="e.g. ₹50,000 or $700"
                               value={budget}
                               onChange={(e) => setBudget(e.target.value)}
-                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                              className="w-full max-w-full min-w-0 box-border bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
                             />
                           </div>
                         </div>
@@ -924,16 +924,16 @@ export const EnquiryPage: React.FC = () => {
                     /* ======================================================== */
                     /* MODE 2: STANDARD PACKAGE (FIXED-ITINERARY VIEW)          */
                     /* ======================================================== */
-                    <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+                    <div className="space-y-4 pt-1 animate-in fade-in duration-200 w-full max-w-full min-w-0">
                       {/* Standard Package: Start Date and Duration row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-full min-w-0">
                         {/* Tour Start Date */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 w-full max-w-full min-w-0">
                           <label htmlFor="enquire-start-date" className="block text-xs font-bold uppercase tracking-wider text-slate-600">
                             Estimated Tour Start Date <span className="text-rose-500">*</span>
                           </label>
-                          <div className="relative">
-                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3.5 top-3.5" />
+                          <div className="relative w-full max-w-full min-w-0">
+                            <Calendar className="w-4 h-4 text-orange-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             <BaseInput
                               id="enquire-start-date"
                               name="enquire-start-date"
@@ -942,7 +942,7 @@ export const EnquiryPage: React.FC = () => {
                               value={tourStartDate}
                               min={new Date().toISOString().split('T')[0]}
                               onChange={(e) => setTourStartDate(e.target.value)}
-                              className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                              className="w-full max-w-full min-w-0 box-border bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm font-bold text-[#0f294a] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
                             />
                           </div>
                         </div>

@@ -92,7 +92,7 @@ export const FlightsPage: React.FC = () => {
                 </BaseSelect>
               </div>
 
-              <div>
+              <div className="w-full max-w-full min-w-0">
                 <label htmlFor="flights-travel-date" className="block text-[11px] font-bold uppercase text-slate-400 mb-1">Travel Date</label>
                 <BaseInput
                   id="flights-travel-date"
@@ -100,7 +100,7 @@ export const FlightsPage: React.FC = () => {
                   type="date"
                   value={flightDate}
                   onChange={(e) => setFlightDate(e.target.value)}
-                  className="w-full text-xs font-bold p-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                  className="w-full max-w-full min-w-0 box-border text-xs font-bold p-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none"
                 />
               </div>
 
