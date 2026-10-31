@@ -637,11 +637,11 @@ NOTIFY pgrst, 'reload schema';`;
                         id="room-price-per-night"
                         name="room-price-per-night"
                         type="number"
-                        min="1"
-                        step="50"
+                        min="0"
+                        step="any"
                         required
-                        value={pricePerNight}
-                        onChange={(e) => handlePricePerNightChange(Number(e.target.value))}
+                        value={pricePerNight || ''}
+                        onChange={(e) => handlePricePerNightChange(e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-full text-xs font-extrabold pl-7 pr-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-[#0f294a] dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
                       />
                     </div>
@@ -785,8 +785,10 @@ NOTIFY pgrst, 'reload schema';`;
                         id="plan-ep"
                         name="plan-ep"
                         type="number"
-                        value={epPrice}
-                        onChange={(e) => setEpPrice(Number(e.target.value))}
+                        min="0"
+                        step="any"
+                        value={epPrice || ''}
+                        onChange={(e) => setEpPrice(e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
@@ -796,8 +798,10 @@ NOTIFY pgrst, 'reload schema';`;
                         id="plan-bb"
                         name="plan-bb"
                         type="number"
-                        value={bbPrice}
-                        onChange={(e) => setBbPrice(Number(e.target.value))}
+                        min="0"
+                        step="any"
+                        value={bbPrice || ''}
+                        onChange={(e) => setBbPrice(e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
@@ -807,8 +811,10 @@ NOTIFY pgrst, 'reload schema';`;
                         id="plan-map"
                         name="plan-map"
                         type="number"
-                        value={mapPrice}
-                        onChange={(e) => setMapPrice(Number(e.target.value))}
+                        min="0"
+                        step="any"
+                        value={mapPrice || ''}
+                        onChange={(e) => setMapPrice(e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
@@ -818,8 +824,10 @@ NOTIFY pgrst, 'reload schema';`;
                         id="plan-ap"
                         name="plan-ap"
                         type="number"
-                        value={apPrice}
-                        onChange={(e) => setApPrice(Number(e.target.value))}
+                        min="0"
+                        step="any"
+                        value={apPrice || ''}
+                        onChange={(e) => setApPrice(e.target.value === '' ? 0 : Number(e.target.value))}
                         className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
