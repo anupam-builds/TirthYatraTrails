@@ -133,10 +133,10 @@ export interface Room {
   cancellationPolicy?: string;
   pricePerNight?: number; // Custom price per night
   mealOption?: string; // e.g. 'Room Only', 'Bed & Breakfast', 'Half Board', 'Full Board'
-  roomOnlyPrice: number; // EP (European Plan)
-  breakfastPrice: number; // BB (Bed & Breakfast)
-  halfBoardPrice: number; // MAP (Modified American Plan)
-  fullBoardPrice: number; // AP (American Plan)
+  roomOnlyPrice?: number; // EP (European Plan)
+  breakfastPrice?: number; // BB (Bed & Breakfast)
+  halfBoardPrice?: number; // MAP (Modified American Plan)
+  fullBoardPrice?: number; // AP (American Plan)
   imageUrl: string;
   isAvailable?: boolean;
   displayOrder?: number;

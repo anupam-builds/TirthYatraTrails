@@ -19,12 +19,9 @@ import {
   ShieldCheck,
   Users,
   Image as ImageIcon,
-  DollarSign,
   Radio,
   Layers,
   Info,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 
 interface HotelRoomsRatesModalProps {
@@ -94,13 +91,6 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
   );
   const [description, setDescription] = useState<string>('');
   const [imageUrl, setImageUrl] = useState<string>('');
-
-  // Optional Multi-Tier Expansion State
-  const [showMultiTier, setShowMultiTier] = useState<boolean>(false);
-  const [epPrice, setEpPrice] = useState<number>(4200);
-  const [bbPrice, setBbPrice] = useState<number>(5000);
-  const [mapPrice, setMapPrice] = useState<number>(5800);
-  const [apPrice, setApPrice] = useState<number>(6600);
 
   // Load rooms for this hotel
   const loadRooms = React.useCallback(async () => {
@@ -201,12 +191,6 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
           'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80'
       );
 
-      // Multi-tier rates
-      setEpPrice(room.roomOnlyPrice ?? p);
-      setBbPrice(room.breakfastPrice ?? p + 800);
-      setMapPrice(room.halfBoardPrice ?? p + 1600);
-      setApPrice(room.fullBoardPrice ?? p + 2400);
-
       setErrorMsg('');
       setSuccessMsg('');
     }
@@ -229,10 +213,6 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
       mealOption: 'Bed & Breakfast',
       cancellationPolicy: 'Free cancellation up to 48 hrs before check-in',
       imageUrl: hotel.images?.[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80',
-      roomOnlyPrice: base,
-      breakfastPrice: base + 800,
-      halfBoardPrice: base + 1600,
-      fullBoardPrice: base + 2400,
       isAvailable: true,
       displayOrder: rooms.length,
     };
@@ -249,20 +229,12 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
     setCancellationPolicy(newRoom.cancellationPolicy || 'Free cancellation up to 48 hrs before check-in');
     setDescription(newRoom.description || '');
     setImageUrl(newRoom.imageUrl);
-    setEpPrice(base);
-    setBbPrice(base + 800);
-    setMapPrice(base + 1600);
-    setApPrice(base + 2400);
     setSuccessMsg('New room created. Customize the details and click Save Room.');
   };
 
-  // Sync EP price when pricePerNight changes
+  // Update price per night
   const handlePricePerNightChange = (val: number) => {
     setPricePerNight(val);
-    setEpPrice(val);
-    setBbPrice(val + 800);
-    setMapPrice(val + 1600);
-    setApPrice(val + 2400);
   };
 
   // Save room to Supabase
@@ -300,10 +272,6 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
       mealOption: effectiveMealOption,
       cancellationPolicy: cancellationPolicy.trim(),
       imageUrl: imageUrl.trim() || hotel.images?.[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80',
-      roomOnlyPrice: Number(epPrice || pricePerNight),
-      breakfastPrice: Number(bbPrice || pricePerNight + 800),
-      halfBoardPrice: Number(mapPrice || pricePerNight + 1600),
-      fullBoardPrice: Number(apPrice || pricePerNight + 2400),
       isAvailable: true,
     };
 
@@ -761,78 +729,6 @@ NOTIFY pgrst, 'reload schema';`;
                   maxImages={1}
                   folder="hotel-rooms"
                 />
-              </div>
-
-              {/* 3. Optional Multi-Tier Meal Rates Accordion */}
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowMultiTier(!showMultiTier)}
-                  className="flex items-center justify-between w-full py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4 text-orange-500" />
-                    <span>Advanced: 4-Tier Meal Plan Rates (EP, BB, MAP, AP)</span>
-                  </span>
-                  {showMultiTier ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-
-                {showMultiTier && (
-                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-slate-50 dark:bg-[#081220]/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 animate-in fade-in duration-150">
-                    <div>
-                      <span className="block text-[10px] uppercase font-bold text-slate-400">EP: Room Only</span>
-                      <BaseInput
-                        id="plan-ep"
-                        name="plan-ep"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={epPrice || ''}
-                        onChange={(e) => setEpPrice(e.target.value === '' ? 0 : Number(e.target.value))}
-                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
-                      />
-                    </div>
-                    <div>
-                      <span className="block text-[10px] uppercase font-bold text-[#ea580c]">BB: B’fast</span>
-                      <BaseInput
-                        id="plan-bb"
-                        name="plan-bb"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={bbPrice || ''}
-                        onChange={(e) => setBbPrice(e.target.value === '' ? 0 : Number(e.target.value))}
-                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
-                      />
-                    </div>
-                    <div>
-                      <span className="block text-[10px] uppercase font-bold text-slate-400">MAP: Half Board</span>
-                      <BaseInput
-                        id="plan-map"
-                        name="plan-map"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={mapPrice || ''}
-                        onChange={(e) => setMapPrice(e.target.value === '' ? 0 : Number(e.target.value))}
-                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
-                      />
-                    </div>
-                    <div>
-                      <span className="block text-[10px] uppercase font-bold text-slate-400">AP: Full Board</span>
-                      <BaseInput
-                        id="plan-ap"
-                        name="plan-ap"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={apPrice || ''}
-                        onChange={(e) => setApPrice(e.target.value === '' ? 0 : Number(e.target.value))}
-                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Form Footer Actions */}

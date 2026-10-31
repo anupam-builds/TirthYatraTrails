@@ -5343,28 +5343,15 @@ export function roomToRow(room: Partial<Room>): Record<string, any> {
   const img = room.imageUrl || (room as any).image_url || (room as any).image;
   if (img !== undefined) row.image_url = String(img).trim();
 
-  const price = room.pricePerNight ?? (room as any).price_per_night ?? room.roomOnlyPrice ?? (room as any).ep_price;
+  const price = room.pricePerNight ?? (room as any).price_per_night ?? room.roomOnlyPrice;
   if (price !== undefined) {
     row.price_per_night = Number(price);
-    row.ep_price = Number(price);
   }
 
   const meal = room.mealOption || (room as any).meal_option;
   if (meal !== undefined) {
     row.meal_option = String(meal).trim();
   }
-
-  const ep = room.roomOnlyPrice ?? (room as any).ep_price ?? row.price_per_night;
-  if (ep !== undefined) row.ep_price = Number(ep);
-
-  const bb = room.breakfastPrice ?? (room as any).bb_price;
-  if (bb !== undefined) row.bb_price = Number(bb);
-
-  const map = room.halfBoardPrice ?? (room as any).map_price;
-  if (map !== undefined) row.map_price = Number(map);
-
-  const ap = room.fullBoardPrice ?? (room as any).ap_price;
-  if (ap !== undefined) row.ap_price = Number(ap);
 
   if (room.isAvailable !== undefined || (room as any).is_available !== undefined) {
     row.is_available = Boolean(room.isAvailable ?? (room as any).is_available);
