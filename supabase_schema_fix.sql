@@ -282,5 +282,36 @@ BEGIN
 END;
 $$;
 
--- 7. Force PostgREST to reload its schema cache
+-- 7. Ensure hotel_rooms table for rooms and 4-tier rate plans
+CREATE TABLE IF NOT EXISTS public.hotel_rooms (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  room_id TEXT,
+  hotel_id TEXT NOT NULL,
+  room_name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  bed_configuration TEXT DEFAULT '1 King Bed',
+  max_occupancy TEXT DEFAULT '2 Adults + 1 Child',
+  cancellation_policy TEXT DEFAULT 'Free cancellation up to 48 hrs before check-in',
+  image_url TEXT DEFAULT '',
+  ep_price NUMERIC(10, 2) DEFAULT 4200.00,
+  bb_price NUMERIC(10, 2) DEFAULT 5000.00,
+  map_price NUMERIC(10, 2) DEFAULT 5800.00,
+  ap_price NUMERIC(10, 2) DEFAULT 6600.00,
+  is_available BOOLEAN DEFAULT TRUE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE IF EXISTS public.hotels ADD COLUMN IF NOT EXISTS rooms JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.hotel_rooms ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read access on hotel_rooms" ON public.hotel_rooms;
+CREATE POLICY "Public read access on hotel_rooms" ON public.hotel_rooms FOR SELECT TO anon, authenticated USING (true);
+
+DROP POLICY IF EXISTS "Staff and admin full access on hotel_rooms" ON public.hotel_rooms;
+CREATE POLICY "Staff and admin full access on hotel_rooms" ON public.hotel_rooms FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 8. Force PostgREST to reload its schema cache
 NOTIFY pgrst, 'reload schema';
+

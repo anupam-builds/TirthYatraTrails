@@ -120,16 +120,64 @@ export interface City {
 
 export interface Room {
   id: string;
+  roomId?: string;
   hotelId?: string;
+  hotel_id?: string;
   name: string;
-  roomOnlyPrice: number;
-  breakfastPrice: number;
-  halfBoardPrice: number;
-  fullBoardPrice: number;
-  imageUrl: string;
+  roomName?: string;
+  description?: string;
   bedType?: string;
+  bedConfiguration?: string;
   capacity?: string;
+  maxOccupancy?: string;
+  cancellationPolicy?: string;
+  roomOnlyPrice: number; // EP (European Plan)
+  breakfastPrice: number; // BB (Bed & Breakfast)
+  halfBoardPrice: number; // MAP (Modified American Plan)
+  fullBoardPrice: number; // AP (American Plan)
+  imageUrl: string;
+  isAvailable?: boolean;
+  displayOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+
+  // Raw database column aliases for flexibility
+  room_id?: string;
+  room_name?: string;
+  bed_configuration?: string;
+  max_occupancy?: string;
+  cancellation_policy?: string;
+  image_url?: string;
+  ep_price?: number;
+  bb_price?: number;
+  map_price?: number;
+  ap_price?: number;
+  is_available?: boolean;
+  display_order?: number;
+  created_at?: string;
+  updated_at?: string;
 }
+
+export interface HotelRoomRecord {
+  id: string;
+  room_id?: string;
+  hotel_id: string;
+  room_name: string;
+  description?: string;
+  bed_configuration?: string;
+  max_occupancy?: string;
+  cancellation_policy?: string;
+  image_url?: string;
+  ep_price: number;
+  bb_price: number;
+  map_price: number;
+  ap_price: number;
+  is_available?: boolean;
+  display_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 
 export interface Hotel {
   id: string;

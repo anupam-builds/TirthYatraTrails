@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
+import { supabase } from '../lib/supabase.js';
 import { Hotel, Room } from '../types.js';
 import { InquiryModal } from '../components/common/InquiryModal.js';
 import {
@@ -24,6 +25,7 @@ import {
   X,
   Share2,
   Heart,
+  Bed,
 } from 'lucide-react';
 
 export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
@@ -50,6 +52,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
   const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('Standard Plan');
   const [selectedRoomName, setSelectedRoomName] = useState<string>('');
+  const [rooms, setRooms] = useState<Room[]>([]);
 
   useEffect(() => {
     async function loadHotel() {
@@ -57,6 +60,8 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
       try {
         const h = await api.getHotelById(hotelId);
         setHotel(h);
+        const rList = await api.getHotelRooms(hotelId);
+        setRooms(rList.length > 0 ? rList : (h.rooms || []));
       } catch (err: any) {
         setError(err.message || 'Hotel not found');
       } finally {
@@ -64,6 +69,52 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
       }
     }
     loadHotel();
+  }, [hotelId]);
+
+  // Supabase Realtime synchronization for rooms and rate plans
+  useEffect(() => {
+    if (!hotelId) return;
+
+    const channelName = `realtime-hotel-detail-rooms-${hotelId}-${Date.now()}`;
+    const channel = supabase.channel(channelName);
+
+    channel
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hotel_rooms', filter: `hotel_id=eq.${hotelId}` },
+        async () => {
+          const latestRooms = await api.getHotelRooms(hotelId);
+          if (latestRooms && latestRooms.length > 0) {
+            setRooms(latestRooms);
+          }
+        }
+      )
+      .on('broadcast', { event: 'room_updated' }, async ({ payload }) => {
+        if (payload?.hotelId === hotelId) {
+          const latestRooms = await api.getHotelRooms(hotelId);
+          setRooms(latestRooms);
+        }
+      })
+      .on('broadcast', { event: 'room_deleted' }, async ({ payload }) => {
+        if (payload?.hotelId === hotelId) {
+          const latestRooms = await api.getHotelRooms(hotelId);
+          setRooms(latestRooms);
+        }
+      })
+      .subscribe();
+
+    const handleRoomEvent = async (e: Event) => {
+      if (e instanceof CustomEvent && e.detail?.hotelId === hotelId) {
+        const latestRooms = await api.getHotelRooms(hotelId);
+        setRooms(latestRooms);
+      }
+    };
+    window.addEventListener('tirth-room-changed', handleRoomEvent);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('tirth-room-changed', handleRoomEvent);
+    };
   }, [hotelId]);
 
   if (loading) {
@@ -298,121 +349,137 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                   <h2 className="text-xl font-bold text-[#0f294a]">Rooms &amp; rates</h2>
                 </div>
                 <span className="text-xs font-semibold text-slate-500">
-                  {hotel.rooms.length} room type{hotel.rooms.length > 1 ? 's' : ''} available
+                  {(rooms.length > 0 ? rooms : hotel.rooms).length} room type{(rooms.length > 0 ? rooms : hotel.rooms).length > 1 ? 's' : ''} available
                 </span>
               </div>
 
               <div className="space-y-6">
-                {hotel.rooms.map((room) => (
-                  <div
-                    key={room.id}
-                    className="border border-slate-200 rounded-2xl overflow-hidden hover:border-orange-200 transition-colors"
-                  >
-                    {/* Room Header */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 bg-slate-50/70 border-b border-slate-100">
-                      <div className="w-full sm:w-28 h-24 rounded-xl overflow-hidden shrink-0 bg-slate-200">
-                        <img
-                          src={room.imageUrl}
-                          alt={room.name}
-                          className="w-full h-full object-cover"
-                        />
+                {(rooms.length > 0 ? rooms : hotel.rooms).map((room) => {
+                  const ep = Number(room.roomOnlyPrice ?? (room as any).ep_price ?? 4200);
+                  const bb = Number(room.breakfastPrice ?? (room as any).bb_price ?? ep + 800);
+                  const map = Number(room.halfBoardPrice ?? (room as any).map_price ?? ep + 1600);
+                  const ap = Number(room.fullBoardPrice ?? (room as any).ap_price ?? ep + 2400);
+                  const bedDesc = room.bedConfiguration || room.bedType || '1 King Bed';
+                  const occDesc = room.maxOccupancy || room.capacity || '2 Adults + 1 Child';
+                  const cancelDesc = room.cancellationPolicy || 'Free cancellation up to 48 hrs before check-in';
+                  const roomPhoto = room.imageUrl || hotel.images[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80';
+
+                  return (
+                    <div
+                      key={room.id}
+                      className="border border-slate-200 rounded-2xl overflow-hidden hover:border-orange-200 transition-colors shadow-xs"
+                    >
+                      {/* Room Header */}
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 bg-slate-50/70 border-b border-slate-100">
+                        <div className="w-full sm:w-28 h-24 rounded-xl overflow-hidden shrink-0 bg-slate-200">
+                          <img
+                            src={roomPhoto}
+                            alt={room.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="space-y-1 flex-1">
+                          <h3 className="font-bold text-base text-[#0f294a]">{room.name}</h3>
+                          <p className="text-xs text-slate-500 font-medium">
+                            {bedDesc} • {occDesc}
+                          </p>
+                          {room.description && (
+                            <p className="text-xs text-slate-600 line-clamp-2 mt-0.5">
+                              {room.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 text-[11px] text-emerald-700 font-semibold pt-0.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>{cancelDesc}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <h3 className="font-bold text-base text-[#0f294a]">{room.name}</h3>
-                        <p className="text-xs text-slate-500 font-medium">
-                          {room.bedType || '1 King Bed'} • {room.capacity || '2 Adults'}
-                        </p>
-                        <div className="flex items-center gap-2 text-[11px] text-emerald-700 font-semibold">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Free cancellation up to 48 hrs before check-in</span>
+
+                      {/* Meal Plan Grid */}
+                      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white">
+                        {/* 1. Room Only */}
+                        <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              European Plan
+                            </span>
+                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">Room Only</h4>
+                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
+                              ₹{ep.toLocaleString('en-IN')}{' '}
+                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleOpenInquiry('Room Only', room.name)}
+                            className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                          >
+                            Check Availability
+                          </button>
+                        </div>
+
+                        {/* 2. With Breakfast */}
+                        <div className="p-3.5 rounded-xl border border-orange-200 bg-orange-50/20 flex flex-col justify-between space-y-3">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#ea580c]">
+                              Bed &amp; Breakfast
+                            </span>
+                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">With Complimentary Breakfast</h4>
+                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
+                              ₹{bb.toLocaleString('en-IN')}{' '}
+                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleOpenInquiry('With Breakfast', room.name)}
+                            className="w-full py-2 bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                          >
+                            Check Availability
+                          </button>
+                        </div>
+
+                        {/* 3. Half Board */}
+                        <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Modified Plan
+                            </span>
+                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">Half Board (B’fast + Dinner)</h4>
+                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
+                              ₹{map.toLocaleString('en-IN')}{' '}
+                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleOpenInquiry('Half Board', room.name)}
+                            className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                          >
+                            Check Availability
+                          </button>
+                        </div>
+
+                        {/* 4. Full Board */}
+                        <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              American Plan
+                            </span>
+                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">Full Board (All Meals)</h4>
+                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
+                              ₹{ap.toLocaleString('en-IN')}{' '}
+                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleOpenInquiry('Full Board', room.name)}
+                            className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                          >
+                            Check Availability
+                          </button>
                         </div>
                       </div>
                     </div>
-
-                    {/* Meal Plan Grid */}
-                    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white">
-                      {/* 1. Room Only */}
-                      <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            European Plan
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-800 mt-0.5">Room Only</h4>
-                          <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                            ₹{room.roomOnlyPrice.toLocaleString('en-IN')}{' '}
-                            <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleOpenInquiry('Room Only', room.name)}
-                          className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs"
-                        >
-                          Check Availability
-                        </button>
-                      </div>
-
-                      {/* 2. With Breakfast */}
-                      <div className="p-3.5 rounded-xl border border-orange-200 bg-orange-50/20 flex flex-col justify-between space-y-3">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#ea580c]">
-                            Bed &amp; Breakfast
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-800 mt-0.5">With Complimentary Breakfast</h4>
-                          <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                            ₹{room.breakfastPrice.toLocaleString('en-IN')}{' '}
-                            <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleOpenInquiry('With Breakfast', room.name)}
-                          className="w-full py-2 bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-                        >
-                          Check Availability
-                        </button>
-                      </div>
-
-                      {/* 3. Half Board */}
-                      <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Modified Plan
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-800 mt-0.5">Half Board (B’fast + Dinner)</h4>
-                          <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                            ₹{room.halfBoardPrice.toLocaleString('en-IN')}{' '}
-                            <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleOpenInquiry('Half Board', room.name)}
-                          className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs"
-                        >
-                          Check Availability
-                        </button>
-                      </div>
-
-                      {/* 4. Full Board */}
-                      <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            American Plan
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-800 mt-0.5">Full Board (All Meals)</h4>
-                          <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                            ₹{room.fullBoardPrice.toLocaleString('en-IN')}{' '}
-                            <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleOpenInquiry('Full Board', room.name)}
-                          className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs"
-                        >
-                          Check Availability
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

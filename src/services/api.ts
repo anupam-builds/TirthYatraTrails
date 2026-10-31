@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
+import { City, Hotel, Room, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
 import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat } from '../lib/supabase.js';
 import { localStore } from './localStore.js';
 
@@ -1700,9 +1700,161 @@ export const api = {
         error = fallbackRes.error;
       }
 
-      if (!error && data && !data.is_deleted && !(data as any).isDeleted) return mapHotelRow(data);
+      if (!error && data && !data.is_deleted && !(data as any).isDeleted) {
+        const hotel = mapHotelRow(data);
+        if (!hotel.rooms || hotel.rooms.length === 0) {
+          hotel.rooms = await this.getHotelRooms(cleanId);
+        }
+        return hotel;
+      }
     } catch {}
-    return localStore.getHotelById(cleanId)!;
+    const localHotel = localStore.getHotelById(cleanId)!;
+    if (localHotel && (!localHotel.rooms || localHotel.rooms.length === 0)) {
+      localHotel.rooms = localStore.getHotelRooms(cleanId);
+    }
+    return localHotel;
+  },
+
+  async getHotelRooms(hotelId: string): Promise<Room[]> {
+    const cleanId = String(hotelId || '').trim();
+    if (!cleanId) return [];
+
+    try {
+      // 1. Try querying dedicated hotel_rooms table in Supabase
+      const { data, error } = await supabase
+        .from('hotel_rooms')
+        .select('*')
+        .eq('hotel_id', cleanId)
+        .order('display_order', { ascending: true });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map(mapRoomRow);
+      }
+    } catch (err) {
+      console.warn('[api.getHotelRooms] hotel_rooms query exception:', err);
+    }
+
+    // 2. Fallback: check hotels table row.rooms
+    try {
+      const { data: hotelRow } = await supabase
+        .from('hotels')
+        .select('rooms, base_price')
+        .eq('id', cleanId)
+        .maybeSingle();
+
+      if (hotelRow?.rooms && Array.isArray(hotelRow.rooms) && hotelRow.rooms.length > 0) {
+        return hotelRow.rooms.map(mapRoomRow);
+      }
+    } catch {}
+
+    // 3. Fallback to localStore
+    return localStore.getHotelRooms(cleanId);
+  },
+
+  async saveHotelRoom(room: Partial<Room> & { hotelId: string }): Promise<Room> {
+    const cleanHotelId = String(room.hotelId || room.hotel_id || '').trim();
+    if (!cleanHotelId) throw new Error('Hotel ID is required to save room');
+
+    const roomId = String(room.id || room.roomId || (room as any).room_id || `room-${Date.now()}`).trim();
+    const mapped = mapRoomRow({ ...room, id: roomId, hotelId: cleanHotelId });
+    const dbPayload = roomToRow(mapped);
+
+    // 1. Upsert into public.hotel_rooms table in Supabase
+    try {
+      const { data, error } = await supabase
+        .from('hotel_rooms')
+        .upsert([dbPayload], { onConflict: 'id' })
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[api.saveHotelRoom] Supabase hotel_rooms upsert notice:', error.message);
+      } else if (data) {
+        console.log('[api.saveHotelRoom] Successfully upserted room into hotel_rooms table:', data.id);
+      }
+    } catch (err) {
+      console.warn('[api.saveHotelRoom] exception on hotel_rooms upsert:', err);
+    }
+
+    // 2. Synchronize hotels.rooms JSONB column in public.hotels
+    try {
+      const existingRooms = await this.getHotelRooms(cleanHotelId);
+      const existingIdx = existingRooms.findIndex((r) => r.id === roomId);
+      let updatedRooms: Room[];
+      if (existingIdx >= 0) {
+        updatedRooms = existingRooms.map((r, i) => (i === existingIdx ? mapped : r));
+      } else {
+        updatedRooms = [...existingRooms, mapped];
+      }
+      await supabase
+        .from('hotels')
+        .update({ rooms: updatedRooms.map(mapRoomRow) })
+        .eq('id', cleanHotelId);
+    } catch (syncErr) {
+      console.warn('[api.saveHotelRoom] hotels.rooms sync notice:', syncErr);
+    }
+
+    // 3. Update localStore for resilience
+    localStore.saveHotelRoom(cleanHotelId, mapped);
+
+    // 4. Trigger Realtime events
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tirth-room-changed', {
+          detail: { action: 'save', hotelId: cleanHotelId, room: mapped },
+        })
+      );
+    }
+    broadcastContentSync('room_updated', { hotelId: cleanHotelId, room: mapped });
+
+    return mapped;
+  },
+
+  async deleteHotelRoom(roomId: string, hotelId: string): Promise<boolean> {
+    const cleanHotelId = String(hotelId || '').trim();
+    const cleanRoomId = String(roomId || '').trim();
+    if (!cleanRoomId || !cleanHotelId) return false;
+
+    // 1. Delete from public.hotel_rooms in Supabase
+    try {
+      const { error } = await supabase
+        .from('hotel_rooms')
+        .delete()
+        .eq('id', cleanRoomId)
+        .eq('hotel_id', cleanHotelId);
+      if (error) {
+        console.warn('[api.deleteHotelRoom] hotel_rooms delete notice:', error.message);
+      }
+    } catch (err) {
+      console.warn('[api.deleteHotelRoom] exception deleting room:', err);
+    }
+
+    // 2. Synchronize hotels.rooms JSONB column in public.hotels
+    try {
+      const existingRooms = await this.getHotelRooms(cleanHotelId);
+      const remaining = existingRooms.filter((r) => r.id !== cleanRoomId);
+      await supabase
+        .from('hotels')
+        .update({ rooms: remaining.map(mapRoomRow) })
+        .eq('id', cleanHotelId);
+    } catch (syncErr) {
+      console.warn('[api.deleteHotelRoom] hotels.rooms sync notice:', syncErr);
+    }
+
+    // 3. Update localStore
+    localStore.deleteHotelRoom(cleanHotelId, cleanRoomId);
+
+    // 4. Trigger Realtime events
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('tirth-room-changed', {
+          detail: { action: 'delete', hotelId: cleanHotelId, roomId: cleanRoomId },
+        })
+      );
+    }
+    broadcastContentSync('room_deleted', { hotelId: cleanHotelId, roomId: cleanRoomId });
+
+    return true;
   },
 
   async getPackages(category?: string, query?: string): Promise<Package[]> {
@@ -5121,8 +5273,113 @@ export function mapHubRow(row: any): TransitHub {
   };
 }
 
+export function mapRoomRow(row: any): Room {
+  if (!row) return {} as Room;
+  const baseRate = Number(row.ep_price ?? row.room_only_price ?? row.roomOnlyPrice ?? 4200);
+  const bbRate = Number(row.bb_price ?? row.breakfast_price ?? row.breakfastPrice ?? baseRate + 800);
+  const mapRate = Number(row.map_price ?? row.half_board_price ?? row.halfBoardPrice ?? baseRate + 1600);
+  const apRate = Number(row.ap_price ?? row.full_board_price ?? row.fullBoardPrice ?? baseRate + 2400);
+
+  const bedConf = row.bed_configuration || row.bedConfiguration || row.bed_type || row.bedType || '1 King Bed';
+  const occupancy = row.max_occupancy || row.maxOccupancy || row.capacity || '2 Adults + 1 Child';
+  const cancelPolicy = row.cancellation_policy || row.cancellationPolicy || 'Free cancellation up to 48 hrs before check-in';
+  const roomName = row.room_name || row.roomName || row.name || 'Deluxe Room';
+  const img = row.image_url || row.imageUrl || row.image || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80';
+
+  const rawId = String(row.id || row.room_id || row.roomId || `room-${Date.now()}`);
+
+  return {
+    id: rawId,
+    roomId: row.room_id || row.roomId || rawId,
+    hotelId: row.hotel_id || row.hotelId,
+    hotel_id: row.hotel_id || row.hotelId,
+    name: roomName,
+    roomName,
+    description: row.description || '',
+    bedType: bedConf,
+    bedConfiguration: bedConf,
+    capacity: occupancy,
+    maxOccupancy: occupancy,
+    cancellationPolicy: cancelPolicy,
+    roomOnlyPrice: baseRate,
+    breakfastPrice: bbRate,
+    halfBoardPrice: mapRate,
+    fullBoardPrice: apRate,
+    imageUrl: img,
+    isAvailable: row.is_available ?? row.isAvailable ?? true,
+    displayOrder: Number(row.display_order ?? row.displayOrder ?? 0),
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+
+    // Raw database column aliases
+    room_id: row.room_id || row.roomId || rawId,
+    room_name: roomName,
+    bed_configuration: bedConf,
+    max_occupancy: occupancy,
+    cancellation_policy: cancelPolicy,
+    image_url: img,
+    ep_price: baseRate,
+    bb_price: bbRate,
+    map_price: mapRate,
+    ap_price: apRate,
+    is_available: row.is_available ?? row.isAvailable ?? true,
+    display_order: Number(row.display_order ?? row.displayOrder ?? 0),
+  };
+}
+
+export function roomToRow(room: Partial<Room>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (room.id !== undefined) row.id = String(room.id);
+  if (room.roomId !== undefined || (room as any).room_id !== undefined) {
+    row.room_id = room.roomId ?? (room as any).room_id;
+  }
+  if (room.hotelId !== undefined || (room as any).hotel_id !== undefined) {
+    row.hotel_id = room.hotelId ?? (room as any).hotel_id;
+  }
+  const name = room.roomName || room.name || (room as any).room_name;
+  if (name !== undefined) {
+    row.room_name = String(name).trim();
+  }
+  if (room.description !== undefined) row.description = String(room.description).trim();
+
+  const bedConf = room.bedConfiguration || room.bedType || (room as any).bed_configuration;
+  if (bedConf !== undefined) row.bed_configuration = String(bedConf).trim();
+
+  const occupancy = room.maxOccupancy || room.capacity || (room as any).max_occupancy;
+  if (occupancy !== undefined) row.max_occupancy = String(occupancy).trim();
+
+  const cancelPolicy = room.cancellationPolicy || (room as any).cancellation_policy;
+  if (cancelPolicy !== undefined) row.cancellation_policy = String(cancelPolicy).trim();
+
+  const img = room.imageUrl || (room as any).image_url || (room as any).image;
+  if (img !== undefined) row.image_url = String(img).trim();
+
+  const ep = room.roomOnlyPrice ?? (room as any).ep_price;
+  if (ep !== undefined) row.ep_price = Number(ep);
+
+  const bb = room.breakfastPrice ?? (room as any).bb_price;
+  if (bb !== undefined) row.bb_price = Number(bb);
+
+  const map = room.halfBoardPrice ?? (room as any).map_price;
+  if (map !== undefined) row.map_price = Number(map);
+
+  const ap = room.fullBoardPrice ?? (room as any).ap_price;
+  if (ap !== undefined) row.ap_price = Number(ap);
+
+  if (room.isAvailable !== undefined || (room as any).is_available !== undefined) {
+    row.is_available = Boolean(room.isAvailable ?? (room as any).is_available);
+  }
+
+  if (room.displayOrder !== undefined || (room as any).display_order !== undefined) {
+    row.display_order = Number(room.displayOrder ?? (room as any).display_order ?? 0);
+  }
+
+  return row;
+}
+
 export function mapHotelRow(row: any): Hotel {
   if (!row) return {} as Hotel;
+  const rawRooms = Array.isArray(row.rooms) ? row.rooms : [];
   return {
     id: String(row.id),
     cityId: row.city_id || row.cityId,
@@ -5139,7 +5396,7 @@ export function mapHotelRow(row: any): Hotel {
     isTopRated: Boolean(row.is_top_rated ?? row.isTopRated),
     distanceToTemple: row.distance_to_temple || row.distanceToTemple,
     darshanType: row.darshan_type || row.darshanType,
-    rooms: Array.isArray(row.rooms) ? row.rooms : [],
+    rooms: rawRooms.map(mapRoomRow),
     createdAt: row.created_at || row.createdAt,
     updatedAt: row.updated_at || row.updatedAt,
   };

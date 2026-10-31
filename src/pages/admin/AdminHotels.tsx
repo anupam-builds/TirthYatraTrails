@@ -8,6 +8,7 @@ import { SacredCityHybridSelector } from '../../components/admin/SacredCityHybri
 import { reconcileRealtimeList } from '../../hooks/useRealtimeSync.js';
 import { supabase } from '../../lib/supabase.js';
 import { HotelInventoryGrid } from '../../components/admin/HotelInventoryGrid.js';
+import { HotelRoomsRatesModal } from '../../components/admin/HotelRoomsRatesModal.js';
 import { BaseInput, BaseSelect, BaseTextarea } from '../../components/FormField.js';
 import {
   Building,
@@ -26,6 +27,7 @@ import {
   RotateCcw,
   Calendar,
   Radio,
+  Bed,
 } from 'lucide-react';
 
 interface ToastAlert {
@@ -43,6 +45,7 @@ export const AdminHotels: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('');
   const [selectedInventoryHotel, setSelectedInventoryHotel] = useState<Hotel | null>(null);
+  const [selectedRoomsHotel, setSelectedRoomsHotel] = useState<Hotel | null>(null);
 
   // Floating confirmation toast alert
   const [toast, setToast] = useState<ToastAlert | null>(null);
@@ -555,6 +558,15 @@ export const AdminHotels: React.FC = () => {
                                 <span className="hidden sm:inline">Allocations</span>
                               </button>
                               <button
+                                id={`btn-rooms-hotel-${resolvedId}`}
+                                onClick={() => setSelectedRoomsHotel(safeItem)}
+                                className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                                title="Manage Rooms & 4-Tier Rate Plans"
+                              >
+                                <Bed className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Rooms &amp; Rates</span>
+                              </button>
+                              <button
                                 id={`btn-edit-hotel-${resolvedId}`}
                                 onClick={() => handleOpenEdit(safeItem)}
                                 className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-lg transition-colors cursor-pointer"
@@ -845,6 +857,22 @@ export const AdminHotels: React.FC = () => {
             />
           </div>
         </div>
+      )}
+
+      {/* ROOMS & 4-TIER RATE PLANS MANAGEMENT MODAL */}
+      {selectedRoomsHotel && (
+        <HotelRoomsRatesModal
+          hotel={selectedRoomsHotel}
+          isOpen={Boolean(selectedRoomsHotel)}
+          onClose={() => setSelectedRoomsHotel(null)}
+          onRoomsUpdated={(updatedRooms) => {
+            setHotels((prev) =>
+              prev.map((h) =>
+                h.id === selectedRoomsHotel.id ? { ...h, rooms: updatedRooms } : h
+              )
+            );
+          }}
+        />
       )}
     </AdminLayout>
   );

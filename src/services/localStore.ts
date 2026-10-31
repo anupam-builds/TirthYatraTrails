@@ -1,4 +1,4 @@
-import { City, Hotel, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub } from '../types.js';
+import { City, Hotel, Room, Package, Inquiry, User, AuthResponse, Review, StaffMember, InquiryNote, StaffActivityLog, StaffSessionMonitor, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub } from '../types.js';
 import {
   INITIAL_CITIES,
   INITIAL_HOTELS,
@@ -574,6 +574,64 @@ export const localStore = {
     setStored(STORAGE_KEYS.HOTELS, remainingHotels);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-hotel-changed', { detail: { action: 'delete', target, hotelId: target } }));
+    }
+    return true;
+  },
+
+  getHotelRooms(hotelId: string): Room[] {
+    const hotel = this.getHotelById(hotelId);
+    if (!hotel || !Array.isArray(hotel.rooms) || hotel.rooms.length === 0) {
+      const base = hotel?.basePrice || 4200;
+      return [
+        {
+          id: `room-${hotelId}-deluxe`,
+          hotelId,
+          name: 'Executive Deluxe Room',
+          description: 'Spacious spiritual sanctuary room with modern amenities, air conditioning, and ensuite bath.',
+          bedType: '1 King Bed',
+          bedConfiguration: '1 King Bed',
+          capacity: '2 Adults + 1 Child',
+          maxOccupancy: '2 Adults + 1 Child',
+          cancellationPolicy: 'Free cancellation up to 48 hrs before check-in',
+          roomOnlyPrice: base,
+          breakfastPrice: base + 800,
+          halfBoardPrice: base + 1600,
+          fullBoardPrice: base + 2400,
+          imageUrl: hotel?.images?.[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80',
+          isAvailable: true,
+          displayOrder: 0,
+        },
+      ];
+    }
+    return hotel.rooms;
+  },
+
+  saveHotelRoom(hotelId: string, room: Room): Room {
+    const hotel = this.getHotelById(hotelId);
+    if (!hotel) return room;
+    const existingRooms = Array.isArray(hotel.rooms) ? [...hotel.rooms] : [];
+    const idx = existingRooms.findIndex(
+      (r) => r.id === room.id || (r.name && room.name && r.name.toLowerCase() === room.name.toLowerCase())
+    );
+    if (idx >= 0) {
+      existingRooms[idx] = { ...existingRooms[idx], ...room };
+    } else {
+      existingRooms.push(room);
+    }
+    this.updateHotel(hotelId, { rooms: existingRooms });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-room-changed', { detail: { action: 'save', hotelId, room } }));
+    }
+    return room;
+  },
+
+  deleteHotelRoom(hotelId: string, roomId: string): boolean {
+    const hotel = this.getHotelById(hotelId);
+    if (!hotel || !Array.isArray(hotel.rooms)) return true;
+    const filtered = hotel.rooms.filter((r) => r.id !== roomId);
+    this.updateHotel(hotelId, { rooms: filtered });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-room-changed', { detail: { action: 'delete', hotelId, roomId } }));
     }
     return true;
   },
