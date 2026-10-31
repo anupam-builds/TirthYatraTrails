@@ -1755,22 +1755,42 @@ export const api = {
     const cleanHotelId = String(room.hotelId || room.hotel_id || '').trim();
     if (!cleanHotelId) throw new Error('Hotel ID is required to save room');
 
-    const roomId = String(room.id || room.roomId || (room as any).room_id || `room-${Date.now()}`).trim();
-    const mapped = mapRoomRow({ ...room, id: roomId, hotelId: cleanHotelId });
+    const roomId = String(room.id || room.roomId || (room as any).room_id || '').trim();
+    const isIdUUID = isValidUUID(roomId);
+    const mapped = mapRoomRow({ ...room, id: roomId || `room-${Date.now()}`, hotelId: cleanHotelId });
     const dbPayload = roomToRow(mapped);
 
-    // 1. Upsert into public.hotel_rooms table in Supabase
+    // 1. Insert or Upsert into public.hotel_rooms table in Supabase
     try {
-      const { data, error } = await supabase
-        .from('hotel_rooms')
-        .upsert([dbPayload], { onConflict: 'id' })
-        .select()
-        .maybeSingle();
+      if (isIdUUID) {
+        const { data, error } = await supabase
+          .from('hotel_rooms')
+          .upsert([dbPayload], { onConflict: 'id' })
+          .select()
+          .maybeSingle();
 
-      if (error) {
-        console.warn('[api.saveHotelRoom] Supabase hotel_rooms upsert notice:', error.message);
-      } else if (data) {
-        console.log('[api.saveHotelRoom] Successfully upserted room into hotel_rooms table:', data.id);
+        if (error) {
+          console.warn('[api.saveHotelRoom] Supabase hotel_rooms upsert notice:', error.message);
+        } else if (data) {
+          console.log('[api.saveHotelRoom] Successfully upserted room into hotel_rooms table:', data.id);
+        }
+      } else {
+        // If roomId is not a UUID, omit id so gen_random_uuid() generates the primary key
+        delete dbPayload.id;
+        const { data, error } = await supabase
+          .from('hotel_rooms')
+          .insert([dbPayload])
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          console.warn('[api.saveHotelRoom] Supabase hotel_rooms insert notice:', error.message);
+        } else if (data?.id) {
+          console.log('[api.saveHotelRoom] Successfully inserted room into hotel_rooms table with UUID:', data.id);
+          mapped.id = String(data.id);
+          mapped.roomId = String(data.id);
+          mapped.room_id = String(data.id);
+        }
       }
     } catch (err) {
       console.warn('[api.saveHotelRoom] exception on hotel_rooms upsert:', err);
@@ -1779,7 +1799,7 @@ export const api = {
     // 2. Synchronize hotels.rooms JSONB column in public.hotels
     try {
       const existingRooms = await this.getHotelRooms(cleanHotelId);
-      const existingIdx = existingRooms.findIndex((r) => r.id === roomId);
+      const existingIdx = existingRooms.findIndex((r) => r.id === roomId || (mapped.id && r.id === mapped.id));
       let updatedRooms: Room[];
       if (existingIdx >= 0) {
         updatedRooms = existingRooms.map((r, i) => (i === existingIdx ? mapped : r));
@@ -1817,13 +1837,20 @@ export const api = {
 
     // 1. Delete from public.hotel_rooms in Supabase
     try {
-      const { error } = await supabase
-        .from('hotel_rooms')
-        .delete()
-        .eq('id', cleanRoomId)
-        .eq('hotel_id', cleanHotelId);
-      if (error) {
-        console.warn('[api.deleteHotelRoom] hotel_rooms delete notice:', error.message);
+      if (isValidUUID(cleanRoomId)) {
+        const { error } = await supabase
+          .from('hotel_rooms')
+          .delete()
+          .eq('id', cleanRoomId);
+        if (error) {
+          console.warn('[api.deleteHotelRoom] hotel_rooms delete notice:', error.message);
+        }
+      } else {
+        await supabase
+          .from('hotel_rooms')
+          .delete()
+          .eq('hotel_id', cleanHotelId)
+          .or(`room_id.eq.${cleanRoomId},room_name.eq.${cleanRoomId}`);
       }
     } catch (err) {
       console.warn('[api.deleteHotelRoom] exception deleting room:', err);
@@ -5344,12 +5371,14 @@ export function mapRoomRow(row: any): Room {
 
 export function roomToRow(room: Partial<Room>): Record<string, any> {
   const row: Record<string, any> = {};
-  if (room.id !== undefined) row.id = String(room.id);
+  if (room.id !== undefined && isValidUUID(room.id)) {
+    row.id = String(room.id);
+  }
   if (room.roomId !== undefined || (room as any).room_id !== undefined) {
-    row.room_id = room.roomId ?? (room as any).room_id;
+    row.room_id = String(room.roomId ?? (room as any).room_id);
   }
   if (room.hotelId !== undefined || (room as any).hotel_id !== undefined) {
-    row.hotel_id = room.hotelId ?? (room as any).hotel_id;
+    row.hotel_id = String(room.hotelId ?? (room as any).hotel_id);
   }
   const name = room.roomName || room.name || (room as any).room_name;
   if (name !== undefined) {

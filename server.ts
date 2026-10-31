@@ -1241,6 +1241,13 @@ app.get('/api/admin/schema/sql', (req, res) => {
     const leadsSyncPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261001_leads_and_inquiries_schema_sync.sql');
     const leadsSoftDeletePath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261013_leads_soft_delete_schema.sql');
 
+    const roomsMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261031_hotel_rooms_and_rates_schema.sql');
+
+    if ((requested === 'hotel_rooms' || requested === 'rooms') && fs.existsSync(roomsMigrationPath)) {
+      res.setHeader('Content-Type', 'text/plain');
+      return res.send(fs.readFileSync(roomsMigrationPath, 'utf8'));
+    }
+
     if (requested === 'hotel_inventory' && fs.existsSync(invMigrationPath)) {
       res.setHeader('Content-Type', 'text/plain');
       return res.send(fs.readFileSync(invMigrationPath, 'utf8'));
@@ -1259,6 +1266,9 @@ app.get('/api/admin/schema/sql', (req, res) => {
     }
 
     let combinedSql = '';
+    if (fs.existsSync(roomsMigrationPath)) {
+      combinedSql += fs.readFileSync(roomsMigrationPath, 'utf8') + '\n\n';
+    }
     if (fs.existsSync(invMigrationPath)) {
       combinedSql += fs.readFileSync(invMigrationPath, 'utf8') + '\n\n';
     }
