@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Hotel, Room } from '../../types.js';
 import { api, mapRoomRow } from '../../services/api.js';
 import { supabase } from '../../lib/supabase.js';
-import { BaseInput, BaseTextarea } from '../FormField.js';
+import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
+import { ImageUploadField } from './ImageUploadField.js';
 import {
   Bed,
   Sparkles,
@@ -22,6 +23,8 @@ import {
   Radio,
   Layers,
   Info,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface HotelRoomsRatesModalProps {
@@ -30,6 +33,39 @@ interface HotelRoomsRatesModalProps {
   onClose: () => void;
   onRoomsUpdated?: (updatedRooms: Room[]) => void;
 }
+
+const MEAL_OPTION_PRESETS = [
+  'Bed & Breakfast',
+  'Room Only',
+  'Half Board (Breakfast + Dinner)',
+  'Full Board (All Meals)',
+  'Complimentary Breakfast & Temple Shuttle',
+  'Pure Vegetarian Buffet Included',
+];
+
+const CANCELLATION_PRESETS = [
+  'Free cancellation up to 48 hrs before check-in',
+  'Free cancellation up to 24 hrs before check-in',
+  'Free cancellation up to 7 days before check-in',
+  'Non-refundable pilgrim special rate',
+];
+
+const BED_PRESETS = [
+  '1 King Bed',
+  '2 Queen Beds',
+  '1 Queen Bed',
+  '2 Twin Beds',
+  '1 King Bed + 1 Single Bed',
+  '4 Single Beds (Family Hall)',
+];
+
+const OCCUPANCY_PRESETS = [
+  '2 Adults + 1 Child',
+  '2 Adults',
+  '3 Adults',
+  '4 Adults (Family)',
+  '1 Adult',
+];
 
 export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
   hotel,
@@ -45,15 +81,22 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string>('');
 
-  // Form Fields
+  // Primary Customizable Form Fields
   const [roomName, setRoomName] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
   const [bedConfiguration, setBedConfiguration] = useState<string>('1 King Bed');
   const [maxOccupancy, setMaxOccupancy] = useState<string>('2 Adults + 1 Child');
+  const [pricePerNight, setPricePerNight] = useState<number>(4200);
+  const [mealOption, setMealOption] = useState<string>('Bed & Breakfast');
+  const [isCustomMeal, setIsCustomMeal] = useState<boolean>(false);
+  const [customMealText, setCustomMealText] = useState<string>('');
   const [cancellationPolicy, setCancellationPolicy] = useState<string>(
     'Free cancellation up to 48 hrs before check-in'
   );
+  const [description, setDescription] = useState<string>('');
   const [imageUrl, setImageUrl] = useState<string>('');
+
+  // Optional Multi-Tier Expansion State
+  const [showMultiTier, setShowMultiTier] = useState<boolean>(false);
   const [epPrice, setEpPrice] = useState<number>(4200);
   const [bbPrice, setBbPrice] = useState<number>(5000);
   const [mapPrice, setMapPrice] = useState<number>(5800);
@@ -68,18 +111,16 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
       const roomList = await api.getHotelRooms(hotel.id);
       setRooms(roomList);
       if (roomList.length > 0) {
-        // If current selected room is still in list, keep it; otherwise select first
         setSelectedRoomId((prev) => {
           const exists = roomList.some((r) => r.id === prev);
           return exists ? prev : roomList[0].id;
         });
       } else {
-        // Prepare blank room template
         handleAddNewRoom();
       }
     } catch (err: any) {
       console.error('[HotelRoomsRatesModal] Error loading rooms:', err);
-      setErrorMsg('Failed to load room details from database.');
+      setErrorMsg('Failed to load room configurations from database.');
     } finally {
       setLoading(false);
     }
@@ -91,7 +132,7 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
     }
   }, [isOpen, loadRooms]);
 
-  // Supabase Realtime channel subscription for rooms
+  // Realtime subscription via Supabase channel and window event
   useEffect(() => {
     if (!isOpen || !hotel?.id) return;
 
@@ -102,57 +143,70 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'hotel_rooms', filter: `hotel_id=eq.${hotel.id}` },
-        (payload) => {
-          console.log('[HotelRoomsRatesModal] Realtime room change detected:', payload);
+        () => {
           loadRooms();
         }
       )
       .on('broadcast', { event: 'room_updated' }, ({ payload }) => {
-        if (payload?.hotelId === hotel.id) {
-          loadRooms();
-        }
+        if (payload?.hotelId === hotel.id) loadRooms();
       })
       .on('broadcast', { event: 'room_deleted' }, ({ payload }) => {
-        if (payload?.hotelId === hotel.id) {
-          loadRooms();
-        }
+        if (payload?.hotelId === hotel.id) loadRooms();
       })
       .subscribe();
 
-    const handleWindowRoomChange = (e: Event) => {
+    const handleRoomEvent = (e: Event) => {
       if (e instanceof CustomEvent && e.detail?.hotelId === hotel.id) {
         loadRooms();
       }
     };
-    window.addEventListener('tirth-room-changed', handleWindowRoomChange);
+    window.addEventListener('tirth-room-changed', handleRoomEvent);
 
     return () => {
       supabase.removeChannel(channel);
-      window.removeEventListener('tirth-room-changed', handleWindowRoomChange);
+      window.removeEventListener('tirth-room-changed', handleRoomEvent);
     };
   }, [isOpen, hotel?.id, loadRooms]);
 
-  // When selected room changes, populate form fields
+  // Populate form when selected room changes
   useEffect(() => {
     if (!selectedRoomId) return;
     const room = rooms.find((r) => r.id === selectedRoomId);
     if (room) {
-      setRoomName(room.name || room.roomName || 'Deluxe Room');
-      setDescription(room.description || '');
+      const p = Number(room.pricePerNight ?? room.price_per_night ?? room.roomOnlyPrice ?? 4200);
+      const m = room.mealOption || room.meal_option || 'Bed & Breakfast';
+
+      setRoomName(room.name || room.roomName || 'Executive Deluxe Room');
       setBedConfiguration(room.bedConfiguration || room.bedType || '1 King Bed');
       setMaxOccupancy(room.maxOccupancy || room.capacity || '2 Adults + 1 Child');
+      setPricePerNight(p);
+
+      if (MEAL_OPTION_PRESETS.includes(m)) {
+        setMealOption(m);
+        setIsCustomMeal(false);
+        setCustomMealText('');
+      } else {
+        setMealOption('CUSTOM');
+        setIsCustomMeal(true);
+        setCustomMealText(m);
+      }
+
       setCancellationPolicy(
         room.cancellationPolicy || 'Free cancellation up to 48 hrs before check-in'
       );
+      setDescription(room.description || '');
       setImageUrl(
         room.imageUrl ||
           hotel.images?.[0] ||
           'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80'
       );
-      setEpPrice(room.roomOnlyPrice ?? 4200);
-      setBbPrice(room.breakfastPrice ?? (room.roomOnlyPrice ?? 4200) + 800);
-      setMapPrice(room.halfBoardPrice ?? (room.roomOnlyPrice ?? 4200) + 1600);
-      setApPrice(room.fullBoardPrice ?? (room.roomOnlyPrice ?? 4200) + 2400);
+
+      // Multi-tier rates
+      setEpPrice(room.roomOnlyPrice ?? p);
+      setBbPrice(room.breakfastPrice ?? p + 800);
+      setMapPrice(room.halfBoardPrice ?? p + 1600);
+      setApPrice(room.fullBoardPrice ?? p + 2400);
+
       setErrorMsg('');
       setSuccessMsg('');
     }
@@ -165,12 +219,14 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
     const newRoom: Room = {
       id: newId,
       hotelId: hotel.id,
-      name: 'New Sanctum Room',
-      description: 'Air-conditioned holy sanctuary room with comfortable bedding and attached modern bathroom.',
+      name: 'Executive Deluxe Room',
+      description: 'Comfortable air-conditioned pilgrim room featuring holy sanctuary views, ensuite bath, and warm hospitality.',
       bedConfiguration: '1 King Bed',
       bedType: '1 King Bed',
       maxOccupancy: '2 Adults + 1 Child',
       capacity: '2 Adults + 1 Child',
+      pricePerNight: base,
+      mealOption: 'Bed & Breakfast',
       cancellationPolicy: 'Free cancellation up to 48 hrs before check-in',
       imageUrl: hotel.images?.[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80',
       roomOnlyPrice: base,
@@ -184,37 +240,44 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
     setRooms((prev) => [...prev, newRoom]);
     setSelectedRoomId(newId);
     setRoomName(newRoom.name);
-    setDescription(newRoom.description || '');
     setBedConfiguration(newRoom.bedConfiguration || '1 King Bed');
     setMaxOccupancy(newRoom.maxOccupancy || '2 Adults + 1 Child');
+    setPricePerNight(base);
+    setMealOption('Bed & Breakfast');
+    setIsCustomMeal(false);
+    setCustomMealText('');
     setCancellationPolicy(newRoom.cancellationPolicy || 'Free cancellation up to 48 hrs before check-in');
+    setDescription(newRoom.description || '');
     setImageUrl(newRoom.imageUrl);
-    setEpPrice(newRoom.roomOnlyPrice);
-    setBbPrice(newRoom.breakfastPrice);
-    setMapPrice(newRoom.halfBoardPrice);
-    setApPrice(newRoom.fullBoardPrice);
-    setSuccessMsg('New room template created. Fill in details and click Save Room.');
-  };
-
-  // Quick preset calculation based on European Plan price
-  const handleApplyRatePreset = (base: number) => {
     setEpPrice(base);
     setBbPrice(base + 800);
     setMapPrice(base + 1600);
     setApPrice(base + 2400);
+    setSuccessMsg('New room created. Customize the details and click Save Room.');
   };
 
-  // Save current room to Supabase
+  // Sync EP price when pricePerNight changes
+  const handlePricePerNightChange = (val: number) => {
+    setPricePerNight(val);
+    setEpPrice(val);
+    setBbPrice(val + 800);
+    setMapPrice(val + 1600);
+    setApPrice(val + 2400);
+  };
+
+  // Save room to Supabase
   const handleSaveRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomName.trim()) {
-      setErrorMsg('Room title/name is required');
+      setErrorMsg('Room Title is required');
       return;
     }
-    if (epPrice <= 0) {
-      setErrorMsg('European Plan (Room Only) rate must be greater than ₹0');
+    if (pricePerNight <= 0) {
+      setErrorMsg('Price per night must be greater than ₹0');
       return;
     }
+
+    const effectiveMealOption = isCustomMeal ? (customMealText.trim() || 'Bed & Breakfast') : mealOption;
 
     setSaving(true);
     setErrorMsg('');
@@ -233,12 +296,14 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
       bedType: bedConfiguration.trim(),
       maxOccupancy: maxOccupancy.trim(),
       capacity: maxOccupancy.trim(),
+      pricePerNight: Number(pricePerNight),
+      mealOption: effectiveMealOption,
       cancellationPolicy: cancellationPolicy.trim(),
       imageUrl: imageUrl.trim() || hotel.images?.[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80',
-      roomOnlyPrice: Number(epPrice),
-      breakfastPrice: Number(bbPrice),
-      halfBoardPrice: Number(mapPrice),
-      fullBoardPrice: Number(apPrice),
+      roomOnlyPrice: Number(epPrice || pricePerNight),
+      breakfastPrice: Number(bbPrice || pricePerNight + 800),
+      halfBoardPrice: Number(mapPrice || pricePerNight + 1600),
+      fullBoardPrice: Number(apPrice || pricePerNight + 2400),
       isAvailable: true,
     };
 
@@ -254,13 +319,13 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
         return [...prev, savedRoom];
       });
       setSelectedRoomId(savedRoom.id);
-      setSuccessMsg(`"${savedRoom.name}" and rate plans saved successfully!`);
+      setSuccessMsg(`"${savedRoom.name}" saved to database successfully!`);
       if (onRoomsUpdated) {
         onRoomsUpdated(rooms);
       }
     } catch (err: any) {
-      console.error('[HotelRoomsRatesModal] Save failed:', err);
-      setErrorMsg(err.message || 'Failed to persist room rates to database.');
+      console.error('[HotelRoomsRatesModal] Save error:', err);
+      setErrorMsg(err.message || 'Failed to save room to Supabase database.');
     } finally {
       setSaving(false);
     }
@@ -285,7 +350,7 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
       } else {
         handleAddNewRoom();
       }
-      setSuccessMsg('Room removed successfully.');
+      setSuccessMsg('Room removed from database.');
       if (onRoomsUpdated) {
         onRoomsUpdated(remaining);
       }
@@ -304,7 +369,7 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
       <div className="bg-white dark:bg-[#0d1d33] border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#081220]/70 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#081220]/70 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-orange-100 dark:bg-orange-950/60 text-[#ea580c] dark:text-orange-400">
               <Bed className="w-5 h-5" />
@@ -312,11 +377,11 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-bold text-[#0f294a] dark:text-white">
-                  Rooms &amp; Rates Manager
+                  Add / Edit Rooms &amp; Rates
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Supabase Realtime
+                  Supabase Live
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -333,21 +398,21 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
           </button>
         </div>
 
-        {/* Content Body: Left Column (Room List), Right Column (Edit Form) */}
+        {/* Modal Body: Left Sidebar (Room List) + Right Form */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           
-          {/* Left Column: Room Tabs */}
-          <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-[#081220]/30 shrink-0 flex flex-col gap-2 overflow-y-auto max-h-48 md:max-h-none">
+          {/* Left Room List */}
+          <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-[#081220]/30 shrink-0 flex flex-col gap-2 overflow-y-auto max-h-52 md:max-h-none">
             <div className="flex items-center justify-between pb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Room Types ({rooms.length})
+                Rooms ({rooms.length})
               </span>
               <button
                 type="button"
                 onClick={handleAddNewRoom}
-                className="px-2 py-1 text-[11px] font-bold text-orange-600 hover:text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50 hover:bg-orange-100 dark:hover:bg-orange-900/60 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-bold text-orange-600 hover:text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50 hover:bg-orange-100 dark:hover:bg-orange-900/60 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="w-3.5 h-3.5" />
                 <span>Add Room</span>
               </button>
             </div>
@@ -355,11 +420,11 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
             {loading ? (
               <div className="py-8 text-center text-slate-400 text-xs">
                 <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <span>Loading room plans...</span>
+                <span>Loading room inventory...</span>
               </div>
             ) : rooms.length === 0 ? (
               <div className="py-6 text-center text-slate-400 text-xs">
-                <p>No room types configured yet.</p>
+                <p>No rooms found.</p>
                 <button
                   onClick={handleAddNewRoom}
                   className="mt-2 text-orange-600 font-bold underline cursor-pointer"
@@ -370,6 +435,10 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
             ) : (
               rooms.map((r, idx) => {
                 const isSelected = r.id === selectedRoomId;
+                const price = Number(r.pricePerNight ?? r.price_per_night ?? r.roomOnlyPrice ?? 4200);
+                const meal = r.mealOption || r.meal_option || 'Bed & Breakfast';
+                const specs = `${r.bedConfiguration || r.bedType || '1 King Bed'} • ${r.maxOccupancy || r.capacity || '2 Adults'}`;
+
                 return (
                   <button
                     key={r.id || idx}
@@ -383,17 +452,25 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
                   >
                     <div className="flex items-start justify-between gap-1">
                       <p className="font-bold text-xs text-[#0f294a] dark:text-white line-clamp-1">
-                        {r.name || 'Untitled Room'}
+                        {r.name || 'Executive Room'}
                       </p>
                       {isSelected && <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-1" />}
                     </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {r.bedConfiguration || r.bedType || '1 King Bed'}
+
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                      {specs}
                     </p>
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[11px]">
-                      <span className="text-slate-400 text-[10px]">Room Only (EP):</span>
+
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 truncate max-w-[130px]">
+                        {meal}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                      <span className="text-slate-400 text-[10px]">Per Night:</span>
                       <span className="font-extrabold text-[#0f294a] dark:text-orange-400">
-                        ₹{(r.roomOnlyPrice ?? 4200).toLocaleString('en-IN')}
+                        ₹{price.toLocaleString('en-IN')}
                       </span>
                     </div>
                   </button>
@@ -402,7 +479,7 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
             )}
           </div>
 
-          {/* Right Column: Edit Form */}
+          {/* Right Form */}
           <div className="flex-1 p-5 sm:p-6 overflow-y-auto">
             {errorMsg && (
               <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
@@ -420,15 +497,20 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
 
             <form onSubmit={handleSaveRoom} className="space-y-5">
               
-              {/* Section 1: Room Identity & Specs */}
+              {/* 1. Room Title & Core Specs */}
               <div className="space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-orange-500" />
-                  <span>Room Identity &amp; Setup</span>
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Bed className="w-3.5 h-3.5 text-orange-500" />
+                    <span>Room Details &amp; Pricing</span>
+                  </h3>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                    Preview: {bedConfiguration} • {maxOccupancy}
+                  </span>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Room Name */}
+                  {/* Room Title */}
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Room Title / Name <span className="text-rose-500">*</span>
@@ -438,7 +520,7 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
                       name="room-title-name"
                       type="text"
                       required
-                      placeholder="e.g. Executive Deluxe Room, Deluxe Sanctum Room"
+                      placeholder="e.g. Executive Deluxe Room, Sanctuary Suite"
                       value={roomName}
                       onChange={(e) => setRoomName(e.target.value)}
                       className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
@@ -450,15 +532,29 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Bed Configuration
                     </label>
-                    <BaseInput
-                      id="room-bed-configuration"
-                      name="room-bed-configuration"
-                      type="text"
-                      placeholder="e.g. 1 King Bed, 2 Queen Beds"
-                      value={bedConfiguration}
-                      onChange={(e) => setBedConfiguration(e.target.value)}
-                      className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    />
+                    <div className="space-y-1.5">
+                      <BaseInput
+                        id="room-bed-configuration"
+                        name="room-bed-configuration"
+                        type="text"
+                        placeholder="e.g. 1 King Bed, 2 Queen Beds"
+                        value={bedConfiguration}
+                        onChange={(e) => setBedConfiguration(e.target.value)}
+                        className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {BED_PRESETS.slice(0, 3).map((bp) => (
+                          <button
+                            key={bp}
+                            type="button"
+                            onClick={() => setBedConfiguration(bp)}
+                            className="px-2 py-0.5 text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded cursor-pointer transition-colors"
+                          >
+                            {bp}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Max Occupancy */}
@@ -466,31 +562,104 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Max Occupancy
                     </label>
-                    <BaseInput
-                      id="room-max-occupancy"
-                      name="room-max-occupancy"
-                      type="text"
-                      placeholder="e.g. 2 Adults + 1 Child, 4 Adults"
-                      value={maxOccupancy}
-                      onChange={(e) => setMaxOccupancy(e.target.value)}
-                      className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    />
+                    <div className="space-y-1.5">
+                      <BaseInput
+                        id="room-max-occupancy"
+                        name="room-max-occupancy"
+                        type="text"
+                        placeholder="e.g. 2 Adults + 1 Child, 4 Adults"
+                        value={maxOccupancy}
+                        onChange={(e) => setMaxOccupancy(e.target.value)}
+                        className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {OCCUPANCY_PRESETS.slice(0, 3).map((op) => (
+                          <button
+                            key={op}
+                            type="button"
+                            onClick={() => setMaxOccupancy(op)}
+                            className="px-2 py-0.5 text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded cursor-pointer transition-colors"
+                          >
+                            {op}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Cancellation Policy */}
-                  <div className="sm:col-span-2">
+                  {/* Price per night */}
+                  <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Cancellation Policy
+                      Price Per Night (₹) <span className="text-rose-500">*</span>
                     </label>
-                    <BaseInput
-                      id="room-cancellation-policy"
-                      name="room-cancellation-policy"
-                      type="text"
-                      placeholder="e.g. Free cancellation up to 48 hrs before check-in"
-                      value={cancellationPolicy}
-                      onChange={(e) => setCancellationPolicy(e.target.value)}
-                      className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs font-bold text-orange-600">₹</span>
+                      <BaseInput
+                        id="room-price-per-night"
+                        name="room-price-per-night"
+                        type="number"
+                        min="1"
+                        step="50"
+                        required
+                        value={pricePerNight}
+                        onChange={(e) => handlePricePerNightChange(Number(e.target.value))}
+                        className="w-full text-xs font-extrabold pl-7 pr-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-[#0f294a] dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Meal Option */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Meal Option / Plan
+                    </label>
+                    {!isCustomMeal ? (
+                      <div className="space-y-1">
+                        <BaseSelect
+                          id="room-meal-option"
+                          name="room-meal-option"
+                          value={mealOption}
+                          onChange={(e) => {
+                            if (e.target.value === 'CUSTOM') {
+                              setIsCustomMeal(true);
+                              setCustomMealText('');
+                            } else {
+                              setMealOption(e.target.value);
+                            }
+                          }}
+                          className="w-full text-xs font-medium px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none cursor-pointer"
+                        >
+                          {MEAL_OPTION_PRESETS.map((mo) => (
+                            <option key={mo} value={mo}>
+                              {mo}
+                            </option>
+                          ))}
+                          <option value="CUSTOM">+ Specify Custom Meal Option...</option>
+                        </BaseSelect>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <BaseInput
+                          id="room-custom-meal"
+                          name="room-custom-meal"
+                          type="text"
+                          placeholder="e.g. Room + Satvik Breakfast"
+                          value={customMealText}
+                          onChange={(e) => setCustomMealText(e.target.value)}
+                          className="flex-1 text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomMeal(false);
+                            setMealOption('Bed & Breakfast');
+                          }}
+                          className="px-2.5 py-1 text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-300 cursor-pointer"
+                        >
+                          Presets
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Description */}
@@ -502,190 +671,121 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
                       id="room-description"
                       name="room-description"
                       rows={2}
-                      placeholder="Spacious spiritual sanctuary room overlooking temple spire with soundproof glazing..."
+                      placeholder="Spacious spiritual sanctuary room overlooking temple spire with soundproof glazing and pristine amenities..."
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     />
                   </div>
 
-                  {/* Room Image URL */}
+                  {/* Cancellation Policy */}
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Room Photo URL
+                      Cancellation Policy
                     </label>
-                    <div className="flex gap-2">
+                    <div className="space-y-1.5">
                       <BaseInput
-                        id="room-photo-url"
-                        name="room-photo-url"
-                        type="url"
-                        placeholder="https://images.unsplash.com/photo-..."
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        className="flex-1 text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                        id="room-cancellation-policy"
+                        name="room-cancellation-policy"
+                        type="text"
+                        placeholder="e.g. Free cancellation up to 48 hrs before check-in"
+                        value={cancellationPolicy}
+                        onChange={(e) => setCancellationPolicy(e.target.value)}
+                        className="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-[#081220] border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
                       />
-                      {imageUrl && (
-                        <div className="w-10 h-9 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100">
-                          <img src={imageUrl} alt="preview" className="w-full h-full object-cover" />
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {CANCELLATION_PRESETS.map((cp) => (
+                          <button
+                            key={cp}
+                            type="button"
+                            onClick={() => setCancellationPolicy(cp)}
+                            className="px-2 py-0.5 text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded cursor-pointer transition-colors"
+                          >
+                            {cp}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Section 2: 4-Tier Rate Plans */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <DollarSign className="w-3.5 h-3.5 text-orange-500" />
-                      <span>Meal Plan Rates (Per Night in INR)</span>
-                    </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Configure rates for all 4 standardized hospitality tiers.
-                    </p>
-                  </div>
+              {/* 2. Room Photo Upload & URL Entry */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <ImageUploadField
+                  id="hotel-room-photo-uploader"
+                  label="Room Photo (Upload from Device or enter URL)"
+                  helpText="Upload a photo from your computer, or paste a public web link."
+                  images={imageUrl ? [imageUrl] : []}
+                  onChange={(newImgs) => setImageUrl(newImgs[0] || '')}
+                  multiple={false}
+                  maxImages={1}
+                  folder="hotel-rooms"
+                />
+              </div>
 
-                  {/* Quick preset buttons */}
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
-                    <span className="text-[10px] text-slate-400">Quick Presets:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleApplyRatePreset(4200)}
-                      className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-orange-100 hover:text-orange-600 dark:hover:bg-orange-950 rounded cursor-pointer transition-colors"
-                    >
-                      ₹4,200
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleApplyRatePreset(5500)}
-                      className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-orange-100 hover:text-orange-600 dark:hover:bg-orange-950 rounded cursor-pointer transition-colors"
-                    >
-                      ₹5,500
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleApplyRatePreset(7500)}
-                      className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-orange-100 hover:text-orange-600 dark:hover:bg-orange-950 rounded cursor-pointer transition-colors"
-                    >
-                      ₹7,500
-                    </button>
-                  </div>
-                </div>
+              {/* 3. Optional Multi-Tier Meal Rates Accordion */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowMultiTier(!showMultiTier)}
+                  className="flex items-center justify-between w-full py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-orange-500" />
+                    <span>Advanced: 4-Tier Meal Plan Rates (EP, BB, MAP, AP)</span>
+                  </span>
+                  {showMultiTier ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
 
-                {/* 4 Rate Plan Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  
-                  {/* Tier 1: European Plan (Room Only) */}
-                  <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-[#081220]/60 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        European Plan
-                      </span>
-                      <Bed className="w-3.5 h-3.5 text-slate-400" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      Room Only (EP)
-                    </p>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">₹</span>
+                {showMultiTier && (
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-slate-50 dark:bg-[#081220]/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 animate-in fade-in duration-150">
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-slate-400">EP: Room Only</span>
                       <BaseInput
-                        id="plan-ep-price"
-                        name="plan-ep-price"
+                        id="plan-ep"
+                        name="plan-ep"
                         type="number"
-                        min="0"
-                        step="50"
                         value={epPrice}
                         onChange={(e) => setEpPrice(Number(e.target.value))}
-                        className="w-full text-xs font-extrabold pl-6 pr-2 py-1.5 bg-white dark:bg-[#0d1d33] border border-slate-300 dark:border-slate-700 rounded-xl text-[#0f294a] dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
-                    <span className="block text-[10px] text-slate-400">Base room rate</span>
-                  </div>
-
-                  {/* Tier 2: Bed & Breakfast */}
-                  <div className="p-3.5 rounded-2xl border border-orange-200 dark:border-orange-800/80 bg-orange-50/30 dark:bg-orange-950/20 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#ea580c]">
-                        Bed &amp; Breakfast
-                      </span>
-                      <Coffee className="w-3.5 h-3.5 text-[#ea580c]" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      With B’fast (BB)
-                    </p>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-2 text-xs font-bold text-[#ea580c]">₹</span>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-[#ea580c]">BB: B’fast</span>
                       <BaseInput
-                        id="plan-bb-price"
-                        name="plan-bb-price"
+                        id="plan-bb"
+                        name="plan-bb"
                         type="number"
-                        min="0"
-                        step="50"
                         value={bbPrice}
                         onChange={(e) => setBbPrice(Number(e.target.value))}
-                        className="w-full text-xs font-extrabold pl-6 pr-2 py-1.5 bg-white dark:bg-[#0d1d33] border border-orange-300 dark:border-orange-700 rounded-xl text-[#0f294a] dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
-                    <span className="block text-[10px] text-slate-400">Includes buffet breakfast</span>
-                  </div>
-
-                  {/* Tier 3: Modified American Plan */}
-                  <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-[#081220]/60 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Modified Plan
-                      </span>
-                      <Utensils className="w-3.5 h-3.5 text-slate-400" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      Half Board (MAP)
-                    </p>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">₹</span>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-slate-400">MAP: Half Board</span>
                       <BaseInput
-                        id="plan-map-price"
-                        name="plan-map-price"
+                        id="plan-map"
+                        name="plan-map"
                         type="number"
-                        min="0"
-                        step="50"
                         value={mapPrice}
                         onChange={(e) => setMapPrice(Number(e.target.value))}
-                        className="w-full text-xs font-extrabold pl-6 pr-2 py-1.5 bg-white dark:bg-[#0d1d33] border border-slate-300 dark:border-slate-700 rounded-xl text-[#0f294a] dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
-                    <span className="block text-[10px] text-slate-400">Breakfast + Dinner</span>
-                  </div>
-
-                  {/* Tier 4: American Plan */}
-                  <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-[#081220]/60 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        American Plan
-                      </span>
-                      <Sparkles className="w-3.5 h-3.5 text-slate-400" />
-                    </div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      Full Board (AP)
-                    </p>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">₹</span>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-slate-400">AP: Full Board</span>
                       <BaseInput
-                        id="plan-ap-price"
-                        name="plan-ap-price"
+                        id="plan-ap"
+                        name="plan-ap"
                         type="number"
-                        min="0"
-                        step="50"
                         value={apPrice}
                         onChange={(e) => setApPrice(Number(e.target.value))}
-                        className="w-full text-xs font-extrabold pl-6 pr-2 py-1.5 bg-white dark:bg-[#0d1d33] border border-slate-300 dark:border-slate-700 rounded-xl text-[#0f294a] dark:text-white focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                        className="w-full text-xs font-bold px-2 py-1 mt-1 bg-white dark:bg-[#0d1d33] border rounded-lg"
                       />
                     </div>
-                    <span className="block text-[10px] text-slate-400">All 3 meals included</span>
                   </div>
-
-                </div>
+                )}
               </div>
 
               {/* Form Footer Actions */}
@@ -718,7 +818,7 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
                     {saving ? (
                       <>
                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>Saving to Supabase...</span>
+                        <span>Saving Room...</span>
                       </>
                     ) : (
                       <>

@@ -282,7 +282,7 @@ BEGIN
 END;
 $$;
 
--- 7. Ensure hotel_rooms table for rooms and 4-tier rate plans
+-- 7. Ensure hotel_rooms table for rooms and rate plans
 CREATE TABLE IF NOT EXISTS public.hotel_rooms (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   room_id TEXT,
@@ -291,6 +291,8 @@ CREATE TABLE IF NOT EXISTS public.hotel_rooms (
   description TEXT DEFAULT '',
   bed_configuration TEXT DEFAULT '1 King Bed',
   max_occupancy TEXT DEFAULT '2 Adults + 1 Child',
+  price_per_night NUMERIC(10, 2) DEFAULT 4200.00,
+  meal_option TEXT DEFAULT 'Bed & Breakfast',
   cancellation_policy TEXT DEFAULT 'Free cancellation up to 48 hrs before check-in',
   image_url TEXT DEFAULT '',
   ep_price NUMERIC(10, 2) DEFAULT 4200.00,
@@ -302,6 +304,13 @@ CREATE TABLE IF NOT EXISTS public.hotel_rooms (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.hotel_rooms ADD COLUMN IF NOT EXISTS price_per_night NUMERIC(10, 2) DEFAULT 4200.00;
+ALTER TABLE public.hotel_rooms ADD COLUMN IF NOT EXISTS meal_option TEXT DEFAULT 'Bed & Breakfast';
+ALTER TABLE public.hotel_rooms ADD COLUMN IF NOT EXISTS cancellation_policy TEXT DEFAULT 'Free cancellation up to 48 hrs before check-in';
+ALTER TABLE public.hotel_rooms ADD COLUMN IF NOT EXISTS bed_configuration TEXT DEFAULT '1 King Bed';
+ALTER TABLE public.hotel_rooms ADD COLUMN IF NOT EXISTS max_occupancy TEXT DEFAULT '2 Adults + 1 Child';
+ALTER TABLE public.hotel_rooms ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT '';
 
 ALTER TABLE IF EXISTS public.hotels ADD COLUMN IF NOT EXISTS rooms JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.hotel_rooms ENABLE ROW LEVEL SECURITY;

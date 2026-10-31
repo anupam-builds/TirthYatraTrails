@@ -5275,7 +5275,18 @@ export function mapHubRow(row: any): TransitHub {
 
 export function mapRoomRow(row: any): Room {
   if (!row) return {} as Room;
-  const baseRate = Number(row.ep_price ?? row.room_only_price ?? row.roomOnlyPrice ?? 4200);
+  const pricePerNight = Number(
+    row.price_per_night ??
+    row.pricePerNight ??
+    row.price ??
+    row.ep_price ??
+    row.room_only_price ??
+    row.roomOnlyPrice ??
+    4200
+  );
+  const mealOption = String(row.meal_option || row.mealOption || 'Bed & Breakfast');
+
+  const baseRate = pricePerNight;
   const bbRate = Number(row.bb_price ?? row.breakfast_price ?? row.breakfastPrice ?? baseRate + 800);
   const mapRate = Number(row.map_price ?? row.half_board_price ?? row.halfBoardPrice ?? baseRate + 1600);
   const apRate = Number(row.ap_price ?? row.full_board_price ?? row.fullBoardPrice ?? baseRate + 2400);
@@ -5301,6 +5312,8 @@ export function mapRoomRow(row: any): Room {
     capacity: occupancy,
     maxOccupancy: occupancy,
     cancellationPolicy: cancelPolicy,
+    pricePerNight,
+    mealOption,
     roomOnlyPrice: baseRate,
     breakfastPrice: bbRate,
     halfBoardPrice: mapRate,
@@ -5317,6 +5330,8 @@ export function mapRoomRow(row: any): Room {
     bed_configuration: bedConf,
     max_occupancy: occupancy,
     cancellation_policy: cancelPolicy,
+    price_per_night: pricePerNight,
+    meal_option: mealOption,
     image_url: img,
     ep_price: baseRate,
     bb_price: bbRate,
@@ -5354,7 +5369,18 @@ export function roomToRow(room: Partial<Room>): Record<string, any> {
   const img = room.imageUrl || (room as any).image_url || (room as any).image;
   if (img !== undefined) row.image_url = String(img).trim();
 
-  const ep = room.roomOnlyPrice ?? (room as any).ep_price;
+  const price = room.pricePerNight ?? (room as any).price_per_night ?? room.roomOnlyPrice ?? (room as any).ep_price;
+  if (price !== undefined) {
+    row.price_per_night = Number(price);
+    row.ep_price = Number(price);
+  }
+
+  const meal = room.mealOption || (room as any).meal_option;
+  if (meal !== undefined) {
+    row.meal_option = String(meal).trim();
+  }
+
+  const ep = room.roomOnlyPrice ?? (room as any).ep_price ?? row.price_per_night;
   if (ep !== undefined) row.ep_price = Number(ep);
 
   const bb = room.breakfastPrice ?? (room as any).bb_price;

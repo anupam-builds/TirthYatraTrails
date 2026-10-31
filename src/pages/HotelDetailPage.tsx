@@ -26,6 +26,9 @@ import {
   Share2,
   Heart,
   Bed,
+  Coffee,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
@@ -53,6 +56,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
   const [selectedPlan, setSelectedPlan] = useState<string>('Standard Plan');
   const [selectedRoomName, setSelectedRoomName] = useState<string>('');
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [expandedRoomPlans, setExpandedRoomPlans] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     async function loadHotel() {
@@ -355,126 +359,185 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
 
               <div className="space-y-6">
                 {(rooms.length > 0 ? rooms : hotel.rooms).map((room) => {
-                  const ep = Number(room.roomOnlyPrice ?? (room as any).ep_price ?? 4200);
-                  const bb = Number(room.breakfastPrice ?? (room as any).bb_price ?? ep + 800);
-                  const map = Number(room.halfBoardPrice ?? (room as any).map_price ?? ep + 1600);
-                  const ap = Number(room.fullBoardPrice ?? (room as any).ap_price ?? ep + 2400);
+                  const price = Number(
+                    room.pricePerNight ??
+                    (room as any).price_per_night ??
+                    room.roomOnlyPrice ??
+                    (room as any).ep_price ??
+                    4200
+                  );
+                  const meal = room.mealOption || (room as any).meal_option || 'Bed & Breakfast';
                   const bedDesc = room.bedConfiguration || room.bedType || '1 King Bed';
                   const occDesc = room.maxOccupancy || room.capacity || '2 Adults + 1 Child';
                   const cancelDesc = room.cancellationPolicy || 'Free cancellation up to 48 hrs before check-in';
                   const roomPhoto = room.imageUrl || hotel.images[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80';
 
+                  const ep = Number(room.roomOnlyPrice ?? (room as any).ep_price ?? price);
+                  const bb = Number(room.breakfastPrice ?? (room as any).bb_price ?? price + 800);
+                  const map = Number(room.halfBoardPrice ?? (room as any).map_price ?? price + 1600);
+                  const ap = Number(room.fullBoardPrice ?? (room as any).ap_price ?? price + 2400);
+
+                  const isExpanded = Boolean(expandedRoomPlans[room.id]);
+
                   return (
                     <div
                       key={room.id}
-                      className="border border-slate-200 rounded-2xl overflow-hidden hover:border-orange-200 transition-colors shadow-xs"
+                      className="bg-white border border-slate-200 rounded-3xl overflow-hidden hover:border-orange-300 transition-all shadow-xs hover:shadow-md flex flex-col md:flex-row group"
                     >
-                      {/* Room Header */}
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 bg-slate-50/70 border-b border-slate-100">
-                        <div className="w-full sm:w-28 h-24 rounded-xl overflow-hidden shrink-0 bg-slate-200">
-                          <img
-                            src={roomPhoto}
-                            alt={room.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="space-y-1 flex-1">
-                          <h3 className="font-bold text-base text-[#0f294a]">{room.name}</h3>
-                          <p className="text-xs text-slate-500 font-medium">
-                            {bedDesc} • {occDesc}
-                          </p>
-                          {room.description && (
-                            <p className="text-xs text-slate-600 line-clamp-2 mt-0.5">
-                              {room.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2 text-[11px] text-emerald-700 font-semibold pt-0.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                            <span>{cancelDesc}</span>
-                          </div>
+                      {/* Left: Room Image with hover effect & bed tag */}
+                      <div className="w-full md:w-72 h-52 md:h-auto relative shrink-0 overflow-hidden bg-slate-100">
+                        <img
+                          src={roomPhoto}
+                          alt={room.name}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                        <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-full text-white text-[11px] font-semibold flex items-center gap-1.5">
+                          <Bed className="w-3 h-3 text-orange-400" />
+                          <span>{bedDesc}</span>
                         </div>
                       </div>
 
-                      {/* Meal Plan Grid */}
-                      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white">
-                        {/* 1. Room Only */}
-                        <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              European Plan
+                      {/* Right: Room Details, Specs, Meal Tag & Booking */}
+                      <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between gap-4">
+                        <div className="space-y-2.5">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <h3 className="font-bold text-lg text-[#0f294a] group-hover:text-orange-600 transition-colors">
+                                {room.name}
+                              </h3>
+                              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                {bedDesc} • {occDesc}
+                              </p>
+                            </div>
+
+                            {/* Meal Option Tag */}
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200/80">
+                              <Utensils className="w-3.5 h-3.5 text-amber-600" />
+                              <span>{meal}</span>
                             </span>
-                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">Room Only</h4>
-                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                              ₹{ep.toLocaleString('en-IN')}{' '}
-                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                            </p>
                           </div>
-                          <button
-                            onClick={() => handleOpenInquiry('Room Only', room.name)}
-                            className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                          >
-                            Check Availability
-                          </button>
+
+                          {/* Cancellation Policy Badge */}
+                          <div className="flex items-center gap-2 text-xs text-emerald-700 font-semibold">
+                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                            <span>{cancelDesc}</span>
+                          </div>
+
+                          {/* Room Description */}
+                          {room.description && (
+                            <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
+                              {room.description}
+                            </p>
+                          )}
                         </div>
 
-                        {/* 2. With Breakfast */}
-                        <div className="p-3.5 rounded-xl border border-orange-200 bg-orange-50/20 flex flex-col justify-between space-y-3">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#ea580c]">
-                              Bed &amp; Breakfast
-                            </span>
-                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">With Complimentary Breakfast</h4>
-                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                              ₹{bb.toLocaleString('en-IN')}{' '}
-                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => handleOpenInquiry('With Breakfast', room.name)}
-                            className="w-full py-2 bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                          >
-                            Check Availability
-                          </button>
-                        </div>
+                        {/* Bottom Bar: Price per night & Check Availability Action */}
+                        <div className="pt-4 border-t border-slate-100 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                Nightly Pilgrim Rate
+                              </span>
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-2xl font-extrabold text-[#0f294a]">
+                                  ₹{price.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-xs text-slate-500 font-medium">/ night</span>
+                                <span className="text-[10px] text-amber-700 font-semibold ml-1">
+                                  ({meal})
+                                </span>
+                              </div>
+                            </div>
 
-                        {/* 3. Half Board */}
-                        <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              Modified Plan
-                            </span>
-                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">Half Board (B’fast + Dinner)</h4>
-                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                              ₹{map.toLocaleString('en-IN')}{' '}
-                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleOpenInquiry(meal, room.name)}
+                                className="px-6 py-2.5 bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto"
+                              >
+                                <CalendarCheck className="w-4 h-4" />
+                                <span>Check Availability</span>
+                              </button>
+                            </div>
                           </div>
-                          <button
-                            onClick={() => handleOpenInquiry('Half Board', room.name)}
-                            className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                          >
-                            Check Availability
-                          </button>
-                        </div>
 
-                        {/* 4. Full Board */}
-                        <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between space-y-3">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              American Plan
-                            </span>
-                            <h4 className="text-xs font-bold text-slate-800 mt-0.5">Full Board (All Meals)</h4>
-                            <p className="text-sm font-extrabold text-[#0f294a] mt-1">
-                              ₹{ap.toLocaleString('en-IN')}{' '}
-                              <span className="text-[10px] font-normal text-slate-500">/ night</span>
-                            </p>
+                          {/* Alternative Meal Plans Accordion */}
+                          <div className="pt-2 border-t border-slate-100/80">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedRoomPlans((prev) => ({
+                                  ...prev,
+                                  [room.id]: !prev[room.id],
+                                }))
+                              }
+                              className="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <span>
+                                {isExpanded ? 'Hide' : 'View'} alternative meal plans &amp; rates
+                              </span>
+                              {isExpanded ? (
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+
+                            {isExpanded && (
+                              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-xs animate-in fade-in duration-150">
+                                <div
+                                  onClick={() => handleOpenInquiry('Room Only', room.name)}
+                                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
+                                >
+                                  <span className="text-[9px] uppercase font-bold text-slate-400 block">
+                                    Room Only (EP)
+                                  </span>
+                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
+                                    ₹{ep.toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
+                                </div>
+
+                                <div
+                                  onClick={() => handleOpenInquiry('Bed & Breakfast', room.name)}
+                                  className="p-2.5 rounded-xl bg-orange-50/50 border border-orange-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
+                                >
+                                  <span className="text-[9px] uppercase font-bold text-[#ea580c] block">
+                                    With B’fast (BB)
+                                  </span>
+                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
+                                    ₹{bb.toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
+                                </div>
+
+                                <div
+                                  onClick={() => handleOpenInquiry('Half Board', room.name)}
+                                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
+                                >
+                                  <span className="text-[9px] uppercase font-bold text-slate-400 block">
+                                    Half Board (MAP)
+                                  </span>
+                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
+                                    ₹{map.toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
+                                </div>
+
+                                <div
+                                  onClick={() => handleOpenInquiry('Full Board', room.name)}
+                                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
+                                >
+                                  <span className="text-[9px] uppercase font-bold text-slate-400 block">
+                                    Full Board (AP)
+                                  </span>
+                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
+                                    ₹{ap.toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <button
-                            onClick={() => handleOpenInquiry('Full Board', room.name)}
-                            className="w-full py-2 bg-white border border-slate-300 hover:border-orange-500 hover:text-[#ea580c] text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                          >
-                            Check Availability
-                          </button>
                         </div>
                       </div>
                     </div>

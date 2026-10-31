@@ -593,6 +593,8 @@ export const localStore = {
           capacity: '2 Adults + 1 Child',
           maxOccupancy: '2 Adults + 1 Child',
           cancellationPolicy: 'Free cancellation up to 48 hrs before check-in',
+          pricePerNight: base,
+          mealOption: 'Bed & Breakfast',
           roomOnlyPrice: base,
           breakfastPrice: base + 800,
           halfBoardPrice: base + 1600,

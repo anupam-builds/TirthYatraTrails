@@ -131,6 +131,8 @@ export interface Room {
   capacity?: string;
   maxOccupancy?: string;
   cancellationPolicy?: string;
+  pricePerNight?: number; // Custom price per night
+  mealOption?: string; // e.g. 'Room Only', 'Bed & Breakfast', 'Half Board', 'Full Board'
   roomOnlyPrice: number; // EP (European Plan)
   breakfastPrice: number; // BB (Bed & Breakfast)
   halfBoardPrice: number; // MAP (Modified American Plan)
@@ -147,6 +149,8 @@ export interface Room {
   bed_configuration?: string;
   max_occupancy?: string;
   cancellation_policy?: string;
+  price_per_night?: number;
+  meal_option?: string;
   image_url?: string;
   ep_price?: number;
   bb_price?: number;
@@ -166,6 +170,8 @@ export interface HotelRoomRecord {
   description?: string;
   bed_configuration?: string;
   max_occupancy?: string;
+  price_per_night?: number;
+  meal_option?: string;
   cancellation_policy?: string;
   image_url?: string;
   ep_price: number;
