@@ -493,7 +493,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                     <Clock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-slate-800">Check-in / Check-out</span>
-                      <p className="text-slate-500">Check-in: 12:00 PM • Check-out: 11:00 AM (Early check-in for morning Aarti on request)</p>
+                      <p className="text-slate-500">Check-in: 02:00 PM • Check-out: 11:00 AM (Early check-in for morning Aarti on request)</p>
                     </div>
                   </div>
 
@@ -509,7 +509,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                     <Utensils className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-slate-800">Breakfast &amp; Wholesome Meals</span>
-                      <p className="text-slate-500">Pure vegetarian buffet with wholesome food items and special fasting platters.</p>
+                      <p className="text-slate-500">Comprehensive daily breakfast buffet featuring a variety of wholesome culinary selections.</p>
                     </div>
                   </div>
 
