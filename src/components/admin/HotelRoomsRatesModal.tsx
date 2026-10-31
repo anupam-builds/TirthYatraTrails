@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Hotel, Room } from '../../types.js';
-import { api, mapRoomRow } from '../../services/api.js';
+import { api, mapRoomRow, isValidUUID } from '../../services/api.js';
 import { supabase } from '../../lib/supabase.js';
 import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
 import { ImageUploadField } from './ImageUploadField.js';
@@ -255,10 +255,9 @@ export const HotelRoomsRatesModal: React.FC<HotelRoomsRatesModalProps> = ({
     setErrorMsg('');
     setSuccessMsg('');
 
-    const targetRoomId = selectedRoomId || `room-${Date.now()}`;
+    const targetRoomId = selectedRoomId && isValidUUID(selectedRoomId) ? selectedRoomId : undefined;
     const payload: Partial<Room> & { hotelId: string } = {
       id: targetRoomId,
-      roomId: targetRoomId,
       hotelId: hotel.id,
       hotel_id: hotel.id,
       name: roomName.trim(),

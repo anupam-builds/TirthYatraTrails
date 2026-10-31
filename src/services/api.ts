@@ -1737,20 +1737,48 @@ export const api = {
   },
 
   async saveHotelRoom(room: Partial<Room> & { hotelId: string }): Promise<Room> {
-    const cleanHotelId = String(room.hotelId || room.hotel_id || '').trim();
+    const cleanHotelId = String(room.hotelId || (room as any).hotel_id || '').trim();
     if (!cleanHotelId) throw new Error('Hotel ID is required to save room');
 
-    const roomId = String(room.id || room.roomId || (room as any).room_id || '').trim();
-    const isIdUUID = isValidUUID(roomId);
-    const mapped = mapRoomRow({ ...room, id: roomId || undefined, hotelId: cleanHotelId });
-    const dbPayload = roomToRow(mapped);
+    // Ensure we map room_id or roomId to id if updating an existing record
+    const rawId = String(
+      (room as any).room_id ||
+      room.roomId ||
+      room.id ||
+      ''
+    ).trim();
+
+    const isIdUUID = isValidUUID(rawId);
+
+    // Build the payload object strictly conforming to public.hotel_rooms
+    const payload: Record<string, any> = {
+      id: isIdUUID ? rawId : undefined, // use 'id' instead of 'room_id'
+      hotel_id: cleanHotelId,
+      room_name: String(room.roomName || room.name || (room as any).room_name || 'Executive Deluxe Room').trim(),
+      description: String(room.description || '').trim(),
+      bed_configuration: String(room.bedConfiguration || room.bedType || (room as any).bed_configuration || '1 King Bed').trim(),
+      max_occupancy: String(room.maxOccupancy || room.capacity || (room as any).max_occupancy || '2 Adults + 1 Child').trim(),
+      price_per_night: Number(room.pricePerNight ?? (room as any).price_per_night ?? room.roomOnlyPrice ?? 4200),
+      meal_option: String(room.mealOption || (room as any).meal_option || 'Bed & Breakfast').trim(),
+      cancellation_policy: String(room.cancellationPolicy || (room as any).cancellation_policy || 'Free cancellation up to 48 hrs before check-in').trim(),
+      image_url: String(room.imageUrl || (room as any).image_url || '').trim(),
+      display_order: Number(room.displayOrder ?? (room as any).display_order ?? 0),
+    };
+
+    // Clean out undefined id if creating a brand new room
+    if (!payload.id) {
+      delete payload.id;
+    }
+
+    // Ensure room_id is NEVER in the payload
+    delete (payload as any).room_id;
 
     let savedData: any = null;
 
-    if (isIdUUID) {
+    if (payload.id) {
       const { data, error } = await supabase
         .from('hotel_rooms')
-        .upsert([dbPayload], { onConflict: 'id' })
+        .upsert(payload, { onConflict: 'id' })
         .select()
         .single();
 
@@ -1760,10 +1788,9 @@ export const api = {
       }
       savedData = data;
     } else {
-      delete dbPayload.id;
       const { data, error } = await supabase
         .from('hotel_rooms')
-        .insert([dbPayload])
+        .insert([payload])
         .select()
         .single();
 
@@ -1774,7 +1801,7 @@ export const api = {
       savedData = data;
     }
 
-    const finalMapped = mapRoomRow(savedData || mapped);
+    const finalMapped = mapRoomRow(savedData || { ...payload, id: savedData?.id || rawId });
 
     // Trigger Realtime events
     if (typeof window !== 'undefined') {
@@ -1798,7 +1825,7 @@ export const api = {
     if (isValidUUID(cleanRoomId)) {
       query = query.eq('id', cleanRoomId);
     } else {
-      query = query.eq('hotel_id', cleanHotelId).or(`room_id.eq.${cleanRoomId},room_name.eq.${cleanRoomId}`);
+      query = query.eq('hotel_id', cleanHotelId).eq('room_name', cleanRoomId);
     }
 
     const { error } = await query;
@@ -5316,12 +5343,12 @@ export function mapRoomRow(row: any): Room {
 
 export function roomToRow(room: Partial<Room>): Record<string, any> {
   const row: Record<string, any> = {};
-  if (room.id !== undefined && isValidUUID(room.id)) {
-    row.id = String(room.id);
+  // Ensure we map room_id or roomId to id (since hotel_rooms uses id as primary key)
+  const rawId = room.id || room.roomId || (room as any).room_id;
+  if (rawId && isValidUUID(String(rawId))) {
+    row.id = String(rawId);
   }
-  if (room.roomId !== undefined || (room as any).room_id !== undefined) {
-    row.room_id = String(room.roomId ?? (room as any).room_id);
-  }
+  delete (row as any).room_id;
   if (room.hotelId !== undefined || (room as any).hotel_id !== undefined) {
     row.hotel_id = String(room.hotelId ?? (room as any).hotel_id);
   }
