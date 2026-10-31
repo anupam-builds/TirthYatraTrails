@@ -1730,8 +1730,15 @@ export const api = {
       if (!error && Array.isArray(data) && data.length > 0) {
         return data.map(mapRoomRow);
       }
-    } catch (err) {
-      console.warn('[api.getHotelRooms] hotel_rooms query exception:', err);
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          console.info('[api.getHotelRooms] Notice: table "public.hotel_rooms" pending execution in Supabase SQL editor. Using hotels.rooms fallback.');
+        } else {
+          console.warn('[api.getHotelRooms] hotel_rooms query notice:', error.message);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[api.getHotelRooms] hotel_rooms query exception:', err?.message || err);
     }
 
     // 2. Fallback: check hotels table row.rooms
@@ -1770,7 +1777,11 @@ export const api = {
           .maybeSingle();
 
         if (error) {
-          console.warn('[api.saveHotelRoom] Supabase hotel_rooms upsert notice:', error.message);
+          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+            console.info('[api.saveHotelRoom] Note: public.hotel_rooms table pending creation in Supabase. Room safely preserved via dual synchronization in hotels.rooms JSONB.');
+          } else {
+            console.warn('[api.saveHotelRoom] Supabase hotel_rooms upsert notice:', error.message);
+          }
         } else if (data) {
           console.log('[api.saveHotelRoom] Successfully upserted room into hotel_rooms table:', data.id);
         }
@@ -1784,7 +1795,11 @@ export const api = {
           .maybeSingle();
 
         if (error) {
-          console.warn('[api.saveHotelRoom] Supabase hotel_rooms insert notice:', error.message);
+          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+            console.info('[api.saveHotelRoom] Note: public.hotel_rooms table pending creation in Supabase. Room safely preserved via dual synchronization in hotels.rooms JSONB.');
+          } else {
+            console.warn('[api.saveHotelRoom] Supabase hotel_rooms insert notice:', error.message);
+          }
         } else if (data?.id) {
           console.log('[api.saveHotelRoom] Successfully inserted room into hotel_rooms table with UUID:', data.id);
           mapped.id = String(data.id);
@@ -1792,8 +1807,8 @@ export const api = {
           mapped.room_id = String(data.id);
         }
       }
-    } catch (err) {
-      console.warn('[api.saveHotelRoom] exception on hotel_rooms upsert:', err);
+    } catch (err: any) {
+      console.warn('[api.saveHotelRoom] exception on hotel_rooms upsert:', err?.message || err);
     }
 
     // 2. Synchronize hotels.rooms JSONB column in public.hotels
@@ -1843,7 +1858,11 @@ export const api = {
           .delete()
           .eq('id', cleanRoomId);
         if (error) {
-          console.warn('[api.deleteHotelRoom] hotel_rooms delete notice:', error.message);
+          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+            console.info('[api.deleteHotelRoom] Note: public.hotel_rooms table not yet in schema cache. Deleting from dual synchronization.');
+          } else {
+            console.warn('[api.deleteHotelRoom] hotel_rooms delete notice:', error.message);
+          }
         }
       } else {
         await supabase
@@ -1852,8 +1871,8 @@ export const api = {
           .eq('hotel_id', cleanHotelId)
           .or(`room_id.eq.${cleanRoomId},room_name.eq.${cleanRoomId}`);
       }
-    } catch (err) {
-      console.warn('[api.deleteHotelRoom] exception deleting room:', err);
+    } catch (err: any) {
+      console.warn('[api.deleteHotelRoom] exception deleting room:', err?.message || err);
     }
 
     // 2. Synchronize hotels.rooms JSONB column in public.hotels
