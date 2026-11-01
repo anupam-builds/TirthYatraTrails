@@ -27,8 +27,6 @@ import {
   Heart,
   Bed,
   Coffee,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 
 export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
@@ -57,7 +55,6 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
   const [selectedRoomName, setSelectedRoomName] = useState<string>('');
   const [selectedRoomDetails, setSelectedRoomDetails] = useState<SelectedRoomInfo | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [expandedRoomPlans, setExpandedRoomPlans] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     async function loadHotel() {
@@ -384,7 +381,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                 </span>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-3.5">
                 {(rooms.length > 0 ? rooms : hotel.rooms).map((room) => {
                   const price = Number(
                     room.pricePerNight ??
@@ -399,37 +396,30 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                   const cancelDesc = room.cancellationPolicy || 'Free cancellation up to 48 hrs before check-in';
                   const roomPhoto = room.imageUrl || hotel.images[0] || 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&q=80';
 
-                  const ep = Number(room.roomOnlyPrice ?? (room as any).ep_price ?? price);
-                  const bb = Number(room.breakfastPrice ?? (room as any).bb_price ?? price + 800);
-                  const map = Number(room.halfBoardPrice ?? (room as any).map_price ?? price + 1600);
-                  const ap = Number(room.fullBoardPrice ?? (room as any).ap_price ?? price + 2400);
-
-                  const isExpanded = Boolean(expandedRoomPlans[room.id]);
-
                   return (
                     <div
                       key={room.id}
-                      className="bg-white border border-slate-200 rounded-3xl overflow-hidden hover:border-orange-300 transition-all shadow-xs hover:shadow-md flex flex-col md:flex-row group"
+                      className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden hover:border-orange-300 transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row group"
                     >
-                      {/* Left: Room Image with hover effect & bed tag */}
-                      <div className="w-full md:w-72 h-52 md:h-auto relative shrink-0 overflow-hidden bg-slate-100">
+                      {/* Left: Compact Room Image with bed tag */}
+                      <div className="w-full sm:w-52 md:w-56 h-40 sm:h-auto relative shrink-0 overflow-hidden bg-slate-100">
                         <img
                           src={roomPhoto}
                           alt={room.name}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
-                        <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-full text-white text-[11px] font-semibold flex items-center gap-1.5">
+                        <div className="absolute top-2.5 left-2.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-full text-white text-[10.5px] font-semibold flex items-center gap-1 shadow-2xs">
                           <Bed className="w-3 h-3 text-orange-400" />
                           <span>{bedDesc}</span>
                         </div>
                       </div>
 
-                      {/* Right: Room Details, Specs, Meal Tag & Booking */}
-                      <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between gap-4">
-                        <div className="space-y-2.5">
+                      {/* Right: Room Details & Direct Booking Action */}
+                      <div className="p-4 sm:p-4.5 flex-1 flex flex-col justify-between gap-3">
+                        <div className="space-y-1.5">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
-                              <h3 className="font-bold text-lg text-[#0f294a] group-hover:text-orange-600 transition-colors">
+                              <h3 className="font-bold text-base text-[#0f294a] group-hover:text-orange-600 transition-colors leading-tight">
                                 {room.name}
                               </h3>
                               <p className="text-xs text-slate-500 font-medium mt-0.5">
@@ -438,15 +428,17 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                             </div>
 
                             {/* Meal Option Tag */}
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200/80">
-                              <Utensils className="w-3.5 h-3.5 text-amber-600" />
-                              <span>{meal}</span>
-                            </span>
+                            {meal && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 shrink-0">
+                                <Utensils className="w-3 h-3 text-amber-600" />
+                                <span>{meal}</span>
+                              </span>
+                            )}
                           </div>
 
                           {/* Cancellation Policy Badge */}
-                          <div className="flex items-center gap-2 text-xs text-emerald-700 font-semibold">
-                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                             <span>{cancelDesc}</span>
                           </div>
 
@@ -458,170 +450,43 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                           )}
                         </div>
 
-                        {/* Bottom Bar: Price per night & Check Availability Action */}
-                        <div className="pt-4 border-t border-slate-100 space-y-3">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                                Nightly Pilgrim Rate
+                        {/* Bottom Bar: Single-line Nightly Price & Check Availability Action */}
+                        <div className="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                              Nightly Rate
+                            </span>
+                            {/* Nightly Price strictly formatted on a single uninterrupted horizontal line */}
+                            <div className="flex items-baseline flex-nowrap whitespace-nowrap gap-1">
+                              <span className="text-xl sm:text-2xl font-black text-[#0f294a] tracking-tight">
+                                ₹{price.toLocaleString('en-IN')}
                               </span>
-                              <div className="flex items-baseline gap-1.5">
-                                <span className="text-2xl font-extrabold text-[#0f294a]">
-                                  ₹{price.toLocaleString('en-IN')}
-                                </span>
-                                <span className="text-xs text-slate-500 font-medium">/ night</span>
-                                <span className="text-[10px] text-amber-700 font-semibold ml-1">
-                                  ({meal})
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  const rName = room.name || room.roomName || 'Executive Deluxe Room';
-                                  const rPrice = Number(price);
-                                  const rMeal = meal || room.mealOption || 'Bed & Breakfast';
-                                  const rInfo: SelectedRoomInfo = {
-                                    room_name: rName,
-                                    price_per_night: rPrice,
-                                    meal_option: rMeal,
-                                    hotel_name: hotel.name,
-                                    bed_configuration: room.bedConfiguration || room.bedType,
-                                    max_occupancy: room.maxOccupancy || room.capacity,
-                                  };
-                                  handleOpenInquiry(rMeal, rName, rPrice, rInfo);
-                                }}
-                                className="px-6 py-2.5 bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto"
-                              >
-                                <CalendarCheck className="w-4 h-4" />
-                                <span>Check Availability</span>
-                              </button>
+                              <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                                / night
+                              </span>
                             </div>
                           </div>
 
-                          {/* Alternative Meal Plans Accordion */}
-                          <div className="pt-2 border-t border-slate-100/80">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedRoomPlans((prev) => ({
-                                  ...prev,
-                                  [room.id]: !prev[room.id],
-                                }))
-                              }
-                              className="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer transition-colors"
-                            >
-                              <span>
-                                {isExpanded ? 'Hide' : 'View'} alternative meal plans &amp; rates
-                              </span>
-                              {isExpanded ? (
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              ) : (
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-
-                            {isExpanded && (
-                              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-xs animate-in fade-in duration-150">
-                                <div
-                                  onClick={() => {
-                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
-                                    const rInfo: SelectedRoomInfo = {
-                                      room_name: rName,
-                                      price_per_night: ep,
-                                      meal_option: 'Room Only (EP)',
-                                      hotel_name: hotel.name,
-                                      bed_configuration: room.bedConfiguration || room.bedType,
-                                      max_occupancy: room.maxOccupancy || room.capacity,
-                                    };
-                                    handleOpenInquiry('Room Only (EP)', rName, ep, rInfo);
-                                  }}
-                                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
-                                >
-                                  <span className="text-[9px] uppercase font-bold text-slate-400 block">
-                                    Room Only (EP)
-                                  </span>
-                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
-                                    ₹{ep.toLocaleString('en-IN')}
-                                  </span>
-                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
-                                </div>
-
-                                <div
-                                  onClick={() => {
-                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
-                                    const rInfo: SelectedRoomInfo = {
-                                      room_name: rName,
-                                      price_per_night: bb,
-                                      meal_option: 'Bed & Breakfast (BB)',
-                                      hotel_name: hotel.name,
-                                      bed_configuration: room.bedConfiguration || room.bedType,
-                                      max_occupancy: room.maxOccupancy || room.capacity,
-                                    };
-                                    handleOpenInquiry('Bed & Breakfast (BB)', rName, bb, rInfo);
-                                  }}
-                                  className="p-2.5 rounded-xl bg-orange-50/50 border border-orange-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
-                                >
-                                  <span className="text-[9px] uppercase font-bold text-[#ea580c] block">
-                                    With B’fast (BB)
-                                  </span>
-                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
-                                    ₹{bb.toLocaleString('en-IN')}
-                                  </span>
-                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
-                                </div>
-
-                                <div
-                                  onClick={() => {
-                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
-                                    const rInfo: SelectedRoomInfo = {
-                                      room_name: rName,
-                                      price_per_night: map,
-                                      meal_option: 'Half Board (MAP)',
-                                      hotel_name: hotel.name,
-                                      bed_configuration: room.bedConfiguration || room.bedType,
-                                      max_occupancy: room.maxOccupancy || room.capacity,
-                                    };
-                                    handleOpenInquiry('Half Board (MAP)', rName, map, rInfo);
-                                  }}
-                                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
-                                >
-                                  <span className="text-[9px] uppercase font-bold text-slate-400 block">
-                                    Half Board (MAP)
-                                  </span>
-                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
-                                    ₹{map.toLocaleString('en-IN')}
-                                  </span>
-                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
-                                </div>
-
-                                <div
-                                  onClick={() => {
-                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
-                                    const rInfo: SelectedRoomInfo = {
-                                      room_name: rName,
-                                      price_per_night: ap,
-                                      meal_option: 'Full Board (AP)',
-                                      hotel_name: hotel.name,
-                                      bed_configuration: room.bedConfiguration || room.bedType,
-                                      max_occupancy: room.maxOccupancy || room.capacity,
-                                    };
-                                    handleOpenInquiry('Full Board (AP)', rName, ap, rInfo);
-                                  }}
-                                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
-                                >
-                                  <span className="text-[9px] uppercase font-bold text-slate-400 block">
-                                    Full Board (AP)
-                                  </span>
-                                  <span className="font-extrabold text-[#0f294a] block mt-0.5">
-                                    ₹{ap.toLocaleString('en-IN')}
-                                  </span>
-                                  <span className="text-[10px] text-orange-600 font-medium">Select Plan →</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            onClick={() => {
+                              const rName = room.name || room.roomName || 'Executive Deluxe Room';
+                              const rPrice = Number(price);
+                              const rMeal = meal || room.mealOption || 'Bed & Breakfast';
+                              const rInfo: SelectedRoomInfo = {
+                                room_name: rName,
+                                price_per_night: rPrice,
+                                meal_option: rMeal,
+                                hotel_name: hotel.name,
+                                bed_configuration: room.bedConfiguration || room.bedType,
+                                max_occupancy: room.maxOccupancy || room.capacity,
+                              };
+                              handleOpenInquiry(rMeal, rName, rPrice, rInfo);
+                            }}
+                            className="px-5 py-2 bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 w-full sm:w-auto"
+                          >
+                            <CalendarCheck className="w-3.5 h-3.5 shrink-0" />
+                            <span>Check Availability</span>
+                          </button>
                         </div>
                       </div>
                     </div>
