@@ -385,8 +385,28 @@ export const customFetch: typeof fetch = async (input, init) => {
   try {
     const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
     const parsedUrl = new URL(urlStr, base);
+    let urlChanged = false;
+
     if (parsedUrl.searchParams.has('columns')) {
       parsedUrl.searchParams.delete('columns');
+      urlChanged = true;
+    }
+
+    // Strip malformed select modifiers like ':1' from PostgREST query URLs (e.g. select=*:1 -> select=*)
+    if (parsedUrl.search.includes('select=')) {
+      const rawSearch = parsedUrl.search;
+      const cleanSearch = rawSearch
+        .replace(/select=\*:[0-9]+/g, 'select=*')
+        .replace(/select=%2A:[0-9]+/g, 'select=%2A')
+        .replace(/select=\*:[a-zA-Z0-9_]+/g, 'select=*')
+        .replace(/select=%2A:[a-zA-Z0-9_]+/g, 'select=%2A');
+      if (cleanSearch !== rawSearch) {
+        parsedUrl.search = cleanSearch;
+        urlChanged = true;
+      }
+    }
+
+    if (urlChanged) {
       const cleanUrl = parsedUrl.toString();
       if (typeof input === 'string') {
         cleanInput = cleanUrl;
@@ -760,6 +780,27 @@ export const customFetch: typeof fetch = async (input, init) => {
       window.sessionStorage.removeItem('sb-auth-token');
     }
     handleUnauthorizedResponse(urlStr);
+  }
+
+  // 3. Gracefully handle 409 Conflict on staff_members inserts by updating existing record
+  if (res.status === 409 && urlStr.includes('/rest/v1/staff_members') && reqInit.method === 'POST' && reqInit.body) {
+    try {
+      const parsedBody = JSON.parse(typeof reqInit.body === 'string' ? reqInit.body : '');
+      const staffRow = Array.isArray(parsedBody) ? parsedBody[0] : parsedBody;
+      const staffEmail = staffRow?.email;
+      if (staffEmail) {
+        const baseUrl = urlStr.split('?')[0];
+        const patchUrl = `${baseUrl}?email=eq.${encodeURIComponent(staffEmail)}`;
+        const patchRes = await fetch(patchUrl, {
+          ...reqInit,
+          method: 'PATCH',
+          headers,
+        });
+        if (patchRes.ok) {
+          return patchRes;
+        }
+      }
+    } catch {}
   }
 
   return res;
@@ -1562,10 +1603,12 @@ export async function smartSupabaseInsert<T = any>(
   let payload = normalizePayloadInMemory(tableName, initialPayload);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const { data, error } = await client
-      .from(tableName)
-      .insert([payload])
-      .select();
+    // If inserting into staff_members or admin_allowlist, specify onConflict: 'email' to prevent 409 Conflict
+    const query = (tableName === 'staff_members' || tableName === 'admin_allowlist') && payload.email
+      ? client.from(tableName).upsert([payload], { onConflict: 'email' })
+      : client.from(tableName).insert([payload]);
+
+    const { data, error } = await query.select('*');
 
     if (!error) {
       return { data: data as T[], error: null };
@@ -1638,7 +1681,7 @@ export async function safeSupabaseUpdate<T = any>(
       }
     }
 
-    const { data, error } = await query.select();
+    const { data, error } = await query.select('*');
 
     if (!error) return { data: data as T[], error: null };
 

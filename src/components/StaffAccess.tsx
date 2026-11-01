@@ -794,10 +794,20 @@ export const StaffAccess: React.FC = () => {
       ]);
       if (sessions) setSessionMonitor(sessions);
       setActivityLogs(logs);
-
       setIsModalOpen(false);
     } catch (err: any) {
-      setFormError(err.message || 'Error saving staff member.');
+      if (
+        err?.status === 409 ||
+        err?.code === '409' ||
+        err?.code === '23505' ||
+        err?.message?.includes('409') ||
+        err?.message?.includes('already exists') ||
+        err?.message?.includes('duplicate key')
+      ) {
+        setFormError('A staff member with this email already exists.');
+      } else {
+        setFormError(err.message || 'Error saving staff member.');
+      }
     } finally {
       setSaving(false);
     }

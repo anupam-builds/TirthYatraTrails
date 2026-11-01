@@ -3027,6 +3027,7 @@ export const api = {
     const newStaffId = staff.id && isValidUUID(staff.id) ? String(staff.id).trim() : generateUUID();
 
     // 1. Direct Supabase Client Insertion into admin_allowlist
+    // 1. Direct Supabase Client Upsert into admin_allowlist (handles duplicate emails gracefully)
     let allowlistId = newStaffId;
     try {
       const allowlistPayload: Record<string, any> = {
@@ -3037,43 +3038,28 @@ export const api = {
         created_at: nowIso,
       };
 
-      let { data, error } = await safeSupabaseInsert(
-        supabase,
-        'admin_allowlist',
-        allowlistPayload
-      );
-
-      if (error && (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('already exists'))) {
-        const { data: updateData } = await safeSupabaseUpdate(
-          supabase,
-          'admin_allowlist',
-          allowlistPayload,
-          { email: staffEmail }
-        );
-        if (updateData && updateData.length > 0) {
-          data = updateData;
-          error = null;
-        }
-      }
+      const { data, error } = await supabase
+        .from('admin_allowlist')
+        .upsert(allowlistPayload, { onConflict: 'email' })
+        .select('*');
 
       if (data && data.length > 0 && data[0]?.id && isValidUUID(data[0].id)) {
         allowlistId = data[0].id;
       }
 
       if (error) {
-        console.warn('[createStaffMember] admin_allowlist insert notice:', error.message);
+        console.warn('[createStaffMember] admin_allowlist upsert notice:', error.message);
       }
     } catch (err: any) {
-      console.warn('[createStaffMember] admin_allowlist insert warning:', err?.message || err);
+      console.warn('[createStaffMember] admin_allowlist upsert warning:', err?.message || err);
     }
 
-    // 2. Direct Supabase Client Insertion into staff_members table
+    // 2. Direct Supabase Client Upsert into staff_members table (handles duplicate emails gracefully)
     const finalStaffId = allowlistId || newStaffId;
     const staffDesignation = ((staff as any).designation || staff.role || 'Pilgrim Operations Specialist').trim();
     const staffPhone = (staff.phone || '').trim();
 
-    // Construct insert payload matching exact database schema columns:
-    // Strip unmatched UI properties ('phone', 'designation', 'department') to prevent PostgREST 400 Bad Request
+    // Construct insert/upsert payload matching exact database schema columns:
     const insertData: Record<string, any> = {
       id: finalStaffId,
       name: staffName,
@@ -3086,32 +3072,52 @@ export const api = {
     };
 
     try {
-      let { data, error } = await safeSupabaseInsert(
-        supabase,
-        'staff_members',
-        insertData
-      );
+      // Use upsert specifying conflict target on 'email' to prevent 409 Conflict
+      const { error: upsertErr } = await supabase
+        .from('staff_members')
+        .upsert(insertData, { onConflict: 'email' })
+        .select('*');
 
-      if (error && (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('already exists'))) {
-        const { data: updateData, error: updateErr } = await safeSupabaseUpdate(
-          supabase,
-          'staff_members',
-          insertData,
-          { email: staffEmail }
-        );
-        if (updateData && updateData.length > 0) {
-          data = updateData;
-          error = null;
-        } else if (updateErr) {
-          console.warn('[createStaffMember] staff_members update notice:', updateErr.message);
+      if (upsertErr) {
+        if (
+          upsertErr.code === '23505' ||
+          (upsertErr as any).status === 409 ||
+          upsertErr.message?.includes('duplicate') ||
+          upsertErr.message?.includes('already exists')
+        ) {
+          console.warn('[createStaffMember] Duplicate staff detected, updating existing staff member by email:', staffEmail);
+          const { error: updateErr } = await supabase
+            .from('staff_members')
+            .update({
+              name: staffName,
+              password: staffPassword,
+              role: staffRole,
+              is_active: insertData.is_active,
+              is_blocked: insertData.is_blocked,
+            })
+            .eq('email', staffEmail);
+
+          if (updateErr) {
+            console.warn('[createStaffMember] Fallback update failed:', updateErr.message);
+            const conflictErr = new Error('A staff member with this email already exists.');
+            (conflictErr as any).status = 409;
+            (conflictErr as any).code = '409';
+            throw conflictErr;
+          }
+        } else {
+          console.warn('[createStaffMember] staff_members upsert notice:', upsertErr.message);
         }
       }
-
-      if (error) {
-        console.warn('[createStaffMember] staff_members insert notice:', error.message);
-      }
     } catch (e: any) {
-      console.warn('[createStaffMember] staff_members insert notice:', e?.message || e);
+      if (
+        e?.status === 409 ||
+        e?.code === '409' ||
+        e?.code === '23505' ||
+        e?.message?.includes('already exists')
+      ) {
+        throw e;
+      }
+      console.warn('[createStaffMember] staff_members upsert notice:', e?.message || e);
     }
 
     // 3. Supabase Auth User Registration & Guaranteed Instant Confirmation (email_confirm: true)
