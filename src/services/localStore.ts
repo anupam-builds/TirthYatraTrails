@@ -66,6 +66,16 @@ export function markStaffAsDeleted(id?: string, email?: string): void {
   } catch {}
 }
 
+export function unmarkStaffAsDeleted(id?: string, email?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const set = getDeletedStaffIdSet();
+    if (id) set.delete(String(id).toLowerCase().trim());
+    if (email) set.delete(String(email).toLowerCase().trim());
+    localStorage.setItem(STORAGE_KEYS.DELETED_STAFF, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 const INITIAL_HUBS: TransitHub[] = [
   { id: 'hub-ayj-air', cityId: 'ayodhya', cityName: 'Ayodhya', name: 'Maharishi Valmiki International Airport (AYJ)', hubType: 'AIRPORT', code: 'AYJ', distanceToTempleKm: 9.5, isPrimary: true },
   { id: 'hub-ayj-rail', cityId: 'ayodhya', cityName: 'Ayodhya', name: 'Ayodhya Dham Junction (AY)', hubType: 'RAILWAY_STATION', code: 'AY', distanceToTempleKm: 1.2, isPrimary: false },
@@ -1701,9 +1711,11 @@ export const localStore = {
   },
 
   createStaffMember(staffData: Partial<StaffMember>): StaffMember {
-    const list = this.getStaffMembers();
     const email = (staffData.email || '').trim().toLowerCase();
     if (!email) throw new Error('Staff Email ID is required.');
+    unmarkStaffAsDeleted(staffData.id, email);
+
+    const list = this.getStaffMembers();
 
     const existingIndex = list.findIndex((s) => s.email.toLowerCase() === email);
     if (existingIndex !== -1) {

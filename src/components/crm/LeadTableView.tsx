@@ -695,7 +695,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                   <option value="UNASSIGNED">Unassigned Only</option>
                   {staffList.map((stf) => (
                     <option key={stf.id} value={stf.id}>
-                      {stf.name}
+                      {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
                     </option>
                   ))}
                 </BaseSelect>
@@ -954,7 +954,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <option value="--Unassigned--">-- Unassigned --</option>
                               {staffList.map((stf) => (
                                 <option key={stf.id} value={stf.id}>
-                                  {stf.name}
+                                  {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
                                 </option>
                               ))}
                             </BaseSelect>

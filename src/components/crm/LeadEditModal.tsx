@@ -555,7 +555,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                     <option value="">-- Unassigned (Available in Pool) --</option>
                     {staffList.map((stf) => (
                       <option key={stf.id} value={stf.id}>
-                        {stf.name} ({stf.department || 'Travel Desk'})
+                        {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
                       </option>
                     ))}
                   </BaseSelect>

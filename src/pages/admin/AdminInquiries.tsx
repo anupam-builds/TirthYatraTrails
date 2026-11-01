@@ -1152,7 +1152,7 @@ export const AdminInquiries: React.FC = () => {
                                 >
                                   {staffList.map((s) => (
                                     <option key={s.id} value={s.id}>
-                                      {s.name} ({s.role.replace('_', ' ')})
+                                      {s.name || s.displayName || s.email} {s.email ? `(${s.email})` : ''}
                                     </option>
                                   ))}
                                 </BaseSelect>

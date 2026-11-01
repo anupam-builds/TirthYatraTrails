@@ -940,6 +940,136 @@ app.get('/api/admin/administrators', (req, res) => {
   }
 });
 
+// ===================== DEDICATED STAFF PROVISIONING ENDPOINT =====================
+app.post('/api/admin/staff', async (req, res) => {
+  try {
+    const {
+      name,
+      displayName,
+      display_name,
+      email,
+      password,
+      role = 'STAFF',
+      designation = 'Pilgrim Operations Specialist',
+      phone = '',
+      permissions = { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
+      status = 'active',
+      isActive = true,
+      isBlocked = false,
+    } = req.body || {};
+
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ error: 'A valid staff email address is required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const resolvedName = (displayName || display_name || name || cleanEmail.split('@')[0]).trim();
+    const resolvedPassword = password && password.trim().length >= 6 ? password.trim() : 'Staff@123';
+    const resolvedRole = (role || 'STAFF').toUpperCase() === 'ADMIN' ? 'ADMIN' : 'STAFF';
+    const nowIso = new Date().toISOString();
+
+    let authUserId: string | null = null;
+
+    // 1. Create or sync Supabase Auth User
+    try {
+      const { data: createData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: resolvedPassword,
+        email_confirm: true,
+        user_metadata: {
+          name: resolvedName,
+          display_name: resolvedName,
+          role: resolvedRole,
+          is_staff: true,
+          is_admin: resolvedRole === 'ADMIN',
+        },
+      });
+
+      if (!createErr && createData?.user?.id) {
+        authUserId = createData.user.id;
+      } else {
+        // Find existing user in auth
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const existing = listData?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail);
+        if (existing?.id) {
+          authUserId = existing.id;
+          await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+            password: resolvedPassword,
+            email_confirm: true,
+            user_metadata: {
+              name: resolvedName,
+              display_name: resolvedName,
+              role: resolvedRole,
+              is_staff: true,
+              is_admin: resolvedRole === 'ADMIN',
+            },
+          }).catch(() => {});
+        }
+      }
+    } catch (authErr: any) {
+      console.warn('[server.ts POST /api/admin/staff] Supabase Auth creation note:', authErr?.message);
+    }
+
+    const finalStaffId = authUserId || req.body.id || `staff-${Date.now()}`;
+
+    // 2. Insert or upsert into public.staff_members
+    const staffRowPayload: Record<string, any> = {
+      id: finalStaffId,
+      email: cleanEmail,
+      name: resolvedName,
+      display_name: resolvedName,
+      role: resolvedRole,
+      designation: (designation || 'Pilgrim Operations Specialist').trim(),
+      phone: (phone || '').trim(),
+      password: resolvedPassword,
+      status: status || (isBlocked ? 'blocked' : 'active'),
+      is_active: isActive !== false && !isBlocked,
+      is_blocked: Boolean(isBlocked),
+      permissions: permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    let savedRow = staffRowPayload;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('staff_members')
+        .upsert(staffRowPayload, { onConflict: 'email' })
+        .select('*')
+        .maybeSingle();
+
+      if (!error && data) {
+        savedRow = data;
+      }
+    } catch (dbErr: any) {
+      console.warn('[server.ts POST /api/admin/staff] staff_members upsert note:', dbErr?.message);
+    }
+
+    // 3. Upsert into admin_allowlist
+    try {
+      await supabaseAdmin.from('admin_allowlist').upsert(
+        {
+          id: finalStaffId,
+          email: cleanEmail,
+          role: resolvedRole,
+          status: 'Active & Authorized',
+          created_at: nowIso,
+        },
+        { onConflict: 'email' }
+      );
+    } catch {}
+
+    return res.status(201).json({
+      success: true,
+      staff: savedRow,
+      user_id: finalStaffId,
+    });
+  } catch (err: any) {
+    console.error('[server.ts POST /api/admin/staff] Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to create staff member' });
+  }
+});
+
 // ===================== DEDICATED ADMIN PROVISIONING & CREDENTIAL SYSTEM =====================
 app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async (req, res) => {
   // 1. ENV CHECK:

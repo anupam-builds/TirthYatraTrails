@@ -9,11 +9,14 @@ export interface StaffPermissions {
 export interface StaffMember {
   id: string;
   name: string;
+  displayName?: string;
+  display_name?: string;
   email: string;
   password?: string;
   phone?: string;
   designation?: string;
   role: 'STAFF' | 'ADMIN';
+  status?: 'active' | 'blocked' | string;
   isActive: boolean;
   isBlocked?: boolean;
   blockedAt?: string;

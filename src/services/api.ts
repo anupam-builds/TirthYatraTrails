@@ -1,8 +1,8 @@
 import { City, Hotel, Room, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
 import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat } from '../lib/supabase.js';
-import { localStore, getDeletedStaffIdSet, markStaffAsDeleted } from './localStore.js';
+import { localStore, getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted } from './localStore.js';
 
-export { getDeletedStaffIdSet, markStaffAsDeleted };
+export { getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted };
 
 export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat };
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
@@ -2977,6 +2977,10 @@ export const api = {
         supabase.from('profiles').select('id, is_online, last_seen'),
       ]);
 
+      if (staffRes.status === 'fulfilled' && staffRes.value.error) {
+        console.error('[getStaffMembers] Supabase query error on staff_members:', staffRes.value.error.message);
+      }
+
       const staffData = staffRes.status === 'fulfilled' && Array.isArray(staffRes.value.data) ? staffRes.value.data : null;
       const inquiries: Inquiry[] = inqRes.status === 'fulfilled' && inqRes.value ? inqRes.value : [];
       let profilesMap: Record<string, any> = {};
@@ -2986,7 +2990,7 @@ export const api = {
         });
       }
 
-      if (staffData !== null) {
+      if (staffData !== null && staffData.length > 0) {
         return staffData
           .filter(
             (s) =>
@@ -3010,28 +3014,103 @@ export const api = {
             };
           });
       }
+
+      // If staff_members table was empty or not accessible, fallback to profiles query
+      try {
+        const { data: profStaff, error: profErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .or('role.eq.STAFF,role.eq.ADMIN,role.eq.staff,role.eq.admin');
+
+        if (!profErr && Array.isArray(profStaff) && profStaff.length > 0) {
+          return profStaff
+            .filter(
+              (p) =>
+                !deletedIds.has(String(p.id || '').toLowerCase().trim()) &&
+                !deletedIds.has(String(p.email || '').toLowerCase().trim())
+            )
+            .map((p) => {
+              const mapped = mapStaffRow({
+                ...p,
+                name: p.display_name || p.name || p.full_name || p.email?.split('@')[0] || 'Staff Member',
+                display_name: p.display_name || p.name || p.full_name,
+                role: (p.role || 'STAFF').toUpperCase() === 'ADMIN' ? 'ADMIN' : 'STAFF',
+                is_active: p.is_active !== false,
+                is_blocked: Boolean(p.is_blocked),
+              });
+              const metrics = computeStaffLeadMetrics(mapped, inquiries);
+              return {
+                ...mapped,
+                ...metrics,
+              };
+            });
+        }
+      } catch (profQueryErr: any) {
+        console.warn('[getStaffMembers] Profiles fallback query note:', profQueryErr?.message);
+      }
+
       return localStore.getStaffMembers();
-    } catch {
+    } catch (err: any) {
+      console.error('[getStaffMembers] Unexpected error fetching staff:', err?.message || err);
       return localStore.getStaffMembers();
     }
   },
 
   async createStaffMember(staff: Partial<StaffMember>) {
-    const staffName = (staff.name || '').trim();
+    const staffName = (staff.displayName || staff.display_name || staff.name || '').trim();
     const staffEmail = (staff.email || '').trim().toLowerCase();
     const staffRole = staff.role || (staff as any).designation || 'STAFF';
     const staffPassword = staff.password || 'Tirth@123';
+    const staffDesignation = ((staff as any).designation || staff.role || 'Pilgrim Operations Specialist').trim();
+    const staffPhone = (staff.phone || '').trim();
     const nowIso = new Date().toISOString();
 
     // Use provided valid UUID or generate a native standard UUID
     const newStaffId = staff.id && isValidUUID(staff.id) ? String(staff.id).trim() : generateUUID();
 
-    // 1. Direct Supabase Client Insertion into admin_allowlist
-    // 1. Direct Supabase Client Upsert into admin_allowlist (handles duplicate emails gracefully)
-    let allowlistId = newStaffId;
+    // 0. Ensure deleted cache is completely unblocked
+    unmarkStaffAsDeleted(newStaffId, staffEmail);
+
+    let createdStaffId = newStaffId;
+
+    // 1. First attempt creation via server-side Admin API (/api/admin/staff)
+    // This creates user in auth.users (via admin API) and inserts into public.staff_members
+    try {
+      const serverRes = await fetch('/api/admin/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newStaffId,
+          name: staffName,
+          displayName: staffName,
+          display_name: staffName,
+          email: staffEmail,
+          password: staffPassword,
+          role: staffRole,
+          designation: staffDesignation,
+          phone: staffPhone,
+          permissions: staff.permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
+          status: 'active',
+          isActive: (staff as any).isActive !== false,
+          isBlocked: Boolean((staff as any).isBlocked),
+        }),
+      });
+
+      if (serverRes.ok) {
+        const json = await serverRes.json().catch(() => null);
+        if (json?.user_id) {
+          createdStaffId = json.user_id;
+        }
+      }
+    } catch (apiErr) {
+      console.warn('[createStaffMember] /api/admin/staff fetch notice:', apiErr);
+    }
+
+    // 2. Direct Supabase Client Insertion into admin_allowlist
+    let allowlistId = createdStaffId;
     try {
       const allowlistPayload: Record<string, any> = {
-        id: newStaffId,
+        id: createdStaffId,
         email: staffEmail,
         role: staffRole,
         status: 'Active & Authorized',
@@ -3054,21 +3133,25 @@ export const api = {
       console.warn('[createStaffMember] admin_allowlist upsert warning:', err?.message || err);
     }
 
-    // 2. Direct Supabase Client Upsert into staff_members table (handles duplicate emails gracefully)
-    const finalStaffId = allowlistId || newStaffId;
-    const staffDesignation = ((staff as any).designation || staff.role || 'Pilgrim Operations Specialist').trim();
-    const staffPhone = (staff.phone || '').trim();
+    // 3. Direct Supabase Client Upsert into staff_members table (handles duplicate emails gracefully)
+    const finalStaffId = allowlistId || createdStaffId;
 
     // Construct insert/upsert payload matching exact database schema columns:
     const insertData: Record<string, any> = {
       id: finalStaffId,
       name: staffName,
+      display_name: staffName,
       email: staffEmail,
       password: staffPassword,
       role: staffRole,
+      designation: staffDesignation,
+      phone: staffPhone,
+      status: 'active',
       is_active: (staff as any).isActive !== false,
       is_blocked: Boolean((staff as any).isBlocked),
+      permissions: staff.permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
       created_at: nowIso,
+      updated_at: nowIso,
     };
 
     try {
@@ -3090,10 +3173,13 @@ export const api = {
             .from('staff_members')
             .update({
               name: staffName,
+              display_name: staffName,
               password: staffPassword,
               role: staffRole,
+              status: 'active',
               is_active: insertData.is_active,
               is_blocked: insertData.is_blocked,
+              updated_at: nowIso,
             })
             .eq('email', staffEmail);
 
@@ -3120,7 +3206,7 @@ export const api = {
       console.warn('[createStaffMember] staff_members upsert notice:', e?.message || e);
     }
 
-    // 3. Supabase Auth User Registration & Guaranteed Instant Confirmation (email_confirm: true)
+    // 4. Supabase Auth User Client Registration Fallback & Guaranteed Instant Confirmation
     if (staffEmail && staffPassword) {
       try {
         const { error: signUpErr } = await supabase.auth.signUp({
@@ -3129,6 +3215,7 @@ export const api = {
           options: {
             data: {
               name: staffName,
+              display_name: staffName,
               role: staffRole,
               is_staff: true,
               is_admin: staffRole === 'Super Admin' || staffRole === 'ADMIN',
@@ -3141,14 +3228,16 @@ export const api = {
       } catch (authErr: any) {
         console.warn('[createStaffMember] Supabase Auth signUp note:', authErr?.message || authErr);
       }
-
-
     }
 
-    // 4. Update local store and notify listeners (preserving phone and designation for UI)
+    // 5. Update local store and notify listeners (preserving phone and designation for UI)
     const mapped = localStore.createStaffMember({
       ...insertData,
       ...staff,
+      name: staffName,
+      displayName: staffName,
+      display_name: staffName,
+      status: 'active',
       phone: staffPhone,
       designation: staffDesignation,
       id: finalStaffId,
@@ -5186,14 +5275,24 @@ export function mapStaffRow(row: any): StaffMember {
     canUpdateStatus: rawPerms.canUpdateStatus !== undefined ? Boolean(rawPerms.canUpdateStatus) : true,
     canAddNotes: rawPerms.canAddNotes !== undefined ? Boolean(rawPerms.canAddNotes) : true,
   };
+  const displayName = String(row.display_name || row.displayName || row.name || row.full_name || 'Staff Member').trim();
+  const isBlocked = Boolean(row.is_blocked ?? row.isBlocked ?? (row.status === 'blocked'));
+  const isActive = row.is_active !== undefined ? Boolean(row.is_active) : (row.isActive !== undefined ? Boolean(row.isActive) : (row.status ? row.status !== 'blocked' : true));
+  const status = row.status || (isBlocked ? 'blocked' : (isActive ? 'active' : 'blocked'));
+  const role = (row.role || 'STAFF').toUpperCase() === 'ADMIN' ? 'ADMIN' : 'STAFF';
+
   return {
     ...row,
     id: String(row.id),
-    name: row.name || row.full_name || 'Staff Member',
+    name: displayName,
+    displayName,
+    display_name: displayName,
     email: row.email || '',
-    isBlocked: Boolean(row.is_blocked ?? row.isBlocked),
+    role,
+    status,
+    isBlocked,
     blockedReason: row.blocked_reason ?? row.blockedReason,
-    isActive: row.is_active !== undefined ? Boolean(row.is_active) : (row.isActive !== undefined ? Boolean(row.isActive) : true),
+    isActive,
     lastActiveAt: row.last_active_at || row.lastActiveAt || row.last_seen || row.lastSeen,
     lastLogin: row.last_login || row.lastLogin,
     lastSeen: row.last_seen || row.lastSeen || row.last_active_at || row.lastActiveAt,

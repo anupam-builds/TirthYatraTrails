@@ -874,7 +874,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
                   <option value="">-- Unassigned (Travel Desk Pool) --</option>
                   {staffList.map((stf) => (
                     <option key={stf.id} value={stf.id}>
-                      {stf.name} ({stf.role || 'Staff'})
+                      {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
                     </option>
                   ))}
                 </BaseSelect>
