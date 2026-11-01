@@ -21,13 +21,23 @@ const SUPABASE_SERVICE_ROLE_KEY = (
 ).trim();
 
 const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_SERVICE_ROLE_KEY, {
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+        },
+      },
     })
   : null;
 
-const supabaseServer = createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_ANON_KEY || 'placeholder-anon-key', {
+const supabaseServer = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
+  global: {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+    },
+  },
 });
 
 export async function POST(request: Request) {

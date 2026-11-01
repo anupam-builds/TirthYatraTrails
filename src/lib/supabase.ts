@@ -177,6 +177,52 @@ export async function ensureActiveSupabaseSession(timeoutMs = 2000): Promise<str
   return null;
 }
 
+/**
+ * Automatically cleans up stale, expired, or forbidden Supabase auth tokens from
+ * sessionStorage and localStorage to prevent infinite credential looping on 401/403 errors.
+ */
+export function clearStaleAuthTokens(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    // 1. Explicitly remove the primary session storage key
+    if (window.sessionStorage) {
+      window.sessionStorage.removeItem('sb-auth-token');
+      // Also remove project-specific Supabase auth keys (sb-<project-ref>-auth-token)
+      for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+        const key = window.sessionStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
+          window.sessionStorage.removeItem(key);
+        }
+      }
+    }
+
+    // 2. Clear localStorage auth keys as well
+    if (window.localStorage) {
+      for (let i = window.localStorage.length - 1; i >= 0; i--) {
+        const key = window.localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
+          window.localStorage.removeItem(key);
+        }
+      }
+    }
+
+    // 3. Trigger clean client sign out without throwing
+    try {
+      supabase.auth.signOut().catch(() => {});
+    } catch {}
+
+    // 4. Dispatch auth state update events so UI listeners update immediately
+    try {
+      window.dispatchEvent(new CustomEvent('tirth-auth-reset', { detail: { reason: 'stale_token' } }));
+      window.dispatchEvent(new CustomEvent('tirth-admin-auth-changed', { detail: null }));
+      window.dispatchEvent(new CustomEvent('tirth-staff-auth-changed', { detail: null }));
+    } catch {}
+  } catch (err) {
+    console.warn('[clearStaleAuthTokens] Storage cleanup error:', err);
+  }
+}
+
 let isHandling401 = false;
 
 /**
@@ -202,27 +248,8 @@ export function handleUnauthorizedResponse(targetUrl?: string) {
   const isAdminRoute = currentPath.startsWith('/admin');
   const isStaffRoute = currentPath.startsWith('/staff');
 
-  // Clear all Supabase client session tokens
-  try {
-    supabase.auth.signOut().catch(() => {});
-  } catch {}
-
-  const clearSupabaseAuthStorage = (store: Storage | null) => {
-    if (!store) return;
-    try {
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < store.length; i++) {
-        const k = store.key(i);
-        if (k && (k.startsWith('sb-') || k.includes('auth-token'))) {
-          keysToRemove.push(k);
-        }
-      }
-      keysToRemove.forEach((k) => store.removeItem(k));
-    } catch {}
-  };
-
-  clearSupabaseAuthStorage(window.sessionStorage);
-  clearSupabaseAuthStorage(window.localStorage);
+  // Purge all stale auth tokens across sessionStorage and localStorage
+  clearStaleAuthTokens();
 
   if (isAdminRoute || hasAdmin) {
     if (window.sessionStorage) {
@@ -716,22 +743,45 @@ export const customFetch: typeof fetch = async (input, init) => {
   reqInit.headers = headers;
   const res = await fetch(cleanInput, reqInit);
 
-  // Gracefully handle 401 Unauthorized across all Supabase operations
+  // 1. Auto-cleanup for Invalid/Forbidden Auth Tokens on /auth/v1/ endpoints (e.g. /auth/v1/user)
+  const isAuthUrl = urlStr.includes('/auth/v1/') || (Boolean(res.url) && res.url.includes('/auth/v1/'));
+  if (res.status === 403 && isAuthUrl) {
+    console.warn(`[Supabase Auth Guard] 403 Forbidden encountered on ${urlStr}. Purging stale auth tokens from sessionStorage.`);
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem('sb-auth-token');
+    }
+    clearStaleAuthTokens();
+  }
+
+  // 2. Gracefully handle 401 Unauthorized across all Supabase operations
   if (res.status === 401) {
     console.warn(`[Supabase 401 Guard] 401 Unauthorized encountered on ${urlStr}`);
+    if (isAuthUrl && typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem('sb-auth-token');
+    }
     handleUnauthorizedResponse(urlStr);
   }
 
   return res;
 };
 
+const resolvedClientUrl: string = (
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) ||
+  SUPABASE_URL
+).trim();
+
+const resolvedClientAnonKey: string = (
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) ||
+  SUPABASE_ANON_KEY
+).trim();
+
 /**
  * Global Supabase singleton client configured with guaranteed session persistence in sessionStorage,
  * dynamic user Bearer token injection, automatic token refresh, and resilient realtime parameters.
  */
 export const supabase: SupabaseClient = createClient(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_ANON_KEY || 'placeholder-anon-key',
+  resolvedClientUrl,
+  resolvedClientAnonKey,
   {
     auth: {
       storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
@@ -742,13 +792,13 @@ export const supabase: SupabaseClient = createClient(
     },
     global: {
       headers: {
-        apikey: SUPABASE_ANON_KEY || 'placeholder-anon-key',
+        apikey: resolvedClientAnonKey,
       },
       fetch: customFetch,
     },
     realtime: {
       params: {
-        apikey: SUPABASE_ANON_KEY || 'placeholder-anon-key',
+        apikey: resolvedClientAnonKey,
         eventsPerSecond: 15,
       },
     },
@@ -862,10 +912,15 @@ export const SUPABASE_SERVICE_ROLE_KEY: string = (
  * Supabase Storage uploads. Completely bypasses Vercel's 4.5MB serverless payload limit.
  */
 export const supabaseStorage: SupabaseClient = createClient(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY || 'placeholder-anon-key',
+  resolvedClientUrl,
+  SUPABASE_SERVICE_ROLE_KEY || resolvedClientAnonKey,
   {
-    auth: { persistSession: false, autoRefreshToken: false }
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY || resolvedClientAnonKey,
+      },
+    },
   }
 );
 

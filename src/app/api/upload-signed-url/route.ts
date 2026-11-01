@@ -20,11 +20,17 @@ const SUPABASE_SERVICE_ROLE_KEY = (
   ''
 ).trim();
 
+const resolvedKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
 const supabaseAdmin = createClient(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY || 'placeholder-anon-key',
+  SUPABASE_URL,
+  resolvedKey,
   {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      headers: {
+        apikey: resolvedKey,
+      },
+    },
   }
 );
 
