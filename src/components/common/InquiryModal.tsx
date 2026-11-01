@@ -18,7 +18,18 @@ import {
   FileText,
   Plus,
   Minus,
+  Bed,
+  Utensils,
 } from 'lucide-react';
+
+export interface SelectedRoomInfo {
+  room_name?: string;
+  price_per_night?: number;
+  meal_option?: string;
+  hotel_name?: string;
+  bed_configuration?: string;
+  max_occupancy?: string;
+}
 
 interface InquiryModalProps {
   isOpen: boolean;
@@ -32,6 +43,7 @@ interface InquiryModalProps {
   defaultChildren?: number;
   defaultChildAges?: number[];
   defaultCheckInDate?: string;
+  selectedRoom?: SelectedRoomInfo | null;
 }
 
 export const InquiryModal: React.FC<InquiryModalProps> = ({
@@ -46,6 +58,7 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
   defaultChildren = 0,
   defaultChildAges = [],
   defaultCheckInDate,
+  selectedRoom,
 }) => {
   const { customerUser } = useAuth();
   const [fullName, setFullName] = useState(customerUser?.name || '');
@@ -149,6 +162,11 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
 
       const phoneVal = formData.whatsappNumber || formData.phone || '';
 
+      const roomNameVal = selectedRoom?.room_name || '';
+      const roomPriceVal = selectedRoom?.price_per_night !== undefined && selectedRoom?.price_per_night !== null ? Number(selectedRoom.price_per_night) : undefined;
+      const mealOptionVal = selectedRoom?.meal_option || '';
+      const hotelNameVal = selectedRoom?.hotel_name || title || '';
+
       const submissionPayload = {
         full_name: formData.fullName,
         email: formData.email,
@@ -166,11 +184,17 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
           pickup_city: formData.pickupCity,
           drop_city: formData.sameAsPickup ? formData.pickupCity : formData.dropCity,
           accommodation_tier: formData.accommodationTier,
-          special_requests: formData.specialRequests
+          special_requests: formData.specialRequests,
+          room_name: roomNameVal,
+          price_per_night: roomPriceVal,
+          meal_option: mealOptionVal,
+          hotel_name: hotelNameVal,
+          bed_configuration: selectedRoom?.bed_configuration || '',
+          max_occupancy: selectedRoom?.max_occupancy || '',
         }
       };
 
-      // 1. Submit to database store with explicit whatsapp_number, phone, and metadata
+      // 1. Submit to database store with explicit whatsapp_number, phone, room details and metadata
       await api.submitInquiry({
         ...submissionPayload,
         userId: customerUser?.id,
@@ -199,9 +223,17 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
         plan: chosenPlan,
         accommodationTier: chosenPlan,
         specialRequests: submissionPayload.metadata.special_requests,
+        roomName: roomNameVal,
+        room_name: roomNameVal,
+        pricePerNight: roomPriceVal,
+        price_per_night: roomPriceVal,
+        mealOption: mealOptionVal,
+        meal_option: mealOptionVal,
+        hotelName: hotelNameVal,
+        hotel_name: hotelNameVal,
       });
 
-      // 2. Generate WhatsApp link with child ages
+      // 2. Generate WhatsApp link with room & rate details
       const waLink = generateWhatsAppLink({
         title,
         type,
@@ -215,6 +247,10 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
         childAges: childAges,
         plan: planChosen || defaultPlan,
         specialRequests,
+        roomName: roomNameVal,
+        pricePerNight: roomPriceVal,
+        mealOption: mealOptionVal,
+        hotelName: hotelNameVal,
       });
 
       setSubmittedLink(waLink);
@@ -307,6 +343,44 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Selected Room Confirmation Summary Banner */}
+              {selectedRoom && (selectedRoom.room_name || selectedRoom.price_per_night) && (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 border border-orange-200/90 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-orange-700 flex items-center gap-1.5">
+                      <Bed className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                      <span>Selected Room &amp; Rate</span>
+                    </span>
+                    {selectedRoom.price_per_night !== undefined && selectedRoom.price_per_night !== null && (
+                      <span className="text-xs font-black text-[#0f294a] bg-white px-2.5 py-0.5 rounded-full border border-orange-200 shadow-2xs shrink-0">
+                        ₹{Number(selectedRoom.price_per_night).toLocaleString('en-IN')}<span className="text-[10px] font-normal text-slate-500">/night</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm font-extrabold text-[#0f294a] leading-tight">
+                    {selectedRoom.room_name || 'Selected Room'}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 pt-1">
+                    {selectedRoom.meal_option && (
+                      <span className="inline-flex items-center gap-1 font-semibold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded-md">
+                        <Utensils className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span>{selectedRoom.meal_option}</span>
+                      </span>
+                    )}
+                    {selectedRoom.bed_configuration && (
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        • {selectedRoom.bed_configuration}
+                      </span>
+                    )}
+                    {selectedRoom.max_occupancy && (
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        • {selectedRoom.max_occupancy}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {errorMsg && (
                 <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs font-medium border border-red-200">
                   {errorMsg}

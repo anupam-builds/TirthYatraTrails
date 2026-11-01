@@ -367,6 +367,15 @@ export interface Inquiry {
   pickupLocation?: string;
   dropoffLocation?: string;
   specialRequests?: string;
+  // Selected Room Details for Hotel Bookings
+  roomName?: string;
+  room_name?: string;
+  pricePerNight?: number;
+  price_per_night?: number;
+  mealOption?: string;
+  meal_option?: string;
+  hotelName?: string;
+  hotel_name?: string;
   status: InquiryStatus | string;
   isResolved: boolean;
   assignedStaffId?: string;

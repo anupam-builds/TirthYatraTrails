@@ -1041,6 +1041,12 @@ export const localStore = {
     const childrenCount = Number(inquiryData.children) || 0;
     const totalGuests = Number(inquiryData.guests) || (adultsCount + childrenCount);
 
+    const roomName = (inquiryData as any).roomName || (inquiryData as any).room_name || (inquiryData as any).metadata?.room_name || '';
+    const rawPricePerNight = (inquiryData as any).pricePerNight ?? (inquiryData as any).price_per_night ?? (inquiryData as any).metadata?.price_per_night;
+    const pricePerNight = rawPricePerNight !== undefined && rawPricePerNight !== null && !isNaN(Number(rawPricePerNight)) ? Number(rawPricePerNight) : undefined;
+    const mealOption = (inquiryData as any).mealOption || (inquiryData as any).meal_option || (inquiryData as any).metadata?.meal_option || '';
+    const hotelName = (inquiryData as any).hotelName || (inquiryData as any).hotel_name || (inquiryData as any).metadata?.hotel_name || '';
+
     const structuredMetadata = {
       whatsapp_number: phone,
       phone: phone,
@@ -1056,6 +1062,10 @@ export const localStore = {
       drop_city: inquiryData.dropoffLocation || '',
       accommodation_tier: inquiryData.accommodationTier || (inquiryData as any).accommodation_tier || (inquiryData as any).accommodation_preference || inquiryData.planChosen || inquiryData.selectedPlan || '3 Star Premium',
       special_requests: inquiryData.specialRequests || '',
+      room_name: roomName,
+      price_per_night: pricePerNight,
+      meal_option: mealOption,
+      hotel_name: hotelName,
       ...((inquiryData as any).metadata || {}),
     };
 
@@ -1076,6 +1086,14 @@ export const localStore = {
       phone: phone,
       whatsapp_number: phone,
       metadata: structuredMetadata,
+      roomName: roomName || undefined,
+      room_name: roomName || undefined,
+      pricePerNight: pricePerNight,
+      price_per_night: pricePerNight,
+      mealOption: mealOption || undefined,
+      meal_option: mealOption || undefined,
+      hotelName: hotelName || undefined,
+      hotel_name: hotelName || undefined,
       userCity: inquiryData.userCity || 'New Delhi',
       checkInDate: inquiryData.checkInDate || '',
       endDate: inquiryData.endDate || (inquiryData as any).end_date || (inquiryData as any).metadata?.end_date,

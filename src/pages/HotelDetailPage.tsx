@@ -3,7 +3,7 @@ import { useRouter } from '../context/RouterContext.js';
 import { api } from '../services/api.js';
 import { supabase } from '../lib/supabase.js';
 import { Hotel, Room } from '../types.js';
-import { InquiryModal } from '../components/common/InquiryModal.js';
+import { InquiryModal, SelectedRoomInfo } from '../components/common/InquiryModal.js';
 import {
   ChevronRight,
   Star,
@@ -55,6 +55,7 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
   const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>('Standard Plan');
   const [selectedRoomName, setSelectedRoomName] = useState<string>('');
+  const [selectedRoomDetails, setSelectedRoomDetails] = useState<SelectedRoomInfo | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [expandedRoomPlans, setExpandedRoomPlans] = useState<Record<string, boolean>>({});
 
@@ -148,9 +149,17 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
     );
   }
 
-  const handleOpenInquiry = (planName = 'Room Only', roomName = '') => {
+  const handleOpenInquiry = (
+    planName = 'Room Only',
+    roomName = '',
+    roomPrice?: number,
+    roomDetails?: SelectedRoomInfo
+  ) => {
     setSelectedPlan(planName);
     setSelectedRoomName(roomName ? `${roomName} (${planName})` : planName);
+    if (roomDetails) {
+      setSelectedRoomDetails(roomDetails);
+    }
     setInquiryModalOpen(true);
   };
 
@@ -218,8 +227,26 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
             {/* Quick action buttons */}
             <div className="flex items-center gap-3">
               <button
-                onClick={() => handleOpenInquiry('General Inquiry')}
-                className="px-6 py-3 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-sm shadow-md transition-all flex items-center gap-2"
+                onClick={() => {
+                  const firstRoom = rooms[0];
+                  const rInfo: SelectedRoomInfo = firstRoom
+                    ? {
+                        room_name: firstRoom.name || firstRoom.roomName || 'Executive Deluxe Room',
+                        price_per_night: Number(firstRoom.pricePerNight ?? firstRoom.price_per_night ?? hotel.basePrice),
+                        meal_option: firstRoom.mealOption || 'Bed & Breakfast',
+                        hotel_name: hotel.name,
+                        bed_configuration: firstRoom.bedConfiguration || firstRoom.bedType,
+                        max_occupancy: firstRoom.maxOccupancy || firstRoom.capacity,
+                      }
+                    : {
+                        room_name: 'Executive Deluxe Room',
+                        price_per_night: hotel.basePrice,
+                        meal_option: 'Bed & Breakfast',
+                        hotel_name: hotel.name,
+                      };
+                  handleOpenInquiry(rInfo.meal_option || 'General Inquiry', rInfo.room_name, rInfo.price_per_night, rInfo);
+                }}
+                className="px-6 py-3 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
               >
                 <CalendarCheck className="w-4 h-4" />
                 <span>Check Availability</span>
@@ -451,7 +478,20 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
 
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => handleOpenInquiry(meal, room.name)}
+                                onClick={() => {
+                                  const rName = room.name || room.roomName || 'Executive Deluxe Room';
+                                  const rPrice = Number(price);
+                                  const rMeal = meal || room.mealOption || 'Bed & Breakfast';
+                                  const rInfo: SelectedRoomInfo = {
+                                    room_name: rName,
+                                    price_per_night: rPrice,
+                                    meal_option: rMeal,
+                                    hotel_name: hotel.name,
+                                    bed_configuration: room.bedConfiguration || room.bedType,
+                                    max_occupancy: room.maxOccupancy || room.capacity,
+                                  };
+                                  handleOpenInquiry(rMeal, rName, rPrice, rInfo);
+                                }}
                                 className="px-6 py-2.5 bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto"
                               >
                                 <CalendarCheck className="w-4 h-4" />
@@ -485,7 +525,18 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                             {isExpanded && (
                               <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-xs animate-in fade-in duration-150">
                                 <div
-                                  onClick={() => handleOpenInquiry('Room Only', room.name)}
+                                  onClick={() => {
+                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
+                                    const rInfo: SelectedRoomInfo = {
+                                      room_name: rName,
+                                      price_per_night: ep,
+                                      meal_option: 'Room Only (EP)',
+                                      hotel_name: hotel.name,
+                                      bed_configuration: room.bedConfiguration || room.bedType,
+                                      max_occupancy: room.maxOccupancy || room.capacity,
+                                    };
+                                    handleOpenInquiry('Room Only (EP)', rName, ep, rInfo);
+                                  }}
                                   className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
                                 >
                                   <span className="text-[9px] uppercase font-bold text-slate-400 block">
@@ -498,7 +549,18 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                                 </div>
 
                                 <div
-                                  onClick={() => handleOpenInquiry('Bed & Breakfast', room.name)}
+                                  onClick={() => {
+                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
+                                    const rInfo: SelectedRoomInfo = {
+                                      room_name: rName,
+                                      price_per_night: bb,
+                                      meal_option: 'Bed & Breakfast (BB)',
+                                      hotel_name: hotel.name,
+                                      bed_configuration: room.bedConfiguration || room.bedType,
+                                      max_occupancy: room.maxOccupancy || room.capacity,
+                                    };
+                                    handleOpenInquiry('Bed & Breakfast (BB)', rName, bb, rInfo);
+                                  }}
                                   className="p-2.5 rounded-xl bg-orange-50/50 border border-orange-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
                                 >
                                   <span className="text-[9px] uppercase font-bold text-[#ea580c] block">
@@ -511,7 +573,18 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                                 </div>
 
                                 <div
-                                  onClick={() => handleOpenInquiry('Half Board', room.name)}
+                                  onClick={() => {
+                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
+                                    const rInfo: SelectedRoomInfo = {
+                                      room_name: rName,
+                                      price_per_night: map,
+                                      meal_option: 'Half Board (MAP)',
+                                      hotel_name: hotel.name,
+                                      bed_configuration: room.bedConfiguration || room.bedType,
+                                      max_occupancy: room.maxOccupancy || room.capacity,
+                                    };
+                                    handleOpenInquiry('Half Board (MAP)', rName, map, rInfo);
+                                  }}
                                   className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
                                 >
                                   <span className="text-[9px] uppercase font-bold text-slate-400 block">
@@ -524,7 +597,18 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
                                 </div>
 
                                 <div
-                                  onClick={() => handleOpenInquiry('Full Board', room.name)}
+                                  onClick={() => {
+                                    const rName = room.name || room.roomName || 'Executive Deluxe Room';
+                                    const rInfo: SelectedRoomInfo = {
+                                      room_name: rName,
+                                      price_per_night: ap,
+                                      meal_option: 'Full Board (AP)',
+                                      hotel_name: hotel.name,
+                                      bed_configuration: room.bedConfiguration || room.bedType,
+                                      max_occupancy: room.maxOccupancy || room.capacity,
+                                    };
+                                    handleOpenInquiry('Full Board (AP)', rName, ap, rInfo);
+                                  }}
                                   className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-orange-500 cursor-pointer transition-all shadow-2xs"
                                 >
                                   <span className="text-[9px] uppercase font-bold text-slate-400 block">
@@ -593,8 +677,26 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
 
               <button
                 id="sidebar-check-avail-btn"
-                onClick={() => handleOpenInquiry('Standard Stay')}
-                className="w-full py-4 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-sm shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2"
+                onClick={() => {
+                  const firstRoom = rooms[0];
+                  const rInfo: SelectedRoomInfo = firstRoom
+                    ? {
+                        room_name: firstRoom.name || firstRoom.roomName || 'Executive Deluxe Room',
+                        price_per_night: Number(firstRoom.pricePerNight ?? firstRoom.price_per_night ?? hotel.basePrice),
+                        meal_option: firstRoom.mealOption || 'Bed & Breakfast',
+                        hotel_name: hotel.name,
+                        bed_configuration: firstRoom.bedConfiguration || firstRoom.bedType,
+                        max_occupancy: firstRoom.maxOccupancy || firstRoom.capacity,
+                      }
+                    : {
+                        room_name: 'Executive Deluxe Room',
+                        price_per_night: hotel.basePrice,
+                        meal_option: 'Bed & Breakfast',
+                        hotel_name: hotel.name,
+                      };
+                  handleOpenInquiry(rInfo.meal_option || 'Standard Stay', rInfo.room_name, rInfo.price_per_night, rInfo);
+                }}
+                className="w-full py-4 rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white font-extrabold text-sm shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CalendarCheck className="w-5 h-5" />
                 <span>Check Availability</span>
@@ -703,11 +805,12 @@ export const HotelDetailPage: React.FC<{ hotelId: string }> = ({ hotelId }) => {
         type="HOTEL"
         referenceId={hotel.id}
         defaultPlan={selectedRoomName || selectedPlan}
-        price={hotel.basePrice}
+        price={selectedRoomDetails?.price_per_night || hotel.basePrice}
         defaultAdults={paramAdults}
         defaultChildren={paramChildren}
         defaultChildAges={paramChildAges}
         defaultCheckInDate={paramCheckIn}
+        selectedRoom={selectedRoomDetails}
       />
     </div>
   );

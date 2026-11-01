@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Sparkles, MessageCircle, Bell, Clock, Edit3, Check, RotateCcw, Lock } from 'lucide-react';
+import { X, User, Phone, Mail, MapPin, Calendar, Users, Hotel, Bed, Utensils, Sparkles, MessageCircle, Bell, Clock, Edit3, Check, RotateCcw, Lock } from 'lucide-react';
 import { formatLeadId } from '../utils/formatters.js';
 import { parseAccommodationTier, getLeadReminderStatus, CRM_STATUS_CONFIG } from '../utils/crmUtils.js';
 import { updateLeadOrInquiryStatus } from '../services/api.js';
@@ -74,6 +74,14 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
 
   const accommodationTier = meta?.accommodation_tier || activeLead?.accommodation_tier || activeLead?.accommodationTier || activeLead?.plan || activeLead?.selectedPlan || '3 Star Premium';
   const specialRequests = meta?.special_requests || activeLead?.special_requests || activeLead?.specialRequests || activeLead?.message || 'No special requests specified.';
+
+  const roomName = activeLead?.roomName || activeLead?.room_name || meta?.room_name;
+  const rawRoomPrice = activeLead?.pricePerNight ?? activeLead?.price_per_night ?? meta?.price_per_night;
+  const pricePerNight = (rawRoomPrice !== undefined && rawRoomPrice !== null && !isNaN(Number(rawRoomPrice))) ? Number(rawRoomPrice) : undefined;
+  const mealOption = activeLead?.mealOption || activeLead?.meal_option || meta?.meal_option;
+  const hotelName = activeLead?.hotelName || activeLead?.hotel_name || meta?.hotel_name;
+  const bedConfig = meta?.bed_configuration;
+  const maxOcc = meta?.max_occupancy;
 
   const leadDisplayId =
     ((activeLead as any)?.lead_id && /^TTT\d+$/i.test(String((activeLead as any).lead_id).trim()) ? String((activeLead as any).lead_id).trim().toUpperCase() : '') ||
@@ -238,6 +246,45 @@ export const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClos
                 <span>3. Accommodation &amp; Special Requests</span>
               </h4>
               <div className="space-y-3 text-xs">
+                {/* Specific Room & Rate Plan Card */}
+                {roomName && (
+                  <div className="p-3 bg-gradient-to-r from-orange-950/70 to-amber-950/50 rounded-xl border border-orange-500/50 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-orange-400 flex items-center gap-1.5">
+                        <Bed className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                        <span>Selected Room &amp; Rate</span>
+                      </span>
+                      {pricePerNight !== undefined && (
+                        <span className="text-xs font-black text-amber-300 bg-slate-900 px-2.5 py-0.5 rounded-full border border-orange-500/50">
+                          ₹{Number(pricePerNight).toLocaleString('en-IN')}<span className="text-[10px] font-normal text-slate-400">/night</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm font-bold text-white flex items-baseline gap-1.5">
+                      <span>{roomName}</span>
+                      {hotelName && <span className="text-xs font-normal text-slate-400">({hotelName})</span>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300 pt-0.5">
+                      {mealOption && (
+                        <span className="inline-flex items-center gap-1 text-amber-300 font-semibold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/40 text-[11px]">
+                          <Utensils className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span>{mealOption}</span>
+                        </span>
+                      )}
+                      {bedConfig && (
+                        <span className="text-[11px] text-slate-400">
+                          • {bedConfig}
+                        </span>
+                      )}
+                      {maxOcc && (
+                        <span className="text-[11px] text-slate-400">
+                          • {maxOcc}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400 font-medium">Accommodation Tier:</span>
                   {(() => {

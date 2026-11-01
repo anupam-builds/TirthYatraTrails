@@ -52,6 +52,8 @@ import {
   XCircle,
   CalendarClock,
   MoreVertical,
+  Bed,
+  Utensils,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { LeadDetailsModal } from '../LeadDetailsModal.js';
@@ -1004,6 +1006,9 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                             {(() => {
                               const pkgTitle = inq.title || inq.referenceName || 'Yatra Package';
                               const isExpanded = expandedPackageLeadIds.has(String(inq.id));
+                              const roomName = inq.roomName || inq.room_name || inq.metadata?.room_name || (inq.metadata as any)?.roomName;
+                              const roomPrice = inq.pricePerNight ?? inq.price_per_night ?? inq.metadata?.price_per_night ?? (inq.metadata as any)?.pricePerNight;
+                              const mealOption = inq.mealOption || inq.meal_option || inq.metadata?.meal_option || (inq.metadata as any)?.mealOption;
 
                               return (
                                 <div className="min-w-0">
@@ -1011,14 +1016,14 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   <button
                                     type="button"
                                     onClick={(e) => togglePackageExpand(String(inq.id), e)}
-                                    title={isExpanded ? 'Hide package details' : `Reveal package: ${pkgTitle}`}
+                                    title={isExpanded ? 'Hide package details' : `Reveal package: ${pkgTitle}${roomName ? ` (${roomName})` : ''}`}
                                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-semibold transition-all cursor-pointer border ${
                                       isExpanded
                                         ? 'bg-orange-100 dark:bg-orange-950/70 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-800 shadow-2xs'
                                         : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-orange-300 hover:text-orange-600 dark:hover:text-orange-400'
                                     }`}
                                   >
-                                    <span>Package</span>
+                                    <span>{roomName ? 'Room / Pkg' : 'Package'}</span>
                                     {isExpanded ? (
                                       <ChevronUp className="w-3 h-3 text-orange-600 dark:text-orange-400 shrink-0" />
                                     ) : (
@@ -1026,13 +1031,32 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                     )}
                                   </button>
 
-                                  {/* Revealed Package Details */}
+                                  {/* Revealed Package & Room Details */}
                                   {isExpanded && (
                                     <div
-                                      className="mt-1 text-[11px] font-medium text-slate-700 dark:text-slate-200 bg-orange-50/80 dark:bg-orange-950/40 p-1.5 rounded-lg border border-orange-200 dark:border-orange-900/50 break-words whitespace-normal leading-snug animate-in fade-in duration-150 max-w-[190px]"
+                                      className="mt-1 text-[11px] font-medium text-slate-700 dark:text-slate-200 bg-orange-50/80 dark:bg-orange-950/40 p-2 rounded-lg border border-orange-200 dark:border-orange-900/50 break-words whitespace-normal leading-snug animate-in fade-in duration-150 max-w-[210px] space-y-1.5"
                                       title={pkgTitle}
                                     >
-                                      {pkgTitle}
+                                      <div className="font-semibold text-slate-800 dark:text-slate-100">{pkgTitle}</div>
+                                      {roomName && (
+                                        <div className="pt-1 border-t border-orange-200/70 dark:border-orange-900/40 space-y-0.5">
+                                          <div className="flex items-center gap-1 font-bold text-orange-950 dark:text-orange-200 text-[10.5px]">
+                                            <Bed className="w-3 h-3 text-orange-600 shrink-0" />
+                                            <span className="truncate">{roomName}</span>
+                                          </div>
+                                          {roomPrice != null && Number(roomPrice) > 0 && (
+                                            <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                              ₹{Number(roomPrice).toLocaleString('en-IN')}/night
+                                            </div>
+                                          )}
+                                          {mealOption && (
+                                            <div className="flex items-center gap-1 text-[9.5px] text-slate-600 dark:text-slate-400">
+                                              <Utensils className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                              <span className="truncate">{mealOption}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>

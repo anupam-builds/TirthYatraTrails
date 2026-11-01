@@ -1941,6 +1941,14 @@ export const api = {
       (inquiryData as any).tourDuration ||
       (durationDays ? `${durationDays} Days` : '');
 
+    const roomName = (inquiryData as any).roomName || (inquiryData as any).room_name || (inquiryData as any).metadata?.room_name || '';
+    const rawPricePerNight = (inquiryData as any).pricePerNight ?? (inquiryData as any).price_per_night ?? (inquiryData as any).metadata?.price_per_night;
+    const pricePerNight = rawPricePerNight !== undefined && rawPricePerNight !== null && !isNaN(Number(rawPricePerNight)) ? Number(rawPricePerNight) : null;
+    const mealOption = (inquiryData as any).mealOption || (inquiryData as any).meal_option || (inquiryData as any).metadata?.meal_option || '';
+    const hotelName = (inquiryData as any).hotelName || (inquiryData as any).hotel_name || (inquiryData as any).metadata?.hotel_name || '';
+    const bedConfiguration = (inquiryData as any).bedConfiguration || (inquiryData as any).bed_configuration || (inquiryData as any).metadata?.bed_configuration || '';
+    const maxOccupancy = (inquiryData as any).maxOccupancy || (inquiryData as any).max_occupancy || (inquiryData as any).metadata?.max_occupancy || '';
+
     const structuredMetadata = {
       whatsapp_number: phoneVal,
       resident_state: (inquiryData as any).residentState || (inquiryData as any).resident_state || (inquiryData as any).userCity || inquiryData.userCity || '',
@@ -1959,6 +1967,12 @@ export const api = {
       accommodation_tier: (inquiryData as any).accommodationTier || (inquiryData as any).accommodation_tier || (inquiryData as any).accommodationPreference || (inquiryData as any).accommodation_preference || inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || '',
       accommodation_preference: (inquiryData as any).accommodationPreference || (inquiryData as any).accommodation_preference || (inquiryData as any).accommodationTier || (inquiryData as any).accommodation_tier || inquiryData.plan || (inquiryData as any).planChosen || (inquiryData as any).selectedPlan || '',
       special_requests: (inquiryData as any).specialRequests || (inquiryData as any).special_requests || '',
+      room_name: roomName,
+      price_per_night: pricePerNight,
+      meal_option: mealOption,
+      hotel_name: hotelName,
+      bed_configuration: bedConfiguration,
+      max_occupancy: maxOccupancy,
       ...((inquiryData as any).metadata || {}),
     };
 
@@ -1985,6 +1999,10 @@ export const api = {
         assigned_staff_id: (inquiryData as any).assignedStaffId,
         assigned_staff_name: (inquiryData as any).assignedStaffName,
         is_locked_for_staff: Boolean((inquiryData as any).isLockedForStaff),
+        room_name: roomName || null,
+        price_per_night: pricePerNight,
+        meal_option: mealOption || null,
+        hotel_name: hotelName || null,
         metadata: structuredMetadata,
       };
 
@@ -4899,6 +4917,12 @@ export function mapInquiryRow(row: any): Inquiry {
   const resolvedReminderAt = row.reminder_at || row.reminderAt || unpacked.reminder_at || unpacked.reminderAt || metadataObj?.reminder_at || undefined;
   const resolvedReminderNote = row.reminder_note || row.reminderNote || unpacked.reminder_note || unpacked.reminderNote || metadataObj?.reminder_note || undefined;
 
+  const resolvedRoomName = row.room_name || row.roomName || unpacked.room_name || unpacked.roomName || metadataObj?.room_name || metadataObj?.roomName;
+  const rawPricePerNight = row.price_per_night ?? row.pricePerNight ?? unpacked.price_per_night ?? unpacked.pricePerNight ?? metadataObj?.price_per_night ?? metadataObj?.pricePerNight;
+  const resolvedPricePerNight = (rawPricePerNight !== undefined && rawPricePerNight !== null && !isNaN(Number(rawPricePerNight))) ? Number(rawPricePerNight) : undefined;
+  const resolvedMealOption = row.meal_option || row.mealOption || unpacked.meal_option || unpacked.mealOption || metadataObj?.meal_option || metadataObj?.mealOption;
+  const resolvedHotelName = row.hotel_name || row.hotelName || unpacked.hotel_name || unpacked.hotelName || metadataObj?.hotel_name || metadataObj?.hotelName;
+
   return {
     id: String(row.id),
     leadId: resolvedLeadId,
@@ -4933,6 +4957,14 @@ export function mapInquiryRow(row: any): Inquiry {
     pickupLocation: row.pickup_location || row.pickupLocation || unpacked.pickup_location || metadataObj?.pickup_city,
     dropoffLocation: row.dropoff_location || row.dropoffLocation || unpacked.dropoff_location || metadataObj?.drop_city,
     specialRequests: cleanNotesText(row.special_requests || row.specialRequests || unpacked.special_requests || metadataObj?.special_requests || ''),
+    roomName: resolvedRoomName,
+    room_name: resolvedRoomName,
+    pricePerNight: resolvedPricePerNight,
+    price_per_night: resolvedPricePerNight,
+    mealOption: resolvedMealOption,
+    meal_option: resolvedMealOption,
+    hotelName: resolvedHotelName,
+    hotel_name: resolvedHotelName,
     status: (row.status ? (row.status.toUpperCase() as any) : 'NEW'),
     isResolved: Boolean(row.is_resolved ?? row.isResolved ?? (row.status === 'CLOSED' || row.status === 'CONFIRMED')),
     assignedStaffId: row.assigned_staff_id || row.assignedStaffId || unpacked.assigned_staff_id || undefined,
@@ -5983,8 +6015,10 @@ export function generateWhatsAppLink(details: any) {
     details.budget ? `Budget: ${details.budget}` : '',
     details.adults ? `Group: ${details.adults} Adults${details.children ? `, ${details.children} Children` : ''}` : '',
     details.pickupLocation ? `Pickup: ${details.pickupLocation}` : '',
-    details.dropoffLocation ? `Drop: ${details.dropoffLocation}` : '',
-    details.plan ? `Accommodation: ${details.plan}` : '',
+    details.roomName || details.room_name ? `Room Type: ${details.roomName || details.room_name}` : '',
+    details.pricePerNight || details.price_per_night ? `Room Rate: ₹${Number(details.pricePerNight || details.price_per_night).toLocaleString('en-IN')}/night` : '',
+    details.mealOption || details.meal_option ? `Meal Plan: ${details.mealOption || details.meal_option}` : '',
+    details.plan && !details.roomName ? `Accommodation: ${details.plan}` : '',
     details.specialRequests ? `Notes: ${details.specialRequests}` : '',
   ].filter(Boolean);
   const text = encodeURIComponent(lines.join('\n'));
