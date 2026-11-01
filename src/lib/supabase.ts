@@ -647,6 +647,41 @@ export const customFetch: typeof fetch = async (input, init) => {
         return remoteRes;
       }
       const errText = await remoteRes.clone().text();
+
+      // If 400 error is caused by missing 'date' column in PostgREST schema cache:
+      if (remoteRes.status === 400 && (errText.includes('date') || errText.includes('42703'))) {
+        // 1. If GET request had order=date: retry by stripping order=date
+        if (urlStr.includes('order=date')) {
+          const safeUrl = urlStr
+            .replace(/([?&])order=date\.(asc|desc)(&|$)/, '$1')
+            .replace(/\?&/, '?')
+            .replace(/&&/, '&')
+            .replace(/[?&]$/, '');
+          try {
+            const retryRes = await fetch(safeUrl, reqInit);
+            if (retryRes.ok) {
+              return retryRes;
+            }
+          } catch {}
+        }
+
+        // 2. If mutating body contains date: retry without date
+        if (reqInit.body && typeof reqInit.body === 'string') {
+          try {
+            const parsedBody = JSON.parse(reqInit.body);
+            if (Array.isArray(parsedBody)) {
+              parsedBody.forEach((item: any) => { if (item) delete item.date; });
+            } else if (parsedBody && typeof parsedBody === 'object') {
+              delete parsedBody.date;
+            }
+            const retryRes = await fetch(cleanInput, { ...reqInit, body: JSON.stringify(parsedBody) });
+            if (retryRes.ok) {
+              return retryRes;
+            }
+          } catch {}
+        }
+      }
+
       console.error(`[Supabase /rest/v1/hotel_inventory ${remoteRes.status} Error Response]:`, {
         url: urlStr,
         method: reqInit.method || 'GET',

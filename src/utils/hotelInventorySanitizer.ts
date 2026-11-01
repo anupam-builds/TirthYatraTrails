@@ -19,6 +19,7 @@ export interface SanitizedHotelInventory {
   room_type?: string;
   allocation_count?: number;
   price?: number;
+  date?: string;
   created_at?: string;
 }
 
@@ -79,7 +80,13 @@ export function sanitizeHotelInventoryPayload(item: any): SanitizedHotelInventor
     sanitized.price = Number(rawPrice);
   }
 
-  // 6. created_at (optional)
+  // 6. date (maps date, inventory_date, inventoryDate)
+  const rawDate = item.date ?? item.inventory_date ?? item.inventoryDate;
+  if (rawDate !== undefined && rawDate !== null && typeof rawDate === 'string' && rawDate.trim()) {
+    sanitized.date = rawDate.trim().split('T')[0];
+  }
+
+  // 7. created_at (optional)
   if (item.created_at) {
     sanitized.created_at = String(item.created_at);
   }
