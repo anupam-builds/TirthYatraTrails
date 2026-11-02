@@ -1,10 +1,10 @@
 import { City, Hotel, Room, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffPermissions, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat, sanitizeStaffMembersPayload, detectStaffDisplayNameSupport, detectStaffPermissionsSupport } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, safeSupabaseUpsert, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat, sanitizeStaffMembersPayload, detectStaffDisplayNameSupport, detectStaffPermissionsSupport } from '../lib/supabase.js';
 import { localStore, getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted } from './localStore.js';
 
 export { getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted };
 
-export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat };
+export { safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, safeSupabaseUpsert, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat };
 import { broadcastNewInquiry, broadcastInquiryUpdated } from './soundNotification.js';
 import { sanitizeHotelInventoryPayload, sanitizeHotelInventoryList } from '../utils/hotelInventorySanitizer.js';
 import { resolveBase64ToUrl, uploadImageFile, ultraCompressBase64, isBase64Image } from '../utils/imageUtils.js';
@@ -3113,97 +3113,110 @@ export const api = {
     // Use provided valid UUID or generate a native standard UUID
     const newStaffId = staff.id && isValidUUID(staff.id) ? String(staff.id).trim() : generateUUID();
 
-    // 0. Ensure deleted cache is completely unblocked
+    // 0. Ensure deleted cache is unblocked
     unmarkStaffAsDeleted(newStaffId, staffEmail);
 
-    let createdStaffId = newStaffId;
+    let authUserId: string | null = null;
 
-    // 1. First attempt creation via server-side Admin API (/api/admin/staff)
-    // This creates user in auth.users (via admin API) and inserts into public.staff_members
-    try {
-      const serverRes = await fetch('/api/admin/staff', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: newStaffId,
-          name: staffName,
-          displayName: staffName,
-          display_name: staffName,
+    // 1. Direct Client-Side Supabase Auth Registration
+    // Registers staff user directly via Supabase client SDK without relying on missing serverless routes
+    if (staffEmail && staffPassword) {
+      try {
+        const { data: authData, error: authErr } = await supabase.auth.signUp({
           email: staffEmail,
           password: staffPassword,
-          role: staffRole,
-          designation: staffDesignation,
-          phone: staffPhone,
-          permissions: staff.permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
-          status: 'active',
-          isActive: (staff as any).isActive !== false,
-          isBlocked: Boolean((staff as any).isBlocked),
-        }),
-      });
+          options: {
+            data: {
+              name: staffName,
+              display_name: staffName,
+              role: staffRole,
+              is_staff: true,
+              is_admin: staffRole === 'Super Admin' || staffRole === 'ADMIN',
+              permissions: staff.permissions || ['canViewInquiries', 'canUpdateStatus', 'canAddNotes'],
+            },
+          },
+        });
 
-      if (serverRes.ok) {
-        const json = await serverRes.json().catch(() => null);
-        if (json?.user_id) {
-          createdStaffId = json.user_id;
+        if (authData?.user?.id && isValidUUID(authData.user.id)) {
+          authUserId = authData.user.id;
         }
+
+        if (authErr && !authErr.message?.includes('already registered')) {
+          console.warn('[createStaffMember] Supabase Auth signUp note:', authErr.message);
+        }
+      } catch (authEx: any) {
+        console.warn('[createStaffMember] Supabase Auth signUp note:', authEx?.message || authEx);
       }
-    } catch (apiErr) {
-      console.warn('[createStaffMember] /api/admin/staff fetch notice:', apiErr);
     }
 
-    // 2. Direct Supabase Client Insertion into admin_allowlist
-    let allowlistId = createdStaffId;
+    const finalStaffId = authUserId || (staff.id && isValidUUID(staff.id) ? String(staff.id).trim() : newStaffId);
+
+    // 2. Direct Supabase Client Upsert into admin_allowlist
     try {
       const allowlistPayload: Record<string, any> = {
-        id: createdStaffId,
+        id: finalStaffId,
         email: staffEmail,
         role: staffRole,
         status: 'Active & Authorized',
         created_at: nowIso,
       };
 
-      const { data, error } = await supabase
-        .from('admin_allowlist')
-        .upsert(allowlistPayload, { onConflict: 'email' })
-        .select('*');
-
-      if (data && data.length > 0 && data[0]?.id && isValidUUID(data[0].id)) {
-        allowlistId = data[0].id;
-      }
-
-      if (error) {
-        console.warn('[createStaffMember] admin_allowlist upsert notice:', error.message);
-      }
+      await safeSupabaseUpsert(
+        supabase,
+        'admin_allowlist',
+        allowlistPayload,
+        { onConflict: 'email' }
+      );
     } catch (err: any) {
-      console.warn('[createStaffMember] admin_allowlist upsert warning:', err?.message || err);
+      console.warn('[createStaffMember] admin_allowlist upsert notice:', err?.message || err);
     }
 
-    // 3. Direct Supabase Client Upsert into staff_members table (handles duplicate emails gracefully)
-    const finalStaffId = allowlistId || createdStaffId;
+    // 3. Resolve permissions payload (supports both JSONB array and JSONB object)
+    const resolvedPermissions = Array.isArray(staff.permissions)
+      ? staff.permissions
+      : typeof staff.permissions === 'object' && staff.permissions !== null
+      ? staff.permissions
+      : ['canViewInquiries', 'canUpdateStatus', 'canAddNotes'];
 
-    // Construct clean payload matching exact database schema columns (supports display_name / name cleanly without try/fail fallbacks)
+    const localPermissions: StaffPermissions = Array.isArray(staff.permissions)
+      ? {
+          canViewInquiries: staff.permissions.includes('canViewInquiries'),
+          canUpdateStatus: staff.permissions.includes('canUpdateStatus'),
+          canAddNotes: staff.permissions.includes('canAddNotes'),
+        }
+      : typeof staff.permissions === 'object' && staff.permissions !== null
+      ? {
+          canViewInquiries: (staff.permissions as any).canViewInquiries !== false,
+          canUpdateStatus: (staff.permissions as any).canUpdateStatus !== false,
+          canAddNotes: (staff.permissions as any).canAddNotes !== false,
+        }
+      : {
+          canViewInquiries: true,
+          canUpdateStatus: true,
+          canAddNotes: true,
+        };
+
+    // 4. Construct clean payload matching exact database schema columns:
+    // email, display_name, role, status, permissions (and id)
+    // Strips out any unmapped or ephemeral fields before executing the Supabase query
     const insertData = sanitizeStaffMembersPayload({
       id: finalStaffId,
       display_name: staffName,
       name: staffName,
       email: staffEmail,
-      password: staffPassword,
       role: staffRole,
-      designation: staffDesignation,
-      phone: staffPhone,
-      status: 'active',
-      is_active: (staff as any).isActive !== false,
-      is_blocked: Boolean((staff as any).isBlocked),
-      permissions: staff.permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
-      created_at: nowIso,
-    });
+      status: staff.status || ((staff as any).isBlocked ? 'blocked' : 'active'),
+      permissions: resolvedPermissions,
+    }, { strictCoreOnly: true });
 
+    // 5. Direct Supabase Client Upsert with onConflict='email' and resilient constraint fallback
     try {
-      // Use upsert specifying conflict target on 'email' to prevent 409 Conflict
-      const { error: upsertErr } = await supabase
-        .from('staff_members')
-        .upsert(insertData, { onConflict: 'email' })
-        .select('*');
+      const { error: upsertErr } = await safeSupabaseUpsert(
+        supabase,
+        'staff_members',
+        insertData,
+        { onConflict: 'email' }
+      );
 
       if (upsertErr) {
         if (
@@ -3215,82 +3228,44 @@ export const api = {
           console.warn('[createStaffMember] Duplicate staff detected, updating existing staff member by email:', staffEmail);
           const updatePayload = sanitizeStaffMembersPayload({
             display_name: staffName,
-            name: staffName,
-            password: staffPassword,
             role: staffRole,
-            status: 'active',
-            is_active: insertData.is_active,
-            is_blocked: insertData.is_blocked,
-          });
+            status: insertData.status,
+            permissions: resolvedPermissions,
+          }, { strictCoreOnly: true });
 
-          const { error: updateErr } = await supabase
-            .from('staff_members')
-            .update(updatePayload)
-            .eq('email', staffEmail);
-
-          if (updateErr) {
-            console.warn('[createStaffMember] Duplicate staff update note:', updateErr.message);
-            const conflictErr = new Error('A staff member with this email already exists.');
-            (conflictErr as any).status = 409;
-            (conflictErr as any).code = '409';
-            throw conflictErr;
-          }
+          await safeSupabaseUpdate(
+            supabase,
+            'staff_members',
+            updatePayload,
+            { email: staffEmail }
+          );
         } else {
           console.warn('[createStaffMember] staff_members upsert notice:', upsertErr.message);
         }
       }
     } catch (e: any) {
-      if (
-        e?.status === 409 ||
-        e?.code === '409' ||
-        e?.code === '23505' ||
-        e?.message?.includes('already exists')
-      ) {
-        throw e;
-      }
       console.warn('[createStaffMember] staff_members upsert notice:', e?.message || e);
     }
 
-    // 4. Supabase Auth User Client Registration Fallback & Guaranteed Instant Confirmation
-    if (staffEmail && staffPassword) {
-      try {
-        const { error: signUpErr } = await supabase.auth.signUp({
-          email: staffEmail,
-          password: staffPassword,
-          options: {
-            data: {
-              name: staffName,
-              display_name: staffName,
-              role: staffRole,
-              is_staff: true,
-              is_admin: staffRole === 'Super Admin' || staffRole === 'ADMIN',
-            },
-          },
-        });
-        if (signUpErr) {
-          console.warn('[createStaffMember] Supabase Auth signUp note:', signUpErr.message);
-        }
-      } catch (authErr: any) {
-        console.warn('[createStaffMember] Supabase Auth signUp note:', authErr?.message || authErr);
-      }
-    }
-
-    // 5. Update local store and notify listeners (preserving phone and designation for UI)
+    // 6. Update local store and notify listeners (preserving phone, designation, and password for UI)
     const mapped = localStore.createStaffMember({
       ...insertData,
       ...staff,
       name: staffName,
       displayName: staffName,
       display_name: staffName,
-      status: 'active',
+      status: insertData.status || 'active',
       phone: staffPhone,
       designation: staffDesignation,
       id: finalStaffId,
+      permissions: localPermissions,
     });
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-staff-roster-changed'));
       window.dispatchEvent(new CustomEvent('tirth-allowlist-changed'));
     }
+
     return mapped;
   },
 

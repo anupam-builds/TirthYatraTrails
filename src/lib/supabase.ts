@@ -1226,10 +1226,24 @@ export async function detectStaffPermissionsSupport(): Promise<boolean> {
  * Normalizes staff_members payload to cleanly match the PostgreSQL table structure
  * without triggering try/fail fallbacks.
  */
-export function sanitizeStaffMembersPayload(payload: Record<string, any>): Record<string, any> {
+export function sanitizeStaffMembersPayload(
+  payload: Record<string, any>,
+  options: { strictCoreOnly?: boolean } = {}
+): Record<string, any> {
   if (!payload || typeof payload !== 'object') return {};
   const clean: Record<string, any> = {};
 
+  // 1. Primary identifier
+  if (payload.id !== undefined && payload.id !== null) {
+    clean.id = String(payload.id).trim();
+  }
+
+  // 2. Email (lowercase, trimmed)
+  if (payload.email !== undefined && payload.email !== null) {
+    clean.email = String(payload.email).trim().toLowerCase();
+  }
+
+  // 3. Display Name (with fallback to name if display_name unsupported)
   const displayName = String(
     payload.display_name ||
     payload.displayName ||
@@ -1238,35 +1252,36 @@ export function sanitizeStaffMembersPayload(payload: Record<string, any>): Recor
     ''
   ).trim();
 
-  // If display_name is supported or unknown, send display_name; otherwise fallback to name
   if (displayName) {
     if (clientStaffUsesDisplayName === false) {
       clean.name = displayName;
     } else {
       clean.display_name = displayName;
-      if (!getUnsupportedColumns('staff_members').has('name')) {
+      if (!options.strictCoreOnly && !getUnsupportedColumns('staff_members').has('name')) {
         clean.name = displayName;
       }
     }
   }
 
-  if (payload.id !== undefined && payload.id !== null) clean.id = String(payload.id).trim();
-  if (payload.email !== undefined && payload.email !== null) clean.email = String(payload.email).trim().toLowerCase();
-  if (payload.role !== undefined) clean.role = String(payload.role).trim();
-  if (payload.status !== undefined) clean.status = String(payload.status).trim();
-  if (payload.designation !== undefined) clean.designation = String(payload.designation).trim();
-  if (payload.phone !== undefined) clean.phone = String(payload.phone).trim();
-  if (payload.password !== undefined) clean.password = String(payload.password);
-  if (payload.is_active !== undefined) clean.is_active = Boolean(payload.is_active);
-  else if (payload.isActive !== undefined) clean.is_active = Boolean(payload.isActive);
-  if (payload.is_blocked !== undefined) clean.is_blocked = Boolean(payload.is_blocked);
-  else if (payload.isBlocked !== undefined) clean.is_blocked = Boolean(payload.isBlocked);
-  if (payload.blocked_reason !== undefined) clean.blocked_reason = String(payload.blocked_reason);
-  else if (payload.blockedReason !== undefined) clean.blocked_reason = String(payload.blockedReason);
+  // 4. Role
+  if (payload.role !== undefined) {
+    clean.role = String(payload.role).trim();
+  }
 
-  // Cleanly format and map permissions (supports JSON object, array, or separate fields)
+  // 5. Status
+  if (payload.status !== undefined) {
+    clean.status = String(payload.status).trim();
+  } else if (payload.is_blocked || payload.isBlocked) {
+    clean.status = 'blocked';
+  } else if (payload.is_active !== undefined || payload.isActive !== undefined) {
+    clean.status = (payload.is_active ?? payload.isActive) ? 'active' : 'inactive';
+  } else {
+    clean.status = 'active';
+  }
+
+  // 6. Permissions (supports JSON array or object)
   if (clientStaffUsesPermissions !== false) {
-    if (payload.permissions !== undefined) {
+    if (payload.permissions !== undefined && payload.permissions !== null) {
       clean.permissions = payload.permissions;
     } else if (
       payload.canViewInquiries !== undefined ||
@@ -1278,22 +1293,54 @@ export function sanitizeStaffMembersPayload(payload: Record<string, any>): Recor
         canUpdateStatus: payload.canUpdateStatus !== undefined ? Boolean(payload.canUpdateStatus) : true,
         canAddNotes: payload.canAddNotes !== undefined ? Boolean(payload.canAddNotes) : true,
       };
+    } else {
+      clean.permissions = ['canViewInquiries', 'canUpdateStatus', 'canAddNotes'];
     }
   }
 
-  // Preserve metadata if provided
-  if (payload.metadata !== undefined) {
-    clean.metadata = payload.metadata;
+  // If not strict core only, map optional fields only if not marked unsupported
+  if (!options.strictCoreOnly) {
+    const unsupported = getUnsupportedColumns('staff_members');
+    if (payload.designation !== undefined && !unsupported.has('designation')) {
+      clean.designation = String(payload.designation).trim();
+    }
+    if (payload.phone !== undefined && !unsupported.has('phone')) {
+      clean.phone = String(payload.phone).trim();
+    }
+    if (payload.password !== undefined && !unsupported.has('password')) {
+      clean.password = String(payload.password);
+    }
+    if (payload.is_active !== undefined && !unsupported.has('is_active')) {
+      clean.is_active = Boolean(payload.is_active);
+    } else if (payload.isActive !== undefined && !unsupported.has('is_active')) {
+      clean.is_active = Boolean(payload.isActive);
+    }
+    if (payload.is_blocked !== undefined && !unsupported.has('is_blocked')) {
+      clean.is_blocked = Boolean(payload.is_blocked);
+    } else if (payload.isBlocked !== undefined && !unsupported.has('is_blocked')) {
+      clean.is_blocked = Boolean(payload.isBlocked);
+    }
+    if (payload.blocked_reason !== undefined && !unsupported.has('blocked_reason')) {
+      clean.blocked_reason = String(payload.blocked_reason);
+    }
+    if (payload.created_at !== undefined) {
+      clean.created_at = payload.created_at;
+    }
   }
 
-  if (payload.created_at !== undefined) clean.created_at = payload.created_at;
-
-  // Never include ephemeral runtime or non-existent columns (updated_at, last_active, is_online, etc.)
+  // Always strip ephemeral runtime and unmapped columns
   delete clean.updated_at;
   delete clean.last_active;
   delete clean.is_online;
   delete clean.last_seen;
   delete clean.last_active_at;
+  delete clean.isCurrentlyLoggedIn;
+  delete clean.currentDevice;
+  delete clean.lastLoginDevice;
+  delete clean.canViewInquiries;
+  delete clean.canUpdateStatus;
+  delete clean.canAddNotes;
+  delete clean.unmapped;
 
   const badCols = getUnsupportedColumns('staff_members');
   badCols.forEach((col) => {
@@ -1908,6 +1955,99 @@ export async function safeSupabaseUpdate<T = any>(
 }
 
 export const safeUpdateLead = safeSupabaseUpdate;
+
+/**
+ * Self-healing Supabase upsert helper:
+ * 1. Synchronously normalizes payload in memory.
+ * 2. Attempts upsert with specified onConflict target (e.g. 'email' or 'id').
+ * 3. If onConflict fails with 400 Bad Request / 42P10 (missing UNIQUE constraint),
+ *    smoothly recovers by checking existing record and updating, or falling back to insert.
+ * 4. Strips unsupported columns on PGRST204 errors and retries.
+ */
+export async function safeSupabaseUpsert<T = any>(
+  supabaseClient: SupabaseClient | any,
+  tableName: string,
+  initialPayload: Record<string, any>,
+  options: { onConflict?: string; maxAttempts?: number } = {}
+): Promise<{ data: T[] | null; error: any }> {
+  const onConflict = options.onConflict || 'id';
+  const maxAttempts = options.maxAttempts || 10;
+  let payload: Record<string, any> = normalizePayloadInMemory(tableName, initialPayload);
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .upsert(payload, { onConflict })
+      .select('*');
+
+    if (!error) return { data: data as T[], error: null };
+
+    const msg = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
+
+    // Handle missing column (PGRST204 / 42703)
+    const match =
+      msg.match(/Could not find the '([^']+)' column/i) ||
+      msg.match(/Could not find the "([^"]+)" column/i) ||
+      msg.match(/column ["']([^"']+)["'] of relation/i) ||
+      msg.match(/column ["']([^"']+)["'] does not exist/i);
+
+    if ((error.code === 'PGRST204' || error.code === '42703' || msg.includes('Could not find')) && match && match[1]) {
+      const missingCol = match[1];
+      recordUnsupportedColumn(tableName, missingCol);
+      delete payload[missingCol];
+      continue;
+    }
+
+    // Handle missing UNIQUE constraint on onConflict column (42P10 or 400 Bad Request)
+    if (
+      error.code === '42P10' ||
+      msg.includes('ON CONFLICT') ||
+      msg.includes('unique or exclusion constraint') ||
+      (error as any).status === 400
+    ) {
+      console.warn(`[safeSupabaseUpsert] ${tableName} onConflict=${onConflict} constraint notice; executing resilient fallback.`);
+
+      const conflictVal = payload[onConflict];
+      if (conflictVal !== undefined) {
+        try {
+          const { data: existing } = await supabaseClient
+            .from(tableName)
+            .select('*')
+            .eq(onConflict, conflictVal)
+            .maybeSingle();
+
+          if (existing && existing.id) {
+            return await safeSupabaseUpdate(supabaseClient, tableName, payload, { id: existing.id });
+          } else if (existing) {
+            return await safeSupabaseUpdate(supabaseClient, tableName, payload, { [onConflict]: conflictVal });
+          }
+        } catch {}
+      }
+
+      // Record does not exist or lookup was inconclusive: attempt direct insert
+      const insertRes = await smartSupabaseInsert<T>(supabaseClient, tableName, payload);
+      if (!insertRes.error) return insertRes;
+
+      // If insert hit duplicate conflict (409 or 23505), update by onConflict column
+      if (
+        insertRes.error.code === '23505' ||
+        (insertRes.error as any).status === 409 ||
+        insertRes.error.message?.includes('duplicate') ||
+        insertRes.error.message?.includes('already exists')
+      ) {
+        if (payload[onConflict] !== undefined) {
+          return await safeSupabaseUpdate(supabaseClient, tableName, payload, { [onConflict]: payload[onConflict] });
+        }
+      }
+
+      return insertRes;
+    }
+
+    return { data: null, error };
+  }
+
+  return { data: null, error: new Error(`Max retries (${maxAttempts}) reached for upsert on ${tableName}`) };
+}
 
 // ==============================================================================
 // Staff Heartbeat & Realtime Presence Tracking (Zero 409 Conflicts)

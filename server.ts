@@ -1053,6 +1053,30 @@ app.post('/api/admin/staff', async (req, res) => {
         savedRow = data;
       } else if (error) {
         console.warn('[server.ts POST /api/admin/staff] staff_members upsert note:', error.message);
+        if (error.code === '42P10' || error.message?.includes('ON CONFLICT') || (error as any).status === 400) {
+          const { data: existing } = await supabaseAdmin
+            .from('staff_members')
+            .select('id')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+
+          if (existing?.id) {
+            const { data: updated } = await supabaseAdmin
+              .from('staff_members')
+              .update(staffRowPayload)
+              .eq('id', existing.id)
+              .select('*')
+              .maybeSingle();
+            if (updated) savedRow = updated;
+          } else {
+            const { data: inserted } = await supabaseAdmin
+              .from('staff_members')
+              .insert(staffRowPayload)
+              .select('*')
+              .maybeSingle();
+            if (inserted) savedRow = inserted;
+          }
+        }
       }
     } catch (dbErr: any) {
       console.warn('[server.ts POST /api/admin/staff] staff_members upsert note:', dbErr?.message);
@@ -1504,15 +1528,16 @@ app.get('/api/admin/schema/sql', (req, res) => {
     const roomsMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261031_hotel_rooms_and_rates_schema.sql');
     const staffMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261102_staff_members_display_name_and_sync.sql');
     const permissionsMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261102_staff_members_permissions.sql');
+    const staffUniqueMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261102_staff_members_email_unique_and_permissions.sql');
 
-    if ((requested === 'permissions' || requested === 'staff_permissions') && fs.existsSync(permissionsMigrationPath)) {
+    if ((requested === 'permissions' || requested === 'staff_permissions' || requested === 'staff_unique') && fs.existsSync(staffUniqueMigrationPath)) {
       res.setHeader('Content-Type', 'text/plain');
-      return res.send(fs.readFileSync(permissionsMigrationPath, 'utf8'));
+      return res.send(fs.readFileSync(staffUniqueMigrationPath, 'utf8'));
     }
 
-    if ((requested === 'staff' || requested === 'staff_members') && fs.existsSync(permissionsMigrationPath)) {
+    if ((requested === 'staff' || requested === 'staff_members') && fs.existsSync(staffUniqueMigrationPath)) {
       res.setHeader('Content-Type', 'text/plain');
-      return res.send(fs.readFileSync(permissionsMigrationPath, 'utf8'));
+      return res.send(fs.readFileSync(staffUniqueMigrationPath, 'utf8'));
     }
 
     if ((requested === 'hotel_rooms' || requested === 'rooms') && fs.existsSync(roomsMigrationPath)) {

@@ -376,6 +376,11 @@ ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'staff';
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;
+
+-- Ensure email column has a UNIQUE constraint for on_conflict=email upserts
+ALTER TABLE public.staff_members DROP CONSTRAINT IF EXISTS staff_members_email_key;
+ALTER TABLE public.staff_members ADD CONSTRAINT staff_members_email_key UNIQUE (email);
+
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT 'Pilgrim Operations Specialist';
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS phone TEXT;
