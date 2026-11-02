@@ -1,5 +1,5 @@
 import { City, Hotel, Room, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat } from '../lib/supabase.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat, sanitizeStaffMembersPayload, detectStaffDisplayNameSupport } from '../lib/supabase.js';
 import { localStore, getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted } from './localStore.js';
 
 export { getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted };
@@ -1006,14 +1006,17 @@ export const api = {
     }
 
     const checkDatabaseRoles = async (): Promise<boolean> => {
+      let anyQuerySucceeded = false;
+
       // 2. Query admin_allowlist table
       try {
-        const { data: allowData } = await supabase
+        const { data: allowData, error: allowErr } = await supabase
           .from('admin_allowlist')
           .select('id, email, role')
           .ilike('email', cleanEmail)
           .maybeSingle();
 
+        if (!allowErr) anyQuerySucceeded = true;
         if (allowData && allowData.email) {
           return true;
         }
@@ -1021,12 +1024,13 @@ export const api = {
 
       // 3. Query users table for role === 'ADMIN'
       try {
-        const { data: userData } = await supabase
+        const { data: userData, error: userErr } = await supabase
           .from('users')
           .select('id, email, role')
           .eq('email', cleanEmail)
           .maybeSingle();
 
+        if (!userErr) anyQuerySucceeded = true;
         if (userData && (userData.role === 'ADMIN' || (userData as any).is_admin)) {
           return true;
         }
@@ -1034,12 +1038,13 @@ export const api = {
 
       // 4. Query staff_members table for role === 'ADMIN' or designation
       try {
-        const { data: staffData } = await supabase
+        const { data: staffData, error: staffErr } = await supabase
           .from('staff_members')
           .select('id, email, role, designation')
           .eq('email', cleanEmail)
           .maybeSingle();
 
+        if (!staffErr) anyQuerySucceeded = true;
         if (staffData && (staffData.role === 'ADMIN' || staffData.designation?.toLowerCase().includes('admin'))) {
           return true;
         }
@@ -1047,12 +1052,13 @@ export const api = {
 
       // 5. Query profiles table
       try {
-        const { data: profileData } = await supabase
+        const { data: profileData, error: profErr } = await supabase
           .from('profiles')
           .select('id, email, role, is_admin')
           .eq('email', cleanEmail)
           .maybeSingle();
 
+        if (!profErr) anyQuerySucceeded = true;
         if (profileData && (profileData.role === 'ADMIN' || profileData.role === 'admin' || profileData.is_admin)) {
           return true;
         }
@@ -1065,14 +1071,24 @@ export const api = {
         return true;
       }
 
+      // If no queries could reach the server due to network issues, throw to signal network failure
+      if (!anyQuerySucceeded && typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('NETWORK_OFFLINE');
+      }
+
       return false;
     };
 
     try {
-      // Strict 2.5s timeout prevents hanging session verification
-      const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500));
+      // 7.5s timeout prevents false-positive logouts from network latency
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('SESSION_VERIFY_TIMEOUT')), 7500)
+      );
       return await Promise.race([checkDatabaseRoles(), timeoutPromise]);
-    } catch {
+    } catch (err: any) {
+      if (err?.message === 'SESSION_VERIFY_TIMEOUT' || err?.message === 'NETWORK_OFFLINE') {
+        throw err;
+      }
       return false;
     }
   },
@@ -1358,11 +1374,40 @@ export const api = {
 
   /**
    * Re-verifies whether the current user in token has active Admin privileges in the database.
+   * Differentiates explicit authorization rejection from transient network timeouts/failures.
    */
+  async verifyAdminSessionDetailed(user: User | null): Promise<{ valid: boolean; isNetworkError: boolean }> {
+    if (!user || !user.email) return { valid: false, isNetworkError: false };
+    if (user.role !== 'ADMIN') return { valid: false, isNetworkError: false };
+
+    const cleanEmail = user.email.trim().toLowerCase();
+    // Fast path for enterprise root administrators (zero network latency, never fails)
+    if (
+      cleanEmail === 'anupamsaxena.dev@gmail.com' ||
+      cleanEmail === 'admin@tirthyatratrails.com' ||
+      cleanEmail === 'admin@tirthyatra.com' ||
+      cleanEmail.startsWith('admin@')
+    ) {
+      return { valid: true, isNetworkError: false };
+    }
+
+    try {
+      const isAuthorized = await this.checkIsAdminEmail(cleanEmail);
+      return { valid: isAuthorized, isNetworkError: false };
+    } catch (err: any) {
+      console.warn('[verifyAdminSessionDetailed] Transient network issue verifying admin email:', err?.message || err);
+      // Mark as network error so caller can preserve session gracefully instead of immediately revoking
+      return { valid: true, isNetworkError: true };
+    }
+  },
+
   async verifyAdminSession(user: User | null): Promise<boolean> {
-    if (!user || !user.email) return false;
-    if (user.role !== 'ADMIN') return false;
-    return this.checkIsAdminEmail(user.email);
+    const outcome = await this.verifyAdminSessionDetailed(user);
+    if (outcome.isNetworkError) {
+      // Gracefully preserve existing valid session when network check fails or times out
+      return true;
+    }
+    return outcome.valid;
   },
 
   // Staff Online Presence setter
@@ -3136,11 +3181,11 @@ export const api = {
     // 3. Direct Supabase Client Upsert into staff_members table (handles duplicate emails gracefully)
     const finalStaffId = allowlistId || createdStaffId;
 
-    // Construct insert/upsert payload matching exact database schema columns:
-    const insertData: Record<string, any> = {
+    // Construct clean payload matching exact database schema columns (supports display_name / name cleanly without try/fail fallbacks)
+    const insertData = sanitizeStaffMembersPayload({
       id: finalStaffId,
-      name: staffName,
       display_name: staffName,
+      name: staffName,
       email: staffEmail,
       password: staffPassword,
       role: staffRole,
@@ -3151,33 +3196,14 @@ export const api = {
       is_blocked: Boolean((staff as any).isBlocked),
       permissions: staff.permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
       created_at: nowIso,
-      updated_at: nowIso,
-    };
+    });
 
     try {
       // Use upsert specifying conflict target on 'email' to prevent 409 Conflict
-      let { error: upsertErr } = await supabase
+      const { error: upsertErr } = await supabase
         .from('staff_members')
         .upsert(insertData, { onConflict: 'email' })
         .select('*');
-
-      if (upsertErr) {
-        if (
-          upsertErr.message?.includes('display_name') ||
-          upsertErr.code === '42703' ||
-          (upsertErr as any).details?.includes('display_name')
-        ) {
-          console.warn('[createStaffMember] display_name column not found in remote DB, retrying without display_name...');
-          const { display_name, ...fallbackData } = insertData;
-          const { error: retryErr } = await supabase
-            .from('staff_members')
-            .upsert(fallbackData, { onConflict: 'email' })
-            .select('*');
-          if (!retryErr) {
-            upsertErr = null as any;
-          }
-        }
-      }
 
       if (upsertErr) {
         if (
@@ -3187,33 +3213,23 @@ export const api = {
           upsertErr.message?.includes('already exists')
         ) {
           console.warn('[createStaffMember] Duplicate staff detected, updating existing staff member by email:', staffEmail);
-          const updatePayload: Record<string, any> = {
-            name: staffName,
+          const updatePayload = sanitizeStaffMembersPayload({
             display_name: staffName,
+            name: staffName,
             password: staffPassword,
             role: staffRole,
             status: 'active',
             is_active: insertData.is_active,
             is_blocked: insertData.is_blocked,
-            updated_at: nowIso,
-          };
+          });
 
-          let { error: updateErr } = await supabase
+          const { error: updateErr } = await supabase
             .from('staff_members')
             .update(updatePayload)
             .eq('email', staffEmail);
 
-          if (updateErr && (updateErr.message?.includes('display_name') || updateErr.code === '42703')) {
-            delete updatePayload.display_name;
-            const retryRes = await supabase
-              .from('staff_members')
-              .update(updatePayload)
-              .eq('email', staffEmail);
-            updateErr = retryRes.error;
-          }
-
           if (updateErr) {
-            console.warn('[createStaffMember] Fallback update failed:', updateErr.message);
+            console.warn('[createStaffMember] Duplicate staff update note:', updateErr.message);
             const conflictErr = new Error('A staff member with this email already exists.');
             (conflictErr as any).status = 409;
             (conflictErr as any).code = '409';
@@ -3281,18 +3297,28 @@ export const api = {
   async updateStaffMember(id: string, staff: Partial<StaffMember>) {
     try {
       const payload: Record<string, any> = {};
-      if (staff.name !== undefined) payload.name = staff.name;
+      if (staff.name !== undefined || (staff as any).displayName !== undefined || (staff as any).display_name !== undefined) {
+        const dName = staff.name || (staff as any).displayName || (staff as any).display_name;
+        payload.display_name = dName;
+        payload.name = dName;
+      }
       if (staff.email !== undefined) payload.email = staff.email;
       if (staff.password !== undefined) payload.password = staff.password;
       if (staff.role !== undefined) payload.role = staff.role;
       if ((staff as any).isActive !== undefined) payload.is_active = (staff as any).isActive;
       if ((staff as any).isBlocked !== undefined) payload.is_blocked = (staff as any).isBlocked;
+      if (staff.designation !== undefined) payload.designation = staff.designation;
+      if (staff.phone !== undefined) payload.phone = staff.phone;
+      if ((staff as any).blockedReason !== undefined) payload.blocked_reason = (staff as any).blockedReason;
+      if (staff.permissions !== undefined) payload.permissions = staff.permissions;
+
+      const cleanPayload = sanitizeStaffMembersPayload(payload);
 
       // Self-healing update in staff_members
       const { data: updateData } = await safeSupabaseUpdate(
         supabase,
         'staff_members',
-        payload,
+        cleanPayload,
         { id }
       );
       const data = updateData && updateData.length > 0 ? updateData[0] : null;

@@ -105,19 +105,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       try {
-        // Enforce strict 3.5s timeout on the entire admin session verification process
+        // Enforce 8s timeout on admin session verification to prevent premature logouts
         await withTimeout(
           (async () => {
             const stored = await api.getMe('tyt_admin_token');
             if (stored && stored.role === 'ADMIN') {
-              // Strict database-backed re-assertion of admin privileges
+              // Database-backed re-assertion of admin privileges
               const isValidAdmin = await api.verifyAdminSession(stored);
               if (isValidAdmin) {
                 if (!stored.access_token || isJwtExpired(stored.access_token)) {
                   try {
                     const freshToken = await withTimeout(
-                      ensureActiveSupabaseSession(2000),
-                      2000,
+                      ensureActiveSupabaseSession(3000),
+                      3000,
                       'Supabase session refresh timed out'
                     );
                     if (freshToken) {
@@ -145,14 +145,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
           })(),
-          3500,
+          8000,
           'Admin session verification timed out'
         );
       } catch (err: any) {
-        console.warn('[AuthContext] Admin session verification error or timeout:', err?.message || err);
-        clearAdminToken();
-        if (!isCancelled) {
-          setAdminUser(null);
+        console.warn('[AuthContext] Admin session verification note (preserving session on network latency):', err?.message || err);
+        // If timeout or network failure, retain valid existing stored admin user to prevent false-positive logout
+        try {
+          const stored = await api.getMe('tyt_admin_token');
+          if (stored && stored.role === 'ADMIN') {
+            if (!isCancelled) {
+              setAdminUser(stored);
+            }
+          } else {
+            clearAdminToken();
+            if (!isCancelled) {
+              setAdminUser(null);
+            }
+          }
+        } catch {
+          if (!isCancelled) {
+            setAdminUser(null);
+          }
         }
       } finally {
         if (!isCancelled) {

@@ -809,7 +809,8 @@ export const customFetch: typeof fetch = async (input, init) => {
       const errClone = res.clone();
       const errText = await errClone.text();
       if (errText.includes('display_name') || errText.includes('42703') || errText.includes('PGRST204')) {
-        console.warn('[customFetch] Missing display_name column in staff_members, retrying with fallback compatibility...');
+        clientStaffUsesDisplayName = false;
+        recordUnsupportedColumn('staff_members', 'display_name');
         
         // A. If query parameters include display_name in select
         if (urlStr.includes('display_name')) {
@@ -1141,8 +1142,100 @@ export function getUnsupportedColumns(tableName: string): Set<string> {
       colSet.add(k);
     });
   }
+  if (tableName === 'staff_members') {
+    colSet.add('updated_at');
+    colSet.add('is_online');
+    colSet.add('last_active');
+    colSet.add('last_seen');
+    colSet.add('last_active_at');
+  }
 
   return colSet;
+}
+
+let clientStaffUsesDisplayName: boolean | null = null;
+
+/**
+ * Checks once whether the staff_members table uses display_name or name in the active PostgreSQL database.
+ */
+export async function detectStaffDisplayNameSupport(): Promise<boolean> {
+  if (clientStaffUsesDisplayName !== null) return clientStaffUsesDisplayName;
+  try {
+    const { error } = await supabase
+      .from('staff_members')
+      .select('id, display_name')
+      .limit(0);
+    if (!error) {
+      clientStaffUsesDisplayName = true;
+      return true;
+    }
+    if (error.message?.includes('display_name') || error.code === '42703') {
+      clientStaffUsesDisplayName = false;
+      recordUnsupportedColumn('staff_members', 'display_name');
+      return false;
+    }
+  } catch {}
+  clientStaffUsesDisplayName = true;
+  return true;
+}
+
+/**
+ * Normalizes staff_members payload to cleanly match the PostgreSQL table structure
+ * without triggering try/fail fallbacks.
+ */
+export function sanitizeStaffMembersPayload(payload: Record<string, any>): Record<string, any> {
+  if (!payload || typeof payload !== 'object') return {};
+  const clean: Record<string, any> = {};
+
+  const displayName = String(
+    payload.display_name ||
+    payload.displayName ||
+    payload.name ||
+    payload.full_name ||
+    ''
+  ).trim();
+
+  // If display_name is supported or unknown, send display_name; otherwise fallback to name
+  if (displayName) {
+    if (clientStaffUsesDisplayName === false) {
+      clean.name = displayName;
+    } else {
+      clean.display_name = displayName;
+      if (!getUnsupportedColumns('staff_members').has('name')) {
+        clean.name = displayName;
+      }
+    }
+  }
+
+  if (payload.id !== undefined && payload.id !== null) clean.id = String(payload.id).trim();
+  if (payload.email !== undefined && payload.email !== null) clean.email = String(payload.email).trim().toLowerCase();
+  if (payload.role !== undefined) clean.role = String(payload.role).trim();
+  if (payload.status !== undefined) clean.status = String(payload.status).trim();
+  if (payload.designation !== undefined) clean.designation = String(payload.designation).trim();
+  if (payload.phone !== undefined) clean.phone = String(payload.phone).trim();
+  if (payload.password !== undefined) clean.password = String(payload.password);
+  if (payload.is_active !== undefined) clean.is_active = Boolean(payload.is_active);
+  else if (payload.isActive !== undefined) clean.is_active = Boolean(payload.isActive);
+  if (payload.is_blocked !== undefined) clean.is_blocked = Boolean(payload.is_blocked);
+  else if (payload.isBlocked !== undefined) clean.is_blocked = Boolean(payload.isBlocked);
+  if (payload.blocked_reason !== undefined) clean.blocked_reason = String(payload.blocked_reason);
+  else if (payload.blockedReason !== undefined) clean.blocked_reason = String(payload.blockedReason);
+  if (payload.permissions !== undefined) clean.permissions = payload.permissions;
+  if (payload.created_at !== undefined) clean.created_at = payload.created_at;
+
+  // Never include ephemeral runtime or non-existent columns (updated_at, last_active, is_online, etc.)
+  delete clean.updated_at;
+  delete clean.last_active;
+  delete clean.is_online;
+  delete clean.last_seen;
+  delete clean.last_active_at;
+
+  const badCols = getUnsupportedColumns('staff_members');
+  badCols.forEach((col) => {
+    delete clean[col];
+  });
+
+  return clean;
 }
 
 /**
@@ -1593,13 +1686,11 @@ export function normalizePayloadInMemory(
     }
   }
 
-  // For staff_members table, strip non-existent columns (updated_at, last_active, is_online, last_seen, etc.)
+  // For staff_members table: strictly align payload with PostgreSQL schema
   if (cleanTable === 'staff_members') {
-    delete payload.updated_at;
-    delete payload.last_active;
-    delete payload.is_online;
-    delete payload.last_seen;
-    delete payload.last_active_at;
+    const aligned = sanitizeStaffMembersPayload(payload);
+    Object.keys(payload).forEach((k) => delete payload[k]);
+    Object.assign(payload, aligned);
   }
 
   // Strip any columns cached as unsupported for this table (from previous PGRST204)

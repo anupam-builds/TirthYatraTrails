@@ -107,47 +107,90 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeTab })
     }
   };
 
-  // Strict timeout fallback for "Verifying Admin Session..." to guarantee UI never gets stuck
+  // Extended timeout fallback for "Verifying Admin Session..." (increased to 8s) to prevent false-positive logouts from latency
   useEffect(() => {
     if (!isAdminLoading) return;
 
     const timer = setTimeout(() => {
-      console.warn('[AdminLayout] Admin session verification timeout exceeded. Redirecting to login.');
+      console.warn('[AdminLayout] Admin session verification timeout exceeded (8s). Redirecting to login.');
       logoutAdmin();
       navigate(ADMIN_ROUTES.login);
-    }, 3500);
+    }, 8000);
 
     return () => clearTimeout(timer);
   }, [isAdminLoading, logoutAdmin, navigate]);
 
-  // Route change / mount re-verification of admin privileges
+  // Mount re-verification of admin privileges with retry and graceful network error handling
   useEffect(() => {
     if (!isAdminLoading && adminUser) {
       let isMounted = true;
+      let retryCount = 0;
+      const MAX_RETRIES = 2;
 
-      const verify = async () => {
-        try {
-          const timeoutPromise = new Promise<boolean>((_, reject) =>
-            setTimeout(() => reject(new Error('Session verification timeout')), 3000)
-          );
-          const isValid = await Promise.race([api.verifyAdminSession(adminUser), timeoutPromise]);
-          if (!isValid && isMounted) {
-            console.warn('[AdminLayout] Security Guard: Unauthorized admin access. Revoking session.');
-            logoutAdmin();
-            navigate(ADMIN_ROUTES.login);
+      const verifyWithRetry = async () => {
+        while (retryCount <= MAX_RETRIES && isMounted) {
+          try {
+            // Extended 7.5s timeout threshold per attempt
+            const timeoutPromise = new Promise<{ valid: boolean; isNetworkError: boolean }>((_, reject) =>
+              setTimeout(() => reject(new Error('NETWORK_TIMEOUT: Session verification timed out')), 7500)
+            );
+
+            const verificationCall = (async () => {
+              if (typeof api.verifyAdminSessionDetailed === 'function') {
+                return await api.verifyAdminSessionDetailed(adminUser);
+              }
+              const valid = await api.verifyAdminSession(adminUser);
+              return { valid, isNetworkError: false };
+            })();
+
+            const outcome = await Promise.race([verificationCall, timeoutPromise]);
+
+            if (outcome.isNetworkError) {
+              if (retryCount < MAX_RETRIES) {
+                retryCount++;
+                console.warn(`[AdminLayout] Network latency during admin verification. Retrying attempt ${retryCount}/${MAX_RETRIES}...`);
+                await new Promise((res) => setTimeout(res, 1200));
+                continue;
+              } else {
+                console.warn('[AdminLayout] Network issues verifying admin session. Preserving session gracefully rather than logging out.');
+                return;
+              }
+            }
+
+            if (!outcome.valid && isMounted) {
+              console.warn('[AdminLayout] Security Guard: Unauthorized admin access. Revoking session.');
+              logoutAdmin();
+              navigate(ADMIN_ROUTES.login);
+            }
+            return;
+          } catch (err: any) {
+            const isTimeout =
+              err?.message?.includes('TIMEOUT') ||
+              err?.message?.includes('timeout') ||
+              err?.message?.includes('fetch failed') ||
+              err?.message?.includes('Failed to fetch');
+
+            if (isTimeout && retryCount < MAX_RETRIES) {
+              retryCount++;
+              console.warn(`[AdminLayout] Verification attempt ${retryCount} timed out or failed. Retrying...`);
+              await new Promise((res) => setTimeout(res, 1200));
+              continue;
+            }
+
+            // If session verification fails due to a network error, handle gracefully instead of revoking session
+            console.warn('[AdminLayout] Admin privilege check notice (preserving session due to network latency):', err?.message || err);
+            return;
           }
-        } catch (err) {
-          console.warn('[AdminLayout] Admin privilege check notice:', err);
         }
       };
 
-      verify();
+      verifyWithRetry();
 
       return () => {
         isMounted = false;
       };
     }
-  }, [activeTab, adminUser, isAdminLoading, logoutAdmin, navigate]);
+  }, [adminUser?.email, adminUser?.role, isAdminLoading, logoutAdmin, navigate]);
 
   // Sync admin presence on Supabase Realtime channel 'online-admins'
   useAdminPresence();

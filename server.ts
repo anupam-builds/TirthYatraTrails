@@ -1013,13 +1013,12 @@ app.post('/api/admin/staff', async (req, res) => {
     }
 
     const finalStaffId = authUserId || req.body.id || `staff-${Date.now()}`;
+    const usesDisplayName = await checkStaffDisplayNameSupport();
 
-    // 2. Insert or upsert into public.staff_members
+    // 2. Insert or upsert into public.staff_members matching exact PostgreSQL columns
     const staffRowPayload: Record<string, any> = {
       id: finalStaffId,
       email: cleanEmail,
-      name: resolvedName,
-      display_name: resolvedName,
       role: resolvedRole,
       designation: (designation || 'Pilgrim Operations Specialist').trim(),
       phone: (phone || '').trim(),
@@ -1029,8 +1028,14 @@ app.post('/api/admin/staff', async (req, res) => {
       is_blocked: Boolean(isBlocked),
       permissions: permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
       created_at: nowIso,
-      updated_at: nowIso,
     };
+
+    if (usesDisplayName) {
+      staffRowPayload.display_name = resolvedName;
+      staffRowPayload.name = resolvedName;
+    } else {
+      staffRowPayload.name = resolvedName;
+    }
 
     let savedRow = staffRowPayload;
     try {
@@ -1042,6 +1047,8 @@ app.post('/api/admin/staff', async (req, res) => {
 
       if (!error && data) {
         savedRow = data;
+      } else if (error) {
+        console.warn('[server.ts POST /api/admin/staff] staff_members upsert note:', error.message);
       }
     } catch (dbErr: any) {
       console.warn('[server.ts POST /api/admin/staff] staff_members upsert note:', dbErr?.message);
@@ -1072,6 +1079,28 @@ app.post('/api/admin/staff', async (req, res) => {
   }
 });
 
+let serverStaffUsesDisplayName: boolean | null = null;
+
+async function checkStaffDisplayNameSupport(): Promise<boolean> {
+  if (serverStaffUsesDisplayName !== null) return serverStaffUsesDisplayName;
+  try {
+    const { error } = await supabaseAdmin
+      .from('staff_members')
+      .select('id, display_name')
+      .limit(0);
+    if (!error) {
+      serverStaffUsesDisplayName = true;
+      return true;
+    }
+    if (error.message?.includes('display_name') || error.code === '42703') {
+      serverStaffUsesDisplayName = false;
+      return false;
+    }
+  } catch {}
+  serverStaffUsesDisplayName = true;
+  return true;
+}
+
 // Safe Backfill: Pull existing users from auth.users into public.staff_members without column mismatch errors
 export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; total: number }> {
   try {
@@ -1083,6 +1112,7 @@ export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; t
 
     const users = userListData.users;
     let syncedCount = 0;
+    const usesDisplayName = await checkStaffDisplayNameSupport();
 
     for (const u of users) {
       if (!u.email) continue;
@@ -1094,29 +1124,28 @@ export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; t
       const staffPayload: Record<string, any> = {
         id: u.id,
         email: cleanEmail,
-        name: displayName,
-        display_name: displayName,
         role: role,
         status: 'active',
         is_active: true,
         is_blocked: false,
       };
 
-      // Try upserting with display_name, fallback without if column not yet added in remote Postgres
-      let { error: upsertErr } = await supabaseAdmin
+      if (usesDisplayName) {
+        staffPayload.display_name = displayName;
+        staffPayload.name = displayName;
+      } else {
+        staffPayload.name = displayName;
+      }
+
+      // Upsert directly matching verified table columns without try/fail loops
+      const { error: upsertErr } = await supabaseAdmin
         .from('staff_members')
         .upsert(staffPayload, { onConflict: 'id' });
 
-      if (upsertErr && (upsertErr.message?.includes('display_name') || upsertErr.code === '42703')) {
-        const { display_name, ...payloadWithoutDisplayName } = staffPayload;
-        const fallbackRes = await supabaseAdmin
-          .from('staff_members')
-          .upsert(payloadWithoutDisplayName, { onConflict: 'id' });
-        upsertErr = fallbackRes.error;
-      }
-
       if (!upsertErr) {
         syncedCount++;
+      } else {
+        console.warn(`[syncAuthUsersToStaffMembers] Upsert note for ${cleanEmail}:`, upsertErr.message);
       }
     }
 

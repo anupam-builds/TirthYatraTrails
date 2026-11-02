@@ -4,7 +4,7 @@
       "id": "usr-root-admin",
       "name": "Anupam Saxena (Root Admin)",
       "email": "anupamsaxena.dev@gmail.com",
-      "password": "$2b$10$1/f5CIFqaJCseZCYbjcuK.8MtAD/KbC/acUis7EsO/MEDT/iXkqn2",
+      "password": "$2b$10$yYhay8Iv5eo4zW3BG0dik.atdg2gDB18.qCuts3jyrnCSGQNZ/m9y",
       "role": "ADMIN",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
@@ -111,7 +111,7 @@
       "name": "admin",
       "email": "admin@tirthyatratrails.in",
       "phone": "",
-      "password": "$2b$10$5gdXzo/Ln3Xx9N4KWW.IXOL/78J2QB9X/GFwalgDsa5ihmdHAE1nm",
+      "password": "$2b$10$AAZHJ210IlOa4LI0k1nmle3zAJVlZehk67SRH.oKcYCrqOghGfjTG",
       "role": "ADMIN",
       "createdAt": "2026-10-22T15:43:39.742Z"
     }
