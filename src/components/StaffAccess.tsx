@@ -136,37 +136,59 @@ export const StaffAccess: React.FC = () => {
 -- ==============================================================================
 
 -- 1. Ensure standard columns exist on public.staff_members
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS id UUID PRIMARY KEY;
+CREATE TABLE IF NOT EXISTS public.staff_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE,
+  display_name TEXT,
+  role TEXT DEFAULT 'staff',
+  status TEXT DEFAULT 'active',
+  permissions JSONB DEFAULT '[]'::jsonb
+);
+
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS id UUID;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'staff';
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT 'Pilgrim Operations Specialist';
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS password TEXT;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
 
 -- 2. Safe Backfill: Pull existing users from auth.users into public.staff_members
-INSERT INTO public.staff_members (id, email, display_name, role, status)
+INSERT INTO public.staff_members (id, email, display_name, role, status, permissions)
 SELECT 
   id, 
   email, 
   COALESCE(raw_user_meta_data->>'full_name', raw_user_meta_data->>'name', split_part(email, '@', 1)),
   COALESCE(raw_user_meta_data->>'role', 'staff'),
-  'active'
+  'active',
+  '["canViewInquiries", "canUpdateStatus", "canAddNotes"]'::jsonb
 FROM auth.users
-WHERE id::text NOT IN (SELECT id::text FROM public.staff_members)
+WHERE id::text NOT IN (SELECT id::text FROM public.staff_members WHERE id IS NOT NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Automated Database Trigger for Future Staff
 CREATE OR REPLACE FUNCTION public.handle_new_staff_member()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.staff_members (id, email, display_name, role, status)
+  INSERT INTO public.staff_members (id, email, display_name, role, status, permissions)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
     COALESCE(NEW.raw_user_meta_data->>'role', 'staff'),
-    'active'
+    'active',
+    '["canViewInquiries", "canUpdateStatus", "canAddNotes"]'::jsonb
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    display_name = COALESCE(EXCLUDED.display_name, public.staff_members.display_name),
+    permissions = COALESCE(public.staff_members.permissions, EXCLUDED.permissions);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -2274,7 +2296,7 @@ NOTIFY pgrst, 'reload schema';`;
                     Database Schema &amp; Staff Sync Migration
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Fix missing columns (<code>display_name</code>), backfill auth users, and setup sync trigger
+                    Fix missing columns (<code>display_name</code>, <code>permissions</code>), backfill auth users, and setup sync trigger
                   </p>
                 </div>
               </div>
@@ -2293,7 +2315,7 @@ NOTIFY pgrst, 'reload schema';`;
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-medium">
                 <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                   <span className="block font-bold text-amber-600 dark:text-amber-400">1. Table Schema</span>
-                  <span>Adds <code>display_name</code> &amp; columns</span>
+                  <span>Adds <code>display_name</code> &amp; <code>permissions</code></span>
                 </div>
                 <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                   <span className="block font-bold text-amber-600 dark:text-amber-400">2. Backfill Users</span>

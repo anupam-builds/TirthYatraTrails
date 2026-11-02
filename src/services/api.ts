@@ -1,5 +1,5 @@
-import { City, Hotel, Room, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
-import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat, sanitizeStaffMembersPayload, detectStaffDisplayNameSupport } from '../lib/supabase.js';
+import { City, Hotel, Room, Package, Inquiry, InquiryStatus, User, AuthResponse, Review, StaffMember, StaffPermissions, StaffActivityLog, CompanionProfile, CompanionConnection, CompanionSearchFilters, TransitHub, HotelInventory, TravelStory } from '../types.js';
+import { supabase, supabaseRest, getSupabaseHeaders, getActiveSessionToken, handleUnauthorizedResponse, SUPABASE_URL, SUPABASE_ANON_KEY, safeSupabaseInsert, safeInsertLead, safeSupabaseUpdate, safeUpdateLead, unsupportedColumnsCache, unsupportedColumnsByTable, smartSupabaseInsert, unpackExtendedLeadData, cleanNotesText, discoverTableColumns, trackStaffHeartbeat, sanitizeStaffMembersPayload, detectStaffDisplayNameSupport, detectStaffPermissionsSupport } from '../lib/supabase.js';
 import { localStore, getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted } from './localStore.js';
 
 export { getDeletedStaffIdSet, markStaffAsDeleted, unmarkStaffAsDeleted };
@@ -5322,14 +5322,62 @@ export function mergeUpdatedLeadFields(existing: Inquiry, newRow: Record<string,
   };
 }
 
+/**
+ * Robust parser for staff permissions supporting JSON object, string array (e.g. ['canViewInquiries', ...]),
+ * comma-separated string, or nested JSONB from PostgreSQL.
+ */
+export function parseStaffPermissions(raw: any): StaffPermissions {
+  if (!raw) {
+    return { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true };
+  }
+
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = raw.split(',').map((s: string) => s.trim());
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    const permSet = new Set(parsed.map((p) => String(p).toLowerCase().trim()));
+    return {
+      canViewInquiries:
+        permSet.has('canviewinquiries') ||
+        permSet.has('view_inquiries') ||
+        permSet.has('inquiries_view') ||
+        permSet.has('all') ||
+        permSet.size === 0,
+      canUpdateStatus:
+        permSet.has('canupdatestatus') ||
+        permSet.has('update_status') ||
+        permSet.has('status_update') ||
+        permSet.has('all') ||
+        permSet.size === 0,
+      canAddNotes:
+        permSet.has('canaddnotes') ||
+        permSet.has('add_notes') ||
+        permSet.has('notes_add') ||
+        permSet.has('all') ||
+        permSet.size === 0,
+    };
+  }
+
+  if (typeof parsed === 'object' && parsed !== null) {
+    return {
+      canViewInquiries: parsed.canViewInquiries !== undefined ? Boolean(parsed.canViewInquiries) : true,
+      canUpdateStatus: parsed.canUpdateStatus !== undefined ? Boolean(parsed.canUpdateStatus) : true,
+      canAddNotes: parsed.canAddNotes !== undefined ? Boolean(parsed.canAddNotes) : true,
+    };
+  }
+
+  return { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true };
+}
+
 export function mapStaffRow(row: any): StaffMember {
   const isOnline = Boolean(row.is_online ?? row.isOnline ?? row.is_currently_logged_in ?? row.isCurrentlyLoggedIn);
-  const rawPerms = (typeof row.permissions === 'object' && row.permissions !== null) ? row.permissions : {};
-  const permissions = {
-    canViewInquiries: rawPerms.canViewInquiries !== undefined ? Boolean(rawPerms.canViewInquiries) : true,
-    canUpdateStatus: rawPerms.canUpdateStatus !== undefined ? Boolean(rawPerms.canUpdateStatus) : true,
-    canAddNotes: rawPerms.canAddNotes !== undefined ? Boolean(rawPerms.canAddNotes) : true,
-  };
+  const permissions = parseStaffPermissions(row.permissions);
   const displayName = String(row.display_name || row.displayName || row.name || row.full_name || 'Staff Member').trim();
   const isBlocked = Boolean(row.is_blocked ?? row.isBlocked ?? (row.status === 'blocked'));
   const isActive = row.is_active !== undefined ? Boolean(row.is_active) : (row.isActive !== undefined ? Boolean(row.isActive) : (row.status ? row.status !== 'blocked' : true));

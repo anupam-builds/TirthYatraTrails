@@ -1014,6 +1014,7 @@ app.post('/api/admin/staff', async (req, res) => {
 
     const finalStaffId = authUserId || req.body.id || `staff-${Date.now()}`;
     const usesDisplayName = await checkStaffDisplayNameSupport();
+    const usesPermissions = await checkStaffPermissionsSupport();
 
     // 2. Insert or upsert into public.staff_members matching exact PostgreSQL columns
     const staffRowPayload: Record<string, any> = {
@@ -1026,7 +1027,6 @@ app.post('/api/admin/staff', async (req, res) => {
       status: status || (isBlocked ? 'blocked' : 'active'),
       is_active: isActive !== false && !isBlocked,
       is_blocked: Boolean(isBlocked),
-      permissions: permissions || { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true },
       created_at: nowIso,
     };
 
@@ -1035,6 +1035,10 @@ app.post('/api/admin/staff', async (req, res) => {
       staffRowPayload.name = resolvedName;
     } else {
       staffRowPayload.name = resolvedName;
+    }
+
+    if (usesPermissions) {
+      staffRowPayload.permissions = permissions || ['canViewInquiries', 'canUpdateStatus', 'canAddNotes'];
     }
 
     let savedRow = staffRowPayload;
@@ -1080,6 +1084,7 @@ app.post('/api/admin/staff', async (req, res) => {
 });
 
 let serverStaffUsesDisplayName: boolean | null = null;
+let serverStaffUsesPermissions: boolean | null = null;
 
 async function checkStaffDisplayNameSupport(): Promise<boolean> {
   if (serverStaffUsesDisplayName !== null) return serverStaffUsesDisplayName;
@@ -1101,6 +1106,26 @@ async function checkStaffDisplayNameSupport(): Promise<boolean> {
   return true;
 }
 
+async function checkStaffPermissionsSupport(): Promise<boolean> {
+  if (serverStaffUsesPermissions !== null) return serverStaffUsesPermissions;
+  try {
+    const { error } = await supabaseAdmin
+      .from('staff_members')
+      .select('id, permissions')
+      .limit(0);
+    if (!error) {
+      serverStaffUsesPermissions = true;
+      return true;
+    }
+    if (error.message?.includes('permissions') || error.code === '42703') {
+      serverStaffUsesPermissions = false;
+      return false;
+    }
+  } catch {}
+  serverStaffUsesPermissions = true;
+  return true;
+}
+
 // Safe Backfill: Pull existing users from auth.users into public.staff_members without column mismatch errors
 export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; total: number }> {
   try {
@@ -1113,6 +1138,7 @@ export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; t
     const users = userListData.users;
     let syncedCount = 0;
     const usesDisplayName = await checkStaffDisplayNameSupport();
+    const usesPermissions = await checkStaffPermissionsSupport();
 
     for (const u of users) {
       if (!u.email) continue;
@@ -1135,6 +1161,10 @@ export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; t
         staffPayload.name = displayName;
       } else {
         staffPayload.name = displayName;
+      }
+
+      if (usesPermissions) {
+        staffPayload.permissions = meta.permissions || ['canViewInquiries', 'canUpdateStatus', 'canAddNotes'];
       }
 
       // Upsert directly matching verified table columns without try/fail loops
@@ -1473,10 +1503,16 @@ app.get('/api/admin/schema/sql', (req, res) => {
 
     const roomsMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261031_hotel_rooms_and_rates_schema.sql');
     const staffMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261102_staff_members_display_name_and_sync.sql');
+    const permissionsMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261102_staff_members_permissions.sql');
 
-    if ((requested === 'staff' || requested === 'staff_members') && fs.existsSync(staffMigrationPath)) {
+    if ((requested === 'permissions' || requested === 'staff_permissions') && fs.existsSync(permissionsMigrationPath)) {
       res.setHeader('Content-Type', 'text/plain');
-      return res.send(fs.readFileSync(staffMigrationPath, 'utf8'));
+      return res.send(fs.readFileSync(permissionsMigrationPath, 'utf8'));
+    }
+
+    if ((requested === 'staff' || requested === 'staff_members') && fs.existsSync(permissionsMigrationPath)) {
+      res.setHeader('Content-Type', 'text/plain');
+      return res.send(fs.readFileSync(permissionsMigrationPath, 'utf8'));
     }
 
     if ((requested === 'hotel_rooms' || requested === 'rooms') && fs.existsSync(roomsMigrationPath)) {

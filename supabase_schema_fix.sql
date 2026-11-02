@@ -365,7 +365,8 @@ CREATE TABLE IF NOT EXISTS public.staff_members (
   email TEXT UNIQUE,
   display_name TEXT,
   role TEXT DEFAULT 'staff',
-  status TEXT DEFAULT 'active'
+  status TEXT DEFAULT 'active',
+  permissions JSONB DEFAULT '[]'::jsonb
 );
 
 -- Ensure standard columns exist on public.staff_members
@@ -374,6 +375,7 @@ ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'staff';
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT 'Pilgrim Operations Specialist';
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS phone TEXT;
@@ -381,7 +383,6 @@ ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS password TEXT;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{"canViewInquiries": true, "canUpdateStatus": true, "canAddNotes": true}'::jsonb;
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
 ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
@@ -398,13 +399,14 @@ CREATE POLICY "Allow all access on staff_members"
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users') THEN
-    INSERT INTO public.staff_members (id, email, display_name, role, status)
+    INSERT INTO public.staff_members (id, email, display_name, role, status, permissions)
     SELECT 
       id, 
       email, 
       COALESCE(raw_user_meta_data->>'full_name', raw_user_meta_data->>'name', split_part(email, '@', 1)),
       COALESCE(raw_user_meta_data->>'role', 'staff'),
-      'active'
+      'active',
+      '["canViewInquiries", "canUpdateStatus", "canAddNotes"]'::jsonb
     FROM auth.users
     WHERE id::text NOT IN (SELECT id::text FROM public.staff_members WHERE id IS NOT NULL)
     ON CONFLICT (id) DO NOTHING;
@@ -418,16 +420,18 @@ END $$;
 CREATE OR REPLACE FUNCTION public.handle_new_staff_member()
 RETURNS TRIGGER AS $$ 
 BEGIN 
-  INSERT INTO public.staff_members (id, email, display_name, role, status) 
+  INSERT INTO public.staff_members (id, email, display_name, role, status, permissions) 
   VALUES ( 
     NEW.id, 
     NEW.email, 
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)), 
     COALESCE(NEW.raw_user_meta_data->>'role', 'staff'), 
-    'active' 
+    'active',
+    '["canViewInquiries", "canUpdateStatus", "canAddNotes"]'::jsonb
   ) 
   ON CONFLICT (id) DO UPDATE SET
     display_name = COALESCE(EXCLUDED.display_name, public.staff_members.display_name),
+    permissions = COALESCE(public.staff_members.permissions, EXCLUDED.permissions),
     email = COALESCE(EXCLUDED.email, public.staff_members.email),
     role = COALESCE(EXCLUDED.role, public.staff_members.role),
     status = 'active';

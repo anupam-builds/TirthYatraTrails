@@ -803,20 +803,33 @@ export const customFetch: typeof fetch = async (input, init) => {
     } catch {}
   }
 
-  // 4. Gracefully handle missing 'display_name' column error in public.staff_members (42703 / PGRST204)
+  // 4. Gracefully handle missing 'display_name' or 'permissions' column error in public.staff_members (42703 / PGRST204)
   if (res.status === 400 && urlStr.includes('/rest/v1/staff_members')) {
     try {
       const errClone = res.clone();
       const errText = await errClone.text();
-      if (errText.includes('display_name') || errText.includes('42703') || errText.includes('PGRST204')) {
-        clientStaffUsesDisplayName = false;
-        recordUnsupportedColumn('staff_members', 'display_name');
+      if (
+        errText.includes('display_name') ||
+        errText.includes('permissions') ||
+        errText.includes('42703') ||
+        errText.includes('PGRST204')
+      ) {
+        if (errText.includes('display_name')) {
+          clientStaffUsesDisplayName = false;
+          recordUnsupportedColumn('staff_members', 'display_name');
+        }
+        if (errText.includes('permissions')) {
+          clientStaffUsesPermissions = false;
+          recordUnsupportedColumn('staff_members', 'permissions');
+        }
         
-        // A. If query parameters include display_name in select
-        if (urlStr.includes('display_name')) {
+        // A. If query parameters include unsupported column in select
+        if (urlStr.includes('display_name') || urlStr.includes('permissions')) {
           const safeUrl = urlStr
             .replace(/display_name,?/g, '')
             .replace(/,display_name/g, '')
+            .replace(/permissions,?/g, '')
+            .replace(/,permissions/g, '')
             .replace(/select=,/, 'select=')
             .replace(/select=$/, 'select=*');
           const retryRes = await fetch(safeUrl, reqInit);
@@ -825,7 +838,7 @@ export const customFetch: typeof fetch = async (input, init) => {
           }
         }
 
-        // B. If request body contains display_name
+        // B. If request body contains unsupported column
         if (reqInit.body && typeof reqInit.body === 'string') {
           const parsed = JSON.parse(reqInit.body);
           const sanitizeItem = (item: any) => {
@@ -834,7 +847,8 @@ export const customFetch: typeof fetch = async (input, init) => {
             if (!clean.name && clean.display_name) {
               clean.name = clean.display_name;
             }
-            delete clean.display_name;
+            if (errText.includes('display_name')) delete clean.display_name;
+            if (errText.includes('permissions')) delete clean.permissions;
             return clean;
           };
           const cleanBody = Array.isArray(parsed) ? parsed.map(sanitizeItem) : sanitizeItem(parsed);
@@ -1154,6 +1168,7 @@ export function getUnsupportedColumns(tableName: string): Set<string> {
 }
 
 let clientStaffUsesDisplayName: boolean | null = null;
+let clientStaffUsesPermissions: boolean | null = null;
 
 /**
  * Checks once whether the staff_members table uses display_name or name in the active PostgreSQL database.
@@ -1176,6 +1191,34 @@ export async function detectStaffDisplayNameSupport(): Promise<boolean> {
     }
   } catch {}
   clientStaffUsesDisplayName = true;
+  return true;
+}
+
+/**
+ * Checks once whether the staff_members table supports the permissions column.
+ */
+export async function detectStaffPermissionsSupport(): Promise<boolean> {
+  if (clientStaffUsesPermissions !== null) return clientStaffUsesPermissions;
+  try {
+    const { error } = await supabase
+      .from('staff_members')
+      .select('id, permissions')
+      .limit(0);
+    if (!error) {
+      clientStaffUsesPermissions = true;
+      return true;
+    }
+    if (
+      error.message?.includes('permissions') ||
+      error.code === '42703' ||
+      (error as any).details?.includes('permissions')
+    ) {
+      clientStaffUsesPermissions = false;
+      recordUnsupportedColumn('staff_members', 'permissions');
+      return false;
+    }
+  } catch {}
+  clientStaffUsesPermissions = true;
   return true;
 }
 
@@ -1220,7 +1263,29 @@ export function sanitizeStaffMembersPayload(payload: Record<string, any>): Recor
   else if (payload.isBlocked !== undefined) clean.is_blocked = Boolean(payload.isBlocked);
   if (payload.blocked_reason !== undefined) clean.blocked_reason = String(payload.blocked_reason);
   else if (payload.blockedReason !== undefined) clean.blocked_reason = String(payload.blockedReason);
-  if (payload.permissions !== undefined) clean.permissions = payload.permissions;
+
+  // Cleanly format and map permissions (supports JSON object, array, or separate fields)
+  if (clientStaffUsesPermissions !== false) {
+    if (payload.permissions !== undefined) {
+      clean.permissions = payload.permissions;
+    } else if (
+      payload.canViewInquiries !== undefined ||
+      payload.canUpdateStatus !== undefined ||
+      payload.canAddNotes !== undefined
+    ) {
+      clean.permissions = {
+        canViewInquiries: payload.canViewInquiries !== undefined ? Boolean(payload.canViewInquiries) : true,
+        canUpdateStatus: payload.canUpdateStatus !== undefined ? Boolean(payload.canUpdateStatus) : true,
+        canAddNotes: payload.canAddNotes !== undefined ? Boolean(payload.canAddNotes) : true,
+      };
+    }
+  }
+
+  // Preserve metadata if provided
+  if (payload.metadata !== undefined) {
+    clean.metadata = payload.metadata;
+  }
+
   if (payload.created_at !== undefined) clean.created_at = payload.created_at;
 
   // Never include ephemeral runtime or non-existent columns (updated_at, last_active, is_online, etc.)
