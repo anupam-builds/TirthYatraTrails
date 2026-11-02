@@ -86,7 +86,6 @@ import {
   UserX,
   Crown,
   Calendar,
-  Database,
 } from 'lucide-react';
 
 export const StaffAccess: React.FC = () => {
@@ -124,116 +123,7 @@ export const StaffAccess: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
 
-  // Schema & Auth User Sync states
-  const [showSqlModal, setShowSqlModal] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
-  const [syncingAuthUsers, setSyncingAuthUsers] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const SQL_MIGRATION_TEXT = `-- ==============================================================================
--- DATABASE SCHEMA & STAFF SYNC MIGRATION
--- Run this in your Supabase SQL Editor
--- ==============================================================================
-
--- 1. Ensure standard columns exist on public.staff_members
-CREATE TABLE IF NOT EXISTS public.staff_members (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT UNIQUE,
-  display_name TEXT,
-  role TEXT DEFAULT 'staff',
-  status TEXT DEFAULT 'active',
-  permissions JSONB DEFAULT '[]'::jsonb
-);
-
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS id UUID;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS email TEXT;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS display_name TEXT;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'staff';
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT 'Pilgrim Operations Specialist';
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS phone TEXT;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS password TEXT;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
-ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-
--- 2. Safe Backfill: Pull existing users from auth.users into public.staff_members
-INSERT INTO public.staff_members (id, email, display_name, role, status, permissions)
-SELECT 
-  id, 
-  email, 
-  COALESCE(raw_user_meta_data->>'full_name', raw_user_meta_data->>'name', split_part(email, '@', 1)),
-  COALESCE(raw_user_meta_data->>'role', 'staff'),
-  'active',
-  '["canViewInquiries", "canUpdateStatus", "canAddNotes"]'::jsonb
-FROM auth.users
-WHERE id::text NOT IN (SELECT id::text FROM public.staff_members WHERE id IS NOT NULL)
-ON CONFLICT (id) DO NOTHING;
-
--- 3. Automated Database Trigger for Future Staff
-CREATE OR REPLACE FUNCTION public.handle_new_staff_member()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.staff_members (id, email, display_name, role, status, permissions)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'staff'),
-    'active',
-    '["canViewInquiries", "canUpdateStatus", "canAddNotes"]'::jsonb
-  )
-  ON CONFLICT (id) DO UPDATE SET
-    display_name = COALESCE(EXCLUDED.display_name, public.staff_members.display_name),
-    permissions = COALESCE(public.staff_members.permissions, EXCLUDED.permissions);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created_staff ON auth.users;
-CREATE TRIGGER on_auth_user_created_staff
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_staff_member();
-
--- 4. Refresh PostgREST API Schema Cache
-NOTIFY pgrst, 'reload schema';`;
-
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(SQL_MIGRATION_TEXT);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
-  };
-
-  const handleSyncAuthUsers = async () => {
-    setSyncingAuthUsers(true);
-    setSyncResult(null);
-    try {
-      const res = await fetch('/api/admin/staff/sync', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setSyncResult({
-          success: true,
-          message: `Synchronized ${data.syncedCount || 0} user(s) into staff directory. (Total auth users: ${data.totalAuthUsers || 0})`,
-        });
-        await loadAllStaffData();
-      } else {
-        setSyncResult({
-          success: false,
-          message: data.error || 'Failed to sync users. Run the SQL script in your Supabase SQL editor to ensure schema and triggers are updated.',
-        });
-      }
-    } catch (err: any) {
-      setSyncResult({
-        success: false,
-        message: err.message || 'Network error while attempting to sync auth users.',
-      });
-    } finally {
-      setSyncingAuthUsers(false);
-    }
-  };
 
   // Form state for Add / Edit
   const [formData, setFormData] = useState<{
@@ -996,38 +886,20 @@ NOTIFY pgrst, 'reload schema';`;
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 shrink-0">
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0d1d33] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors shadow-xs"
+            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0d1d33] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors shadow-xs cursor-pointer disabled:opacity-60"
             title="Refresh staff status and session monitor"
+            aria-label="Refresh staff directory"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-orange-500' : ''}`} />
           </button>
 
           <button
-            onClick={handleSyncAuthUsers}
-            disabled={syncingAuthUsers}
-            className="px-3 py-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100/70 dark:hover:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-60"
-            title="Sync Supabase Auth Users into public.staff_members"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 dark:text-blue-400 ${syncingAuthUsers ? 'animate-spin' : ''}`} />
-            <span>{syncingAuthUsers ? 'Syncing...' : 'Sync Auth Users'}</span>
-          </button>
-
-          <button
-            onClick={() => setShowSqlModal(true)}
-            className="px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-            title="View & Copy SQL Migration for Supabase SQL Editor"
-          >
-            <Database className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            <span>SQL Migration</span>
-          </button>
-
-          <button
             onClick={() => navigate('/staff/login')}
-            className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0d1d33] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            className="px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0d1d33] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-2 transition-all shadow-xs hover:border-orange-500/40 cursor-pointer"
             title="Test Staff Login Portal"
           >
             <ExternalLink className="w-3.5 h-3.5 text-orange-500" />
@@ -1036,39 +908,13 @@ NOTIFY pgrst, 'reload schema';`;
 
           <button
             onClick={openCreateModal}
-            className="px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md shadow-orange-600/20 transition-all cursor-pointer"
+            className="px-4 py-2.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md shadow-orange-600/20 hover:shadow-orange-600/30 active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap"
           >
             <UserPlus className="w-4 h-4" />
             <span>Create Staff Account</span>
           </button>
         </div>
       </div>
-
-      {/* Sync Auth Users Feedback Banner */}
-      {syncResult && (
-        <div
-          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 ${
-            syncResult.success
-              ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200'
-              : 'bg-red-50 dark:bg-red-950/60 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            {syncResult.success ? (
-              <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
-            )}
-            <p className="font-semibold">{syncResult.message}</p>
-          </div>
-          <button
-            onClick={() => setSyncResult(null)}
-            className="text-xs px-2 py-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 cursor-pointer"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
 
       {/* Security & Access Notice Banner */}
       <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -2279,109 +2125,7 @@ NOTIFY pgrst, 'reload schema';`;
         </div>
       )}
 
-      {/* ===================== MODAL: SQL MIGRATION & SCHEMA FIX ===================== */}
-      {showSqlModal && (
-        <div
-          id="staff-sql-migration-modal"
-          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
-        >
-          <div className="bg-white dark:bg-[#0a192f] border border-amber-500/40 rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <Database className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white font-serif">
-                    Database Schema &amp; Staff Sync Migration
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Fix missing columns (<code>display_name</code>, <code>permissions</code>), backfill auth users, and setup sync trigger
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowSqlModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2">
-              <p>
-                Run this SQL in your <strong>Supabase Dashboard &gt; SQL Editor</strong> to apply the 4 required steps:
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-medium">
-                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <span className="block font-bold text-amber-600 dark:text-amber-400">1. Table Schema</span>
-                  <span>Adds <code>display_name</code> &amp; <code>permissions</code></span>
-                </div>
-                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <span className="block font-bold text-amber-600 dark:text-amber-400">2. Backfill Users</span>
-                  <span>Syncs <code>auth.users</code> into table</span>
-                </div>
-                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <span className="block font-bold text-amber-600 dark:text-amber-400">3. Auth Trigger</span>
-                  <span>Auto-syncs future staff</span>
-                </div>
-                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <span className="block font-bold text-amber-600 dark:text-amber-400">4. Reload Cache</span>
-                  <span>Refreshes PostgREST API</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="relative flex-1 min-h-[220px] bg-slate-900 dark:bg-black rounded-2xl border border-slate-800 overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-3 py-2 bg-slate-800/80 border-b border-slate-700/60 text-[11px] text-slate-400">
-                <span className="font-mono">schema_staff_sync.sql</span>
-                <button
-                  onClick={handleCopySql}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-semibold transition-colors cursor-pointer text-xs"
-                >
-                  {copiedSql ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Copied to Clipboard!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy SQL Script</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <pre className="p-3 text-[11px] font-mono text-emerald-400/90 overflow-y-auto leading-relaxed select-all">
-                {SQL_MIGRATION_TEXT}
-              </pre>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  handleSyncAuthUsers();
-                  setShowSqlModal(false);
-                }}
-                disabled={syncingAuthUsers}
-                className="px-4 py-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100/70 text-blue-800 dark:text-blue-300 font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncingAuthUsers ? 'animate-spin' : ''}`} />
-                <span>Run Backend Sync Now</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowSqlModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold cursor-pointer"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
