@@ -803,6 +803,53 @@ export const customFetch: typeof fetch = async (input, init) => {
     } catch {}
   }
 
+  // 4. Gracefully handle missing 'display_name' column error in public.staff_members (42703 / PGRST204)
+  if (res.status === 400 && urlStr.includes('/rest/v1/staff_members')) {
+    try {
+      const errClone = res.clone();
+      const errText = await errClone.text();
+      if (errText.includes('display_name') || errText.includes('42703') || errText.includes('PGRST204')) {
+        console.warn('[customFetch] Missing display_name column in staff_members, retrying with fallback compatibility...');
+        
+        // A. If query parameters include display_name in select
+        if (urlStr.includes('display_name')) {
+          const safeUrl = urlStr
+            .replace(/display_name,?/g, '')
+            .replace(/,display_name/g, '')
+            .replace(/select=,/, 'select=')
+            .replace(/select=$/, 'select=*');
+          const retryRes = await fetch(safeUrl, reqInit);
+          if (retryRes.ok) {
+            return retryRes;
+          }
+        }
+
+        // B. If request body contains display_name
+        if (reqInit.body && typeof reqInit.body === 'string') {
+          const parsed = JSON.parse(reqInit.body);
+          const sanitizeItem = (item: any) => {
+            if (!item || typeof item !== 'object') return item;
+            const clean = { ...item };
+            if (!clean.name && clean.display_name) {
+              clean.name = clean.display_name;
+            }
+            delete clean.display_name;
+            return clean;
+          };
+          const cleanBody = Array.isArray(parsed) ? parsed.map(sanitizeItem) : sanitizeItem(parsed);
+          const retryRes = await fetch(cleanInput, {
+            ...reqInit,
+            headers,
+            body: JSON.stringify(cleanBody),
+          });
+          if (retryRes.ok) {
+            return retryRes;
+          }
+        }
+      }
+    } catch {}
+  }
+
   return res;
 };
 

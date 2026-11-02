@@ -3156,10 +3156,28 @@ export const api = {
 
     try {
       // Use upsert specifying conflict target on 'email' to prevent 409 Conflict
-      const { error: upsertErr } = await supabase
+      let { error: upsertErr } = await supabase
         .from('staff_members')
         .upsert(insertData, { onConflict: 'email' })
         .select('*');
+
+      if (upsertErr) {
+        if (
+          upsertErr.message?.includes('display_name') ||
+          upsertErr.code === '42703' ||
+          (upsertErr as any).details?.includes('display_name')
+        ) {
+          console.warn('[createStaffMember] display_name column not found in remote DB, retrying without display_name...');
+          const { display_name, ...fallbackData } = insertData;
+          const { error: retryErr } = await supabase
+            .from('staff_members')
+            .upsert(fallbackData, { onConflict: 'email' })
+            .select('*');
+          if (!retryErr) {
+            upsertErr = null as any;
+          }
+        }
+      }
 
       if (upsertErr) {
         if (
@@ -3169,19 +3187,30 @@ export const api = {
           upsertErr.message?.includes('already exists')
         ) {
           console.warn('[createStaffMember] Duplicate staff detected, updating existing staff member by email:', staffEmail);
-          const { error: updateErr } = await supabase
+          const updatePayload: Record<string, any> = {
+            name: staffName,
+            display_name: staffName,
+            password: staffPassword,
+            role: staffRole,
+            status: 'active',
+            is_active: insertData.is_active,
+            is_blocked: insertData.is_blocked,
+            updated_at: nowIso,
+          };
+
+          let { error: updateErr } = await supabase
             .from('staff_members')
-            .update({
-              name: staffName,
-              display_name: staffName,
-              password: staffPassword,
-              role: staffRole,
-              status: 'active',
-              is_active: insertData.is_active,
-              is_blocked: insertData.is_blocked,
-              updated_at: nowIso,
-            })
+            .update(updatePayload)
             .eq('email', staffEmail);
+
+          if (updateErr && (updateErr.message?.includes('display_name') || updateErr.code === '42703')) {
+            delete updatePayload.display_name;
+            const retryRes = await supabase
+              .from('staff_members')
+              .update(updatePayload)
+              .eq('email', staffEmail);
+            updateErr = retryRes.error;
+          }
 
           if (updateErr) {
             console.warn('[createStaffMember] Fallback update failed:', updateErr.message);

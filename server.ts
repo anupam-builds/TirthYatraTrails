@@ -76,8 +76,10 @@ export const withTimeout = <T>(promise: PromiseLike<T>, ms: number = 2500): Prom
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-// Initialize database non-blocking for serverless warm start
-db.init().catch((err) => console.warn('DB init warning:', err));
+// Initialize database and synchronize auth users into staff_members non-blocking
+db.init()
+  .then(() => syncAuthUsersToStaffMembers().catch(() => {}))
+  .catch((err) => console.warn('DB init warning:', err));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -1070,6 +1072,75 @@ app.post('/api/admin/staff', async (req, res) => {
   }
 });
 
+// Safe Backfill: Pull existing users from auth.users into public.staff_members without column mismatch errors
+export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; total: number }> {
+  try {
+    const { data: userListData, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
+    if (listErr || !userListData?.users) {
+      console.warn('[syncAuthUsersToStaffMembers] Notice listing auth users:', listErr?.message);
+      return { synced: 0, total: 0 };
+    }
+
+    const users = userListData.users;
+    let syncedCount = 0;
+
+    for (const u of users) {
+      if (!u.email) continue;
+      const cleanEmail = u.email.trim().toLowerCase();
+      const meta = u.user_metadata || (u as any).raw_user_meta_data || {};
+      const displayName = String(meta.full_name || meta.name || meta.display_name || cleanEmail.split('@')[0]).trim();
+      const role = String(meta.role || (meta.is_admin ? 'admin' : 'staff')).toLowerCase();
+
+      const staffPayload: Record<string, any> = {
+        id: u.id,
+        email: cleanEmail,
+        name: displayName,
+        display_name: displayName,
+        role: role,
+        status: 'active',
+        is_active: true,
+        is_blocked: false,
+      };
+
+      // Try upserting with display_name, fallback without if column not yet added in remote Postgres
+      let { error: upsertErr } = await supabaseAdmin
+        .from('staff_members')
+        .upsert(staffPayload, { onConflict: 'id' });
+
+      if (upsertErr && (upsertErr.message?.includes('display_name') || upsertErr.code === '42703')) {
+        const { display_name, ...payloadWithoutDisplayName } = staffPayload;
+        const fallbackRes = await supabaseAdmin
+          .from('staff_members')
+          .upsert(payloadWithoutDisplayName, { onConflict: 'id' });
+        upsertErr = fallbackRes.error;
+      }
+
+      if (!upsertErr) {
+        syncedCount++;
+      }
+    }
+
+    console.log(`[syncAuthUsersToStaffMembers] Successfully synced ${syncedCount}/${users.length} auth users to public.staff_members.`);
+    return { synced: syncedCount, total: users.length };
+  } catch (err: any) {
+    console.warn('[syncAuthUsersToStaffMembers] Exception during sync:', err?.message || err);
+    return { synced: 0, total: 0 };
+  }
+}
+
+app.post('/api/admin/staff/sync', async (_req, res) => {
+  try {
+    const result = await syncAuthUsersToStaffMembers();
+    return res.json({
+      success: true,
+      message: `Successfully synchronized ${result.synced}/${result.total} Supabase Auth users into public.staff_members.`,
+      ...result,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to sync staff members' });
+  }
+});
+
 // ===================== DEDICATED ADMIN PROVISIONING & CREDENTIAL SYSTEM =====================
 app.post(['/api/admin/provision-user', '/api/admin/rpc/provision_admin'], async (req, res) => {
   // 1. ENV CHECK:
@@ -1372,6 +1443,12 @@ app.get('/api/admin/schema/sql', (req, res) => {
     const leadsSoftDeletePath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261013_leads_soft_delete_schema.sql');
 
     const roomsMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261031_hotel_rooms_and_rates_schema.sql');
+    const staffMigrationPath = path.resolve(process.cwd(), 'supabase', 'migrations', '20261102_staff_members_display_name_and_sync.sql');
+
+    if ((requested === 'staff' || requested === 'staff_members') && fs.existsSync(staffMigrationPath)) {
+      res.setHeader('Content-Type', 'text/plain');
+      return res.send(fs.readFileSync(staffMigrationPath, 'utf8'));
+    }
 
     if ((requested === 'hotel_rooms' || requested === 'rooms') && fs.existsSync(roomsMigrationPath)) {
       res.setHeader('Content-Type', 'text/plain');
@@ -1396,6 +1473,9 @@ app.get('/api/admin/schema/sql', (req, res) => {
     }
 
     let combinedSql = '';
+    if (fs.existsSync(staffMigrationPath)) {
+      combinedSql += fs.readFileSync(staffMigrationPath, 'utf8') + '\n\n';
+    }
     if (fs.existsSync(roomsMigrationPath)) {
       combinedSql += fs.readFileSync(roomsMigrationPath, 'utf8') + '\n\n';
     }
