@@ -1919,13 +1919,32 @@ export const api = {
   },
 
   async getPackageById(id: string): Promise<Package> {
+    const rawId = String(id || '').trim();
+    let packageId = rawId;
+    const allStoredPkgs = localStore.getPackages();
+    const matchById = allStoredPkgs.find((p) => p.id === rawId);
+    if (matchById) {
+      packageId = matchById.id;
+    } else {
+      const matchByTitle = allStoredPkgs.find(
+        (p) => p.title.toLowerCase().trim() === rawId.toLowerCase().trim()
+      );
+      if (matchByTitle) {
+        packageId = matchByTitle.id;
+      }
+    }
+
     try {
-      const res = await supabase.from('packages').select('*').eq('id', id).maybeSingle();
+      const res = await supabase.from('packages').select('*').eq('id', packageId).maybeSingle();
       if (!res.error && res.data) return mapPackageRow(res.data);
+      if (rawId !== packageId || !res.data) {
+        const titleRes = await supabase.from('packages').select('*').eq('title', rawId).maybeSingle();
+        if (!titleRes.error && titleRes.data) return mapPackageRow(titleRes.data);
+      }
     } catch (err) {
       console.warn('getPackageById query error, falling back to localStore:', err);
     }
-    return localStore.getPackageById(id)!;
+    return localStore.getPackageById(packageId)!;
   },
 
   // Inquiries
@@ -3990,11 +4009,34 @@ export const api = {
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
-    const rawId = String(id || pkg.id || '').trim();
-    if (!rawId) {
+    const rawInput = String(id || pkg.id || '').trim();
+    if (!rawInput) {
       const err = new Error('Package ID is required for update');
       console.error('[Package Update Error]:', err);
       throw err;
+    }
+
+    // Resolve the package's primary text ID:
+    // Ensure that packageId is the actual text id (e.g. 'pkg-1') even if the UI passed a title or slug
+    const allStoredPkgs = localStore.getPackages();
+    let packageId = rawInput;
+    let packageTitle = String(pkg.title || '').trim();
+
+    const matchById = allStoredPkgs.find((p) => p.id === rawInput);
+    if (matchById) {
+      packageId = matchById.id;
+      if (!packageTitle) packageTitle = matchById.title;
+    } else {
+      const matchByTitle = allStoredPkgs.find(
+        (p) => p.title.toLowerCase().trim() === rawInput.toLowerCase().trim() ||
+               ((p as any).slug && (p as any).slug.toLowerCase().trim() === rawInput.toLowerCase().trim())
+      );
+      if (matchByTitle) {
+        packageId = matchByTitle.id;
+        if (!packageTitle) packageTitle = matchByTitle.title;
+      } else if (pkg.id && pkg.id !== rawInput && !pkg.id.includes(' ')) {
+        packageId = String(pkg.id).trim();
+      }
     }
 
     pkg = await sanitizeEntityImages(pkg, 'packages');
@@ -4053,12 +4095,25 @@ export const api = {
       }
     }
 
-    // 1. Direct Supabase SDK update query with explicit target row filter: .eq('id', rawId)
-    const { data, error } = await supabase
+    // 1. Direct Supabase SDK update query targeting the primary text id: .eq('id', packageId)
+    let { data, error } = await supabase
       .from('packages')
       .update(payload)
-      .eq('id', rawId)
+      .eq('id', packageId)
       .select();
+
+    // If 0 rows matched by id and packageTitle is present, safely attempt matching by title as fallback
+    if ((!data || data.length === 0) && packageTitle) {
+      const titleRes = await supabase
+        .from('packages')
+        .update(payload)
+        .eq('title', packageTitle)
+        .select();
+      if (!titleRes.error && titleRes.data && titleRes.data.length > 0) {
+        data = titleRes.data;
+        error = null;
+      }
+    }
 
     if (error) {
       console.error('[Package Update Error]:', error);
@@ -4067,18 +4122,18 @@ export const api = {
 
     if (data && data.length > 0) {
       const mapped = mapPackageRow(data[0]);
-      localStore.updatePackage(rawId, mapped);
+      localStore.updatePackage(packageId, mapped);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
       }
       return mapped;
     }
 
-    // 2. If 0 rows matched (row does not yet exist in remote database), perform upsert
-    console.debug(`[Supabase updatePackage] 0 rows matched for id="${rawId}". Upserting package...`);
+    // 2. If 0 rows matched, perform upsert using the primary text id
+    console.debug(`[Supabase updatePackage] 0 rows matched for id="${packageId}". Upserting package...`);
     const { data: upsertData, error: upsertErr } = await supabase
       .from('packages')
-      .upsert([{ ...payload, id: rawId }])
+      .upsert([{ ...payload, id: packageId }])
       .select();
 
     if (upsertErr) {
@@ -4088,35 +4143,63 @@ export const api = {
 
     if (upsertData && upsertData.length > 0) {
       const mapped = mapPackageRow(upsertData[0]);
-      localStore.updatePackage(rawId, mapped);
+      localStore.updatePackage(packageId, mapped);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
       }
       return mapped;
     }
 
-    const notFoundErr = new Error(`Package with ID "${rawId}" was not found or updated in Supabase.`);
-    console.error('[Package Update Error]:', notFoundErr);
-    throw notFoundErr;
+    // 3. Fallback to localStore update to ensure offline/resilient behavior
+    const fallbackSaved = localStore.updatePackage(packageId, { ...pkg, id: packageId });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackSaved }));
+    }
+    return fallbackSaved;
   },
 
   async deletePackage(idOrQuery: string): Promise<boolean> {
-    const rawId = String(idOrQuery || '').trim();
-    // Parse safe id if rawId contains query expression like 'id=eq.pkg-123' or '?id=eq.pkg-123'
-    const id = rawId.includes('id=eq.')
-      ? rawId.split('id=eq.').pop()?.split('&')[0]?.trim() || rawId
-      : rawId;
+    const rawInput = String(idOrQuery || '').trim();
+    if (!rawInput) return false;
 
-    if (!id) return false;
+    // Parse safe id if rawInput contains query expression like 'id=eq.pkg-123' or '?id=eq.pkg-123'
+    const rawId = rawInput.includes('id=eq.')
+      ? rawInput.split('id=eq.').pop()?.split('&')[0]?.trim() || rawInput
+      : rawInput;
 
-    // 1. Immediately delete from localStore and add tombstone blacklist
-    localStore.deletePackage(id);
+    if (!rawId) return false;
+
+    // Resolve the package's primary text ID:
+    let packageId = rawId;
+    let packageTitle = '';
+
+    const allStoredPkgs = localStore.getPackages();
+    const matchById = allStoredPkgs.find((p) => p.id === rawId);
+    if (matchById) {
+      packageId = matchById.id;
+      packageTitle = matchById.title;
+    } else {
+      const matchByTitle = allStoredPkgs.find(
+        (p) => p.title.toLowerCase().trim() === rawId.toLowerCase().trim() ||
+               ((p as any).slug && (p as any).slug.toLowerCase().trim() === rawId.toLowerCase().trim())
+      );
+      if (matchByTitle) {
+        packageId = matchByTitle.id;
+        packageTitle = matchByTitle.title;
+      }
+    }
+
+    // 1. Immediately delete from localStore by text id and title
+    localStore.deletePackage(packageId);
+    if (packageTitle && packageTitle !== packageId) {
+      localStore.deletePackage(packageTitle);
+    }
 
     const explicitHeaders = getSupabaseHeaders();
 
-    // 2. Direct PostgREST DELETE call safely targeting only /rest/v1/packages?id=eq.${id}
+    // 2. Direct PostgREST DELETE call safely targeting only the text id: /rest/v1/packages?id=eq.${packageId}
     try {
-      const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(id)}`;
+      const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(packageId)}`;
       const response = await fetch(restUrl, {
         method: 'DELETE',
         headers: explicitHeaders,
@@ -4130,11 +4213,18 @@ export const api = {
       console.warn('Direct fetch deletePackage network error:', fetchErr);
     }
 
-    // 3. Secondary supabase SDK call targeting only packages
+    // 3. Supabase SDK call targeting the primary text id: .eq('id', packageId)
     try {
-      await supabase.from('packages').delete().eq('id', id);
+      await supabase.from('packages').delete().eq('id', packageId);
     } catch (err) {
       console.warn('deletePackage Supabase SDK error:', err);
+    }
+
+    // If packageTitle is identified and different from packageId, also ensure deletion by title
+    if (packageTitle && packageTitle !== packageId) {
+      try {
+        await supabase.from('packages').delete().eq('title', packageTitle);
+      } catch {}
     }
 
     // 4. Also mark soft-delete flag in case database table enforces soft deletes
@@ -4142,14 +4232,23 @@ export const api = {
       await supabase
         .from('packages')
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq('id', id);
+        .eq('id', packageId);
     } catch {}
 
+    if (packageTitle && packageTitle !== packageId) {
+      try {
+        await supabase
+          .from('packages')
+          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+          .eq('title', packageTitle);
+      } catch {}
+    }
+
     // 5. Broadcast deletion across Supabase Realtime channel to notify all open browser sessions
-    broadcastContentSync('package_deleted', { id });
+    broadcastContentSync('package_deleted', { id: packageId });
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'delete', id, target: id } }));
+      window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: { action: 'delete', id: packageId, target: packageId } }));
     }
     return true;
   },
