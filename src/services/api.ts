@@ -4031,120 +4031,124 @@ export const api = {
       }
     }
 
-    // 2. Payload Sanitization & Type Safety:
+    // 2. Strict Payload Whitelisting & Sanitization:
+    // Construct cleanPayload containing ONLY valid columns from the packages table schema:
+    // (title, destination, duration, starting_price, image_url, category, max_group_size, rating,
+    // highlights, itinerary, cancellation_policy, experience_level, package_type, hotels_level,
+    // transfers, gallery_images, location, overview)
     pkg = await sanitizeEntityImages(pkg, 'packages');
-    const rawRow = packageToRow(pkg);
+    const rawData = { ...(pkg as any) };
 
-    // Whitelist only verified columns on public.packages to prevent 400 Bad Request
-    const ALLOWED_PACKAGE_COLUMNS: readonly string[] = [
-      'title',
-      'location',
-      'duration',
-      'booked_rank',
-      'image_url',
-      'gallery_images',
-      'starting_price',
-      'overview',
-      'highlights',
-      'cancellation_policy',
-      'category',
-      'package_type',
-      'experience_level',
-      'hotels_level',
-      'transfers',
-      'itinerary',
-      'inclusions',
-      'exclusions',
-      'quick_summary',
-      'is_published',
-      'max_group_size',
-      'rating',
-    ];
-
-    const cleanedPayload: Record<string, any> = {};
-    for (const key of ALLOWED_PACKAGE_COLUMNS) {
-      if (rawRow[key] !== undefined) {
-        cleanedPayload[key] = rawRow[key];
-      }
-    }
-
-    // Strip out read-only fields or primary key conflicts
-    delete cleanedPayload.id;
-    delete cleanedPayload.created_at;
-    delete (cleanedPayload as any).createdAt;
-    delete (cleanedPayload as any).updated_at;
-    delete (cleanedPayload as any).updatedAt;
-    delete (cleanedPayload as any)._id;
-
-    // Ensure numeric fields are numbers
-    if (cleanedPayload.starting_price !== undefined) {
-      const pNum = Number(cleanedPayload.starting_price);
-      cleanedPayload.starting_price = !isNaN(pNum) ? Math.max(0, Math.round(pNum)) : 0;
-    }
-    if (cleanedPayload.max_group_size !== undefined) {
-      const gNum = Number(cleanedPayload.max_group_size);
-      cleanedPayload.max_group_size = !isNaN(gNum) ? Math.max(1, Math.round(gNum)) : 12;
-    }
-    if (cleanedPayload.rating !== undefined) {
-      const rNum = Number(cleanedPayload.rating);
-      cleanedPayload.rating = !isNaN(rNum) ? Math.max(1, Math.min(5, Math.round(rNum * 10) / 10)) : 5;
-    }
-
-    // Ensure highlights is an array of strings
-    if (cleanedPayload.highlights !== undefined) {
-      if (typeof cleanedPayload.highlights === 'string') {
-        try {
-          const parsed = JSON.parse(cleanedPayload.highlights);
-          cleanedPayload.highlights = Array.isArray(parsed) ? parsed : [cleanedPayload.highlights];
-        } catch {
-          cleanedPayload.highlights = cleanedPayload.highlights.split(',').map((s: string) => s.trim()).filter(Boolean);
-        }
-      }
-      if (Array.isArray(cleanedPayload.highlights)) {
-        cleanedPayload.highlights = cleanedPayload.highlights.map((s: any) => String(s).trim()).filter(Boolean);
-      } else {
-        cleanedPayload.highlights = [];
-      }
-    }
-
-    // Ensure JSONB array fields are native arrays and valid JSON
-    for (const arrField of ['gallery_images', 'itinerary', 'inclusions', 'exclusions', 'quick_summary'] as const) {
-      if (cleanedPayload[arrField] !== undefined) {
-        if (typeof cleanedPayload[arrField] === 'string') {
-          try {
-            cleanedPayload[arrField] = JSON.parse(cleanedPayload[arrField]);
-          } catch {
-            cleanedPayload[arrField] = [];
-          }
-        }
-        if (!Array.isArray(cleanedPayload[arrField])) {
-          cleanedPayload[arrField] = cleanedPayload[arrField] ? [cleanedPayload[arrField]] : [];
-        }
-      }
-    }
-
-    // Ensure transfers is properly formatted as string or object
-    if (cleanedPayload.transfers !== undefined && typeof cleanedPayload.transfers !== 'string') {
+    // Format highlights to array
+    let sanitizedHighlights = rawData.highlights;
+    if (typeof sanitizedHighlights === 'string') {
       try {
-        cleanedPayload.transfers = JSON.stringify(cleanedPayload.transfers);
+        const parsed = JSON.parse(sanitizedHighlights);
+        sanitizedHighlights = Array.isArray(parsed) ? parsed : [sanitizedHighlights];
       } catch {
-        cleanedPayload.transfers = 'Private AC Coach';
+        sanitizedHighlights = sanitizedHighlights.split(',').map((s: string) => s.trim()).filter(Boolean);
       }
+    }
+    if (Array.isArray(sanitizedHighlights)) {
+      sanitizedHighlights = sanitizedHighlights.map((s: any) => String(s).trim()).filter(Boolean);
+    } else if (sanitizedHighlights === undefined) {
+      sanitizedHighlights = undefined;
+    } else {
+      sanitizedHighlights = [];
     }
 
-    // Strip any remaining undefined keys
-    for (const k of Object.keys(cleanedPayload)) {
-      if (cleanedPayload[k] === undefined) {
-        delete cleanedPayload[k];
-      }
+    // Format itinerary to array
+    let sanitizedItinerary = rawData.itinerary;
+    if (typeof sanitizedItinerary === 'string') {
+      try { sanitizedItinerary = JSON.parse(sanitizedItinerary); } catch { sanitizedItinerary = []; }
     }
+    if (sanitizedItinerary !== undefined && !Array.isArray(sanitizedItinerary)) {
+      sanitizedItinerary = [sanitizedItinerary];
+    }
+
+    // Format gallery_images to array
+    let sanitizedGallery = rawData.gallery_images || rawData.galleryImages;
+    if (typeof sanitizedGallery === 'string') {
+      try { sanitizedGallery = JSON.parse(sanitizedGallery); } catch { sanitizedGallery = []; }
+    }
+    if (sanitizedGallery !== undefined && !Array.isArray(sanitizedGallery)) {
+      sanitizedGallery = [sanitizedGallery];
+    }
+
+    // Format transfers
+    let sanitizedTransfers = rawData.transfers;
+    if (typeof sanitizedTransfers === 'string') {
+      try {
+        const parsed = JSON.parse(sanitizedTransfers);
+        sanitizedTransfers = parsed;
+      } catch {}
+    }
+
+    const cleanPayload: Record<string, any> = {
+      title: rawData.title,
+      destination: rawData.destination || rawData.location,
+      duration: rawData.duration,
+      starting_price: rawData.starting_price !== undefined
+        ? Number(rawData.starting_price)
+        : (rawData.startingPrice !== undefined ? Number(rawData.startingPrice) : 0),
+      image_url: rawData.image_url || rawData.imageUrl || rawData.image,
+      category: rawData.category,
+      max_group_size: rawData.max_group_size !== undefined
+        ? (rawData.max_group_size !== null ? Number(rawData.max_group_size) : null)
+        : (rawData.maxGroupSize !== undefined ? (rawData.maxGroupSize !== null ? Number(rawData.maxGroupSize) : null) : null),
+      rating: rawData.rating !== undefined
+        ? (rawData.rating !== null ? Number(rawData.rating) : null)
+        : null,
+      highlights: sanitizedHighlights,
+      itinerary: sanitizedItinerary,
+      cancellation_policy: rawData.cancellation_policy || rawData.cancellationPolicy,
+      experience_level: rawData.experience_level || rawData.experienceLevel,
+      package_type: rawData.package_type || rawData.packageType,
+      hotels_level: rawData.hotels_level || rawData.hotelsLevel,
+      transfers: sanitizedTransfers,
+      gallery_images: sanitizedGallery,
+      location: rawData.location || rawData.destination,
+      overview: rawData.overview,
+    };
+
+    // Explicitly delete or omit any extra UI-only state flags or read-only properties
+    delete (cleanPayload as any).id;
+    delete (cleanPayload as any).created_at;
+    delete (cleanPayload as any).updated_at;
+    delete (cleanPayload as any).isEditing;
+    delete (cleanPayload as any).localId;
+    delete (cleanPayload as any).selected;
+    delete (cleanPayload as any).ui_state;
+
+    // Remove undefined keys
+    Object.keys(cleanPayload).forEach((key) => {
+      if (cleanPayload[key] === undefined) {
+        delete cleanPayload[key];
+      }
+    });
 
     // Strictly filter by .eq('id', targetId) - never by title
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('packages')
-      .update(cleanedPayload)
+      .update(cleanPayload)
       .eq('id', targetId)
       .select();
+
+    // If an error indicates a column does not exist on the table, strip it and retry
+    if (error && (error.code === '42703' || error.message?.includes('column'))) {
+      const match = error.message.match(/column "([^"]+)"|'([^']+)' column/i);
+      const missingCol = match ? (match[1] || match[2]) : null;
+      if (missingCol && missingCol in cleanPayload) {
+        delete cleanPayload[missingCol];
+        const retryRes = await supabase
+          .from('packages')
+          .update(cleanPayload)
+          .eq('id', targetId)
+          .select();
+        data = retryRes.data;
+        error = retryRes.error;
+      }
+    }
 
     if (error) {
       console.error('[Package Update Error]:', error);
@@ -4158,7 +4162,7 @@ export const api = {
       console.debug(`[Supabase updatePackage] 0 rows matched for id="${targetId}". Upserting package...`);
       const { data: upsertData, error: upsertErr } = await supabase
         .from('packages')
-        .upsert([{ ...cleanedPayload, id: targetId }])
+        .upsert([{ ...cleanPayload, id: targetId }])
         .select();
 
       if (!upsertErr && upsertData && upsertData.length > 0) {
@@ -4176,7 +4180,7 @@ export const api = {
     }
 
     // Fallback to localStore update to ensure resilient offline behavior
-    const fallbackSaved = localStore.updatePackage(targetId, { ...pkg, id: targetId });
+    const fallbackSaved = localStore.updatePackage(targetId, { ...pkg, ...cleanPayload, id: targetId });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackSaved }));
     }
