@@ -4116,9 +4116,12 @@ export const api = {
     delete (cleanPayload as any).created_at;
     delete (cleanPayload as any).updated_at;
     delete (cleanPayload as any).isEditing;
+    delete (cleanPayload as any).isSelected;
+    delete (cleanPayload as any).localKey;
     delete (cleanPayload as any).localId;
     delete (cleanPayload as any).selected;
     delete (cleanPayload as any).ui_state;
+    delete (cleanPayload as any)._id;
 
     // Remove undefined keys
     Object.keys(cleanPayload).forEach((key) => {
@@ -4151,7 +4154,7 @@ export const api = {
     }
 
     if (error) {
-      console.error('[Package Update Error]:', error);
+      console.error("Supabase Package Update Error:", error.message, (error as any).details, (error as any).hint);
       throw error;
     }
 
@@ -6578,3 +6581,4 @@ export function generateWhatsAppLink(details: any) {
 
 export const deleteStaffMember = api.deleteStaffMember;
 export const createStaffMember = api.createStaffMember;
+export const updatePackage = api.updatePackage;
