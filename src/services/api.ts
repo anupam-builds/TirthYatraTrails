@@ -4512,6 +4512,20 @@ export const api = {
   },
 
   async updateReview(id: string, rev: Partial<Review>): Promise<Review> {
+    const cleanId = String(id || '').trim();
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    const isLocalOrTempId = !cleanId || !isUUID || cleanId.startsWith('rev-') || cleanId.startsWith('temp-') || cleanId.startsWith('local-');
+
+    // If the item is a local-only record or has a temporary/local ID that doesn't exist remotely,
+    // automatically bypass the remote sync attempt and update it safely in localStore.
+    if (isLocalOrTempId) {
+      const saved = localStore.updateReview(cleanId, rev);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: saved } }));
+      }
+      return saved;
+    }
+
     const rawPayload = reviewToRow(rev);
     const { id: _ignoredId, ...payload } = rawPayload;
 
@@ -4522,8 +4536,76 @@ export const api = {
 
     const explicitHeaders = getSupabaseHeaders();
 
+    // Check if the record exists on the remote database (Supabase) before executing remote PATCH or PUT
+    let remoteExists = false;
     try {
-      const restUrl = `${SUPABASE_URL}/rest/v1/reviews?id=eq.${encodeURIComponent(id)}`;
+      const { data: existingRemote, error: checkErr } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('id', cleanId)
+        .maybeSingle();
+
+      if (!checkErr && existingRemote) {
+        remoteExists = true;
+      }
+    } catch (checkErr) {
+      console.debug('Error checking remote review existence:', checkErr);
+    }
+
+    // If item doesn't exist remotely, perform an UPSERT instead of strict update so it creates the missing row
+    if (!remoteExists) {
+      try {
+        const fullUpsertPayload: Record<string, any> = {
+          id: cleanId,
+          ...payload,
+        };
+        if (!fullUpsertPayload.author_name) fullUpsertPayload.author_name = rev.authorName || 'Pilgrim';
+        if (!fullUpsertPayload.review_text) fullUpsertPayload.review_text = rev.reviewText || (rev as any).comment || '';
+        if (fullUpsertPayload.rating === undefined) fullUpsertPayload.rating = 5;
+
+        const { data: upsertData, error: upsertErr } = await supabase
+          .from('reviews')
+          .upsert(fullUpsertPayload, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
+
+        if (!upsertErr && upsertData) {
+          const mapped = mapReviewRow(upsertData);
+          localStore.updateReview(cleanId, mapped);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
+          }
+          return mapped;
+        }
+      } catch (upsertEx) {
+        console.debug('Remote review upsert exception, falling back to localStore:', upsertEx);
+      }
+
+      // Safe fallback to localStore
+      const saved = localStore.updateReview(cleanId, rev);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: saved } }));
+      }
+      return saved;
+    }
+
+    // Remote record exists: execute remote PATCH or SDK update
+    try {
+      const { data, error } = await supabase.from('reviews').update(payload).eq('id', cleanId).select().maybeSingle();
+      if (!error && data) {
+        const mapped = mapReviewRow(data);
+        localStore.updateReview(cleanId, mapped);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
+        }
+        return mapped;
+      }
+    } catch (sdkErr) {
+      console.warn('Supabase SDK updateReview error:', sdkErr);
+    }
+
+    try {
+      const restUrl = `${SUPABASE_URL}/rest/v1/reviews?id=eq.${encodeURIComponent(cleanId)}`;
       const response = await fetch(restUrl, {
         method: 'PATCH',
         headers: explicitHeaders,
@@ -4534,7 +4616,7 @@ export const api = {
         const row = Array.isArray(data) ? data[0] : data;
         if (row) {
           const mapped = mapReviewRow(row);
-          localStore.updateReview(id, mapped);
+          localStore.updateReview(cleanId, mapped);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
           }
@@ -4546,24 +4628,15 @@ export const api = {
     }
 
     try {
-      const { data, error } = await supabase.from('reviews').update(payload).eq('id', id).select().maybeSingle();
-      if (!error && data) {
-        const mapped = mapReviewRow(data);
-        localStore.updateReview(id, mapped);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
-        }
-        return mapped;
-      }
       const restRes = await supabaseRest<any[]>('reviews', {
         method: 'PATCH',
         headers: explicitHeaders,
-        params: { id: `eq.${id}` },
+        params: { id: `eq.${cleanId}` },
         body: payload,
       });
       if (restRes.data && restRes.data.length > 0) {
         const mapped = mapReviewRow(restRes.data[0]);
-        localStore.updateReview(id, mapped);
+        localStore.updateReview(cleanId, mapped);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: mapped } }));
         }
@@ -4572,7 +4645,8 @@ export const api = {
     } catch (err) {
       console.warn('updateReview remote error, falling back to localStore', err);
     }
-    const saved = localStore.updateReview(id, rev);
+
+    const saved = localStore.updateReview(cleanId, rev);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-review-changed', { detail: { action: 'update', review: saved } }));
     }
@@ -5076,23 +5150,43 @@ export const api = {
   },
 
   async updateTravelStory(id: string, story: Partial<TravelStory>): Promise<TravelStory> {
+    const cleanId = String(id || '').trim();
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    const isLocalOrTempId = !cleanId || !isUUID || cleanId.startsWith('story-') || cleanId.startsWith('temp-') || cleanId.startsWith('local-');
+
     const payload: Record<string, any> = {};
     if (story.title !== undefined) payload.title = story.title;
     if (story.content !== undefined) payload.content = story.content;
     if (story.excerpt !== undefined) payload.excerpt = story.excerpt;
     if (story.isPublished !== undefined) payload.is_published = story.isPublished;
     if (story.likesCount !== undefined) payload.likes_count = story.likesCount;
+
+    if (isLocalOrTempId) {
+      return { ...story, id: cleanId } as TravelStory;
+    }
+
     try {
-      const { data, error } = await supabase.from('travel_stories').update(payload).eq('id', id).select().maybeSingle();
+      const { data: remoteData } = await supabase.from('travel_stories').select('id').eq('id', cleanId).maybeSingle();
+      if (!remoteData) {
+        const { data: upsertData, error: upsertErr } = await supabase
+          .from('travel_stories')
+          .upsert({ id: cleanId, ...payload }, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
+        if (!upsertErr && upsertData) return mapTravelStoryRow(upsertData);
+        return { ...story, id: cleanId } as TravelStory;
+      }
+
+      const { data, error } = await supabase.from('travel_stories').update(payload).eq('id', cleanId).select().maybeSingle();
       if (!error && data) return mapTravelStoryRow(data);
       const restRes = await supabaseRest<any[]>('travel_stories', {
         method: 'PATCH',
-        params: { id: `eq.${id}` },
+        params: { id: `eq.${cleanId}` },
         body: payload,
       });
       if (restRes.data && restRes.data.length > 0) return mapTravelStoryRow(restRes.data[0]);
     } catch {}
-    return { ...story, id } as TravelStory;
+    return { ...story, id: cleanId } as TravelStory;
   },
 
   async deleteTravelStory(id: string): Promise<boolean> {

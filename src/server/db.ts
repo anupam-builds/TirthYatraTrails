@@ -1860,7 +1860,7 @@ class DatabaseStore {
       authorName.split(' ').map((n) => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'TT';
 
     const newReview: Review = {
-      id: `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: (reviewData as any).id || `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       authorName: authorName,
       authorLocation: reviewData.authorLocation || 'Sacred Dham',
       authorInitials: computedInitials,
@@ -1886,7 +1886,10 @@ class DatabaseStore {
   public updateReview(id: string, updateData: Partial<Review>) {
     if (!this.data.reviews) this.data.reviews = [];
     const index = this.data.reviews.findIndex((r) => r.id === id);
-    if (index === -1) throw new Error('Review not found');
+    if (index === -1) {
+      // Gracefully upsert/create if review does not exist yet
+      return this.createReview({ ...updateData, id } as any);
+    }
 
     const existing = this.data.reviews[index];
     const authorName = updateData.authorName !== undefined ? updateData.authorName : existing.authorName;
@@ -1918,7 +1921,9 @@ class DatabaseStore {
   public toggleReviewFeatured(id: string) {
     if (!this.data.reviews) this.data.reviews = [];
     const index = this.data.reviews.findIndex((r) => r.id === id);
-    if (index === -1) throw new Error('Review not found');
+    if (index === -1) {
+      return this.updateReview(id, { isFeatured: true });
+    }
     this.data.reviews[index].isFeatured = !this.data.reviews[index].isFeatured;
     this.data.reviews[index].updatedAt = new Date().toISOString();
     this.save();

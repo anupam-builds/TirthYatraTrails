@@ -1471,7 +1471,10 @@ export const localStore = {
   updateReview(id: string, updateData: Partial<Review>): Review {
     const reviews = this.getReviews();
     const idx = reviews.findIndex((r) => r.id === id);
-    if (idx === -1) throw new Error('Review not found');
+    if (idx === -1) {
+      // Gracefully upsert/create if review does not exist locally yet
+      return this.createReview({ ...updateData, id });
+    }
     const existing = reviews[idx];
     const authorName = updateData.authorName !== undefined ? updateData.authorName : existing.authorName;
     const computedInitials =
@@ -1501,7 +1504,9 @@ export const localStore = {
   toggleReviewFeatured(id: string): Review {
     const reviews = this.getReviews();
     const idx = reviews.findIndex((r) => r.id === id);
-    if (idx === -1) throw new Error('Review not found');
+    if (idx === -1) {
+      return this.updateReview(id, { isFeatured: true });
+    }
     reviews[idx].isFeatured = !reviews[idx].isFeatured;
     reviews[idx].updatedAt = new Date().toISOString();
     setStored(STORAGE_KEYS.REVIEWS, reviews);
