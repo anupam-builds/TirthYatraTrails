@@ -449,9 +449,6 @@ export const AdminPackages: React.FC = () => {
     // 3. Persist deletion to backend and local storage
     try {
       await api.deletePackage(id);
-      if (pTitle && pTitle !== id) {
-        api.deletePackage(pTitle).catch(() => {});
-      }
     } catch (err: any) {
       console.error('Failed to delete package', err);
       setToast({

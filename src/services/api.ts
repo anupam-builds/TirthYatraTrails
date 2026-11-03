@@ -4009,9 +4009,9 @@ export const api = {
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
-    // 1. Standardize Package Update Query Identifier:
+    // 1. Enforce Primary Key Filtering ('id'):
     // Consistently target the unique primary key column ('id') using the actual unique ID value (pkg.id or id)
-    // rather than accidentally falling back to the title or package name string when a UUID is missing.
+    // and NEVER fallback to filtering by title or human-readable name strings.
     const packageId = String(pkg.id || id || '').trim();
     if (!packageId) {
       const err = new Error('Package ID is required for update');
@@ -4019,7 +4019,6 @@ export const api = {
       throw err;
     }
 
-    // Resolve to the unique record ID if a title was accidentally passed
     let targetId = packageId;
     const allStoredPkgs = localStore.getPackages();
     const matchById = allStoredPkgs.find((p) => p.id === packageId);
@@ -4032,12 +4031,11 @@ export const api = {
       }
     }
 
-    // 2. Sanitize Update Payload:
-    // Filter out read-only, non-existent, or system fields before sending the PATCH request
+    // 2. Payload Sanitization & Type Safety:
     pkg = await sanitizeEntityImages(pkg, 'packages');
     const rawRow = packageToRow(pkg);
 
-    // Whitelist only verified writable columns on public.packages table to prevent 400 Bad Request
+    // Whitelist only verified columns on public.packages to prevent 400 Bad Request
     const ALLOWED_PACKAGE_COLUMNS: readonly string[] = [
       'title',
       'location',
@@ -4059,6 +4057,8 @@ export const api = {
       'exclusions',
       'quick_summary',
       'is_published',
+      'max_group_size',
+      'rating',
     ];
 
     const cleanedPayload: Record<string, any> = {};
@@ -4068,13 +4068,29 @@ export const api = {
       }
     }
 
-    // Ensure starting_price is an integer
+    // Strip out read-only fields or primary key conflicts
+    delete cleanedPayload.id;
+    delete cleanedPayload.created_at;
+    delete (cleanedPayload as any).createdAt;
+    delete (cleanedPayload as any).updated_at;
+    delete (cleanedPayload as any).updatedAt;
+    delete (cleanedPayload as any)._id;
+
+    // Ensure numeric fields are numbers
     if (cleanedPayload.starting_price !== undefined) {
       const pNum = Number(cleanedPayload.starting_price);
       cleanedPayload.starting_price = !isNaN(pNum) ? Math.max(0, Math.round(pNum)) : 0;
     }
+    if (cleanedPayload.max_group_size !== undefined) {
+      const gNum = Number(cleanedPayload.max_group_size);
+      cleanedPayload.max_group_size = !isNaN(gNum) ? Math.max(1, Math.round(gNum)) : 12;
+    }
+    if (cleanedPayload.rating !== undefined) {
+      const rNum = Number(cleanedPayload.rating);
+      cleanedPayload.rating = !isNaN(rNum) ? Math.max(1, Math.min(5, Math.round(rNum * 10) / 10)) : 5;
+    }
 
-    // Ensure highlights is an array of non-empty strings
+    // Ensure highlights is an array of strings
     if (cleanedPayload.highlights !== undefined) {
       if (typeof cleanedPayload.highlights === 'string') {
         try {
@@ -4091,7 +4107,7 @@ export const api = {
       }
     }
 
-    // Ensure JSONB/array fields are native arrays and valid JSON
+    // Ensure JSONB array fields are native arrays and valid JSON
     for (const arrField of ['gallery_images', 'itinerary', 'inclusions', 'exclusions', 'quick_summary'] as const) {
       if (cleanedPayload[arrField] !== undefined) {
         if (typeof cleanedPayload[arrField] === 'string') {
@@ -4107,6 +4123,15 @@ export const api = {
       }
     }
 
+    // Ensure transfers is properly formatted as string or object
+    if (cleanedPayload.transfers !== undefined && typeof cleanedPayload.transfers !== 'string') {
+      try {
+        cleanedPayload.transfers = JSON.stringify(cleanedPayload.transfers);
+      } catch {
+        cleanedPayload.transfers = 'Private AC Coach';
+      }
+    }
+
     // Strip any remaining undefined keys
     for (const k of Object.keys(cleanedPayload)) {
       if (cleanedPayload[k] === undefined) {
@@ -4114,7 +4139,7 @@ export const api = {
       }
     }
 
-    // Ensure we always update using the row's unique id, not its title
+    // Strictly filter by .eq('id', targetId) - never by title
     const { data, error } = await supabase
       .from('packages')
       .update(cleanedPayload)
@@ -4123,7 +4148,7 @@ export const api = {
 
     if (error) {
       console.error('[Package Update Error]:', error);
-      throw new Error(error.message || `Failed to update package in Supabase: ${JSON.stringify(error)}`);
+      throw error;
     }
 
     let updatedRow = data && data.length > 0 ? data[0] : null;
@@ -4171,34 +4196,30 @@ export const api = {
 
     // Resolve the package's primary text ID:
     let packageId = rawId;
-    let packageTitle = '';
-
     const allStoredPkgs = localStore.getPackages();
     const matchById = allStoredPkgs.find((p) => p.id === rawId);
-    if (matchById) {
-      packageId = matchById.id;
-      packageTitle = matchById.title;
-    } else {
+    if (!matchById) {
       const matchByTitle = allStoredPkgs.find(
-        (p) => p.title.toLowerCase().trim() === rawId.toLowerCase().trim() ||
-               ((p as any).slug && (p as any).slug.toLowerCase().trim() === rawId.toLowerCase().trim())
+        (p) => p.title.toLowerCase().trim() === rawId.toLowerCase().trim()
       );
-      if (matchByTitle) {
+      if (matchByTitle?.id) {
         packageId = matchByTitle.id;
-        packageTitle = matchByTitle.title;
       }
     }
 
-    // 1. Immediately delete from localStore by text id and title
+    // 1. Immediately delete from localStore by unique primary key ID
     localStore.deletePackage(packageId);
-    if (packageTitle && packageTitle !== packageId) {
-      localStore.deletePackage(packageTitle);
+
+    // 2. Direct Supabase SDK call strictly filtering by .eq('id', packageId)
+    try {
+      await supabase.from('packages').delete().eq('id', packageId);
+    } catch (err) {
+      console.warn('deletePackage Supabase SDK error:', err);
     }
 
-    const explicitHeaders = getSupabaseHeaders();
-
-    // 2. Direct PostgREST DELETE call safely targeting only the text id: /rest/v1/packages?id=eq.${packageId}
+    // 3. Direct PostgREST DELETE call safely targeting only the primary key: /rest/v1/packages?id=eq.${packageId}
     try {
+      const explicitHeaders = getSupabaseHeaders();
       const restUrl = `${SUPABASE_URL}/rest/v1/packages?id=eq.${encodeURIComponent(packageId)}`;
       const response = await fetch(restUrl, {
         method: 'DELETE',
@@ -4207,27 +4228,13 @@ export const api = {
 
       if (!response.ok && response.status !== 404) {
         const errText = await response.text();
-        console.error(`Direct fetch deletePackage failed (${response.status}):`, errText);
+        console.warn(`Direct fetch deletePackage response (${response.status}):`, errText);
       }
     } catch (fetchErr) {
       console.warn('Direct fetch deletePackage network error:', fetchErr);
     }
 
-    // 3. Supabase SDK call targeting the primary text id: .eq('id', packageId)
-    try {
-      await supabase.from('packages').delete().eq('id', packageId);
-    } catch (err) {
-      console.warn('deletePackage Supabase SDK error:', err);
-    }
-
-    // If packageTitle is identified and different from packageId, also ensure deletion by title
-    if (packageTitle && packageTitle !== packageId) {
-      try {
-        await supabase.from('packages').delete().eq('title', packageTitle);
-      } catch {}
-    }
-
-    // 4. Also mark soft-delete flag in case database table enforces soft deletes
+    // 4. Also mark soft-delete flag strictly filtering by .eq('id', packageId)
     try {
       await supabase
         .from('packages')
@@ -4235,16 +4242,7 @@ export const api = {
         .eq('id', packageId);
     } catch {}
 
-    if (packageTitle && packageTitle !== packageId) {
-      try {
-        await supabase
-          .from('packages')
-          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-          .eq('title', packageTitle);
-      } catch {}
-    }
-
-    // 5. Broadcast deletion across Supabase Realtime channel to notify all open browser sessions
+    // 5. Broadcast deletion across Supabase Realtime channel
     broadcastContentSync('package_deleted', { id: packageId });
 
     if (typeof window !== 'undefined') {
