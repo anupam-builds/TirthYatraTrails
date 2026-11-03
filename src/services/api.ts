@@ -4009,149 +4009,149 @@ export const api = {
   },
 
   async updatePackage(id: string, pkg: Partial<Package>): Promise<Package> {
-    const rawInput = String(id || pkg.id || '').trim();
-    if (!rawInput) {
+    // 1. Standardize Package Update Query Identifier:
+    // Consistently target the unique primary key column ('id') using the actual unique ID value (pkg.id or id)
+    // rather than accidentally falling back to the title or package name string when a UUID is missing.
+    const packageId = String(pkg.id || id || '').trim();
+    if (!packageId) {
       const err = new Error('Package ID is required for update');
       console.error('[Package Update Error]:', err);
       throw err;
     }
 
-    // Resolve the package's primary text ID:
-    // Ensure that packageId is the actual text id (e.g. 'pkg-1') even if the UI passed a title or slug
+    // Resolve to the unique record ID if a title was accidentally passed
+    let targetId = packageId;
     const allStoredPkgs = localStore.getPackages();
-    let packageId = rawInput;
-    let packageTitle = String(pkg.title || '').trim();
-
-    const matchById = allStoredPkgs.find((p) => p.id === rawInput);
-    if (matchById) {
-      packageId = matchById.id;
-      if (!packageTitle) packageTitle = matchById.title;
-    } else {
+    const matchById = allStoredPkgs.find((p) => p.id === packageId);
+    if (!matchById) {
       const matchByTitle = allStoredPkgs.find(
-        (p) => p.title.toLowerCase().trim() === rawInput.toLowerCase().trim() ||
-               ((p as any).slug && (p as any).slug.toLowerCase().trim() === rawInput.toLowerCase().trim())
+        (p) => p.title.toLowerCase().trim() === packageId.toLowerCase().trim()
       );
-      if (matchByTitle) {
-        packageId = matchByTitle.id;
-        if (!packageTitle) packageTitle = matchByTitle.title;
-      } else if (pkg.id && pkg.id !== rawInput && !pkg.id.includes(' ')) {
-        packageId = String(pkg.id).trim();
+      if (matchByTitle?.id) {
+        targetId = matchByTitle.id;
       }
     }
 
+    // 2. Sanitize Update Payload:
+    // Filter out read-only, non-existent, or system fields before sending the PATCH request
     pkg = await sanitizeEntityImages(pkg, 'packages');
-    const payload = packageToRow(pkg);
-    delete payload.id;
+    const rawRow = packageToRow(pkg);
 
-    // Explicitly format highlights from comma-separated string or array
-    if (pkg.highlights !== undefined) {
-      if (typeof pkg.highlights === 'string') {
-        payload.highlights = (pkg.highlights as string).split(',').map((s) => s.trim()).filter(Boolean);
-      } else if (Array.isArray(pkg.highlights)) {
-        payload.highlights = pkg.highlights.map((s) => String(s).trim()).filter(Boolean);
+    // Whitelist only verified writable columns on public.packages table to prevent 400 Bad Request
+    const ALLOWED_PACKAGE_COLUMNS: readonly string[] = [
+      'title',
+      'location',
+      'duration',
+      'booked_rank',
+      'image_url',
+      'gallery_images',
+      'starting_price',
+      'overview',
+      'highlights',
+      'cancellation_policy',
+      'category',
+      'package_type',
+      'experience_level',
+      'hotels_level',
+      'transfers',
+      'itinerary',
+      'inclusions',
+      'exclusions',
+      'quick_summary',
+      'is_published',
+    ];
+
+    const cleanedPayload: Record<string, any> = {};
+    for (const key of ALLOWED_PACKAGE_COLUMNS) {
+      if (rawRow[key] !== undefined) {
+        cleanedPayload[key] = rawRow[key];
       }
     }
 
-    // Ensure array/JSONB fields are native arrays
-    if (typeof payload.itinerary === 'string') {
-      try { payload.itinerary = JSON.parse(payload.itinerary); } catch { payload.itinerary = []; }
-    }
-    if (payload.itinerary !== undefined && !Array.isArray(payload.itinerary)) {
-      payload.itinerary = [payload.itinerary];
+    // Ensure starting_price is an integer
+    if (cleanedPayload.starting_price !== undefined) {
+      const pNum = Number(cleanedPayload.starting_price);
+      cleanedPayload.starting_price = !isNaN(pNum) ? Math.max(0, Math.round(pNum)) : 0;
     }
 
-    if (typeof payload.gallery_images === 'string') {
-      try { payload.gallery_images = JSON.parse(payload.gallery_images); } catch { payload.gallery_images = []; }
-    }
-    if (payload.gallery_images !== undefined && !Array.isArray(payload.gallery_images)) {
-      payload.gallery_images = [payload.gallery_images];
-    }
-
-    if (typeof payload.inclusions === 'string') {
-      try { payload.inclusions = JSON.parse(payload.inclusions); } catch { payload.inclusions = []; }
-    }
-    if (payload.inclusions !== undefined && !Array.isArray(payload.inclusions)) {
-      payload.inclusions = [payload.inclusions];
-    }
-
-    if (typeof payload.exclusions === 'string') {
-      try { payload.exclusions = JSON.parse(payload.exclusions); } catch { payload.exclusions = []; }
-    }
-    if (payload.exclusions !== undefined && !Array.isArray(payload.exclusions)) {
-      payload.exclusions = [payload.exclusions];
-    }
-
-    if (typeof payload.quick_summary === 'string') {
-      try { payload.quick_summary = JSON.parse(payload.quick_summary); } catch { payload.quick_summary = []; }
-    }
-    if (payload.quick_summary !== undefined && !Array.isArray(payload.quick_summary)) {
-      payload.quick_summary = [payload.quick_summary];
-    }
-
-    // Strip undefined keys before database call
-    for (const k of Object.keys(payload)) {
-      if (payload[k] === undefined) {
-        delete payload[k];
+    // Ensure highlights is an array of non-empty strings
+    if (cleanedPayload.highlights !== undefined) {
+      if (typeof cleanedPayload.highlights === 'string') {
+        try {
+          const parsed = JSON.parse(cleanedPayload.highlights);
+          cleanedPayload.highlights = Array.isArray(parsed) ? parsed : [cleanedPayload.highlights];
+        } catch {
+          cleanedPayload.highlights = cleanedPayload.highlights.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+      }
+      if (Array.isArray(cleanedPayload.highlights)) {
+        cleanedPayload.highlights = cleanedPayload.highlights.map((s: any) => String(s).trim()).filter(Boolean);
+      } else {
+        cleanedPayload.highlights = [];
       }
     }
 
-    // 1. Direct Supabase SDK update query targeting the primary text id: .eq('id', packageId)
-    let { data, error } = await supabase
+    // Ensure JSONB/array fields are native arrays and valid JSON
+    for (const arrField of ['gallery_images', 'itinerary', 'inclusions', 'exclusions', 'quick_summary'] as const) {
+      if (cleanedPayload[arrField] !== undefined) {
+        if (typeof cleanedPayload[arrField] === 'string') {
+          try {
+            cleanedPayload[arrField] = JSON.parse(cleanedPayload[arrField]);
+          } catch {
+            cleanedPayload[arrField] = [];
+          }
+        }
+        if (!Array.isArray(cleanedPayload[arrField])) {
+          cleanedPayload[arrField] = cleanedPayload[arrField] ? [cleanedPayload[arrField]] : [];
+        }
+      }
+    }
+
+    // Strip any remaining undefined keys
+    for (const k of Object.keys(cleanedPayload)) {
+      if (cleanedPayload[k] === undefined) {
+        delete cleanedPayload[k];
+      }
+    }
+
+    // Ensure we always update using the row's unique id, not its title
+    const { data, error } = await supabase
       .from('packages')
-      .update(payload)
-      .eq('id', packageId)
+      .update(cleanedPayload)
+      .eq('id', targetId)
       .select();
-
-    // If 0 rows matched by id and packageTitle is present, safely attempt matching by title as fallback
-    if ((!data || data.length === 0) && packageTitle) {
-      const titleRes = await supabase
-        .from('packages')
-        .update(payload)
-        .eq('title', packageTitle)
-        .select();
-      if (!titleRes.error && titleRes.data && titleRes.data.length > 0) {
-        data = titleRes.data;
-        error = null;
-      }
-    }
 
     if (error) {
       console.error('[Package Update Error]:', error);
       throw new Error(error.message || `Failed to update package in Supabase: ${JSON.stringify(error)}`);
     }
 
-    if (data && data.length > 0) {
-      const mapped = mapPackageRow(data[0]);
-      localStore.updatePackage(packageId, mapped);
+    let updatedRow = data && data.length > 0 ? data[0] : null;
+
+    // If 0 rows matched (row does not yet exist in remote database), perform upsert
+    if (!updatedRow) {
+      console.debug(`[Supabase updatePackage] 0 rows matched for id="${targetId}". Upserting package...`);
+      const { data: upsertData, error: upsertErr } = await supabase
+        .from('packages')
+        .upsert([{ ...cleanedPayload, id: targetId }])
+        .select();
+
+      if (!upsertErr && upsertData && upsertData.length > 0) {
+        updatedRow = upsertData[0];
+      }
+    }
+
+    if (updatedRow) {
+      const mapped = mapPackageRow(updatedRow);
+      localStore.updatePackage(targetId, mapped);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
       }
       return mapped;
     }
 
-    // 2. If 0 rows matched, perform upsert using the primary text id
-    console.debug(`[Supabase updatePackage] 0 rows matched for id="${packageId}". Upserting package...`);
-    const { data: upsertData, error: upsertErr } = await supabase
-      .from('packages')
-      .upsert([{ ...payload, id: packageId }])
-      .select();
-
-    if (upsertErr) {
-      console.error('[Package Update Error]:', upsertErr);
-      throw new Error(upsertErr.message || 'Failed to upsert package in Supabase');
-    }
-
-    if (upsertData && upsertData.length > 0) {
-      const mapped = mapPackageRow(upsertData[0]);
-      localStore.updatePackage(packageId, mapped);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: mapped }));
-      }
-      return mapped;
-    }
-
-    // 3. Fallback to localStore update to ensure offline/resilient behavior
-    const fallbackSaved = localStore.updatePackage(packageId, { ...pkg, id: packageId });
+    // Fallback to localStore update to ensure resilient offline behavior
+    const fallbackSaved = localStore.updatePackage(targetId, { ...pkg, id: targetId });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tirth-package-changed', { detail: fallbackSaved }));
     }
