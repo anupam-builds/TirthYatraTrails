@@ -965,7 +965,11 @@ app.post('/api/admin/staff', async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const resolvedName = (displayName || display_name || name || cleanEmail.split('@')[0]).trim();
+    const resolvedName = (
+      cleanEmail === 'anupamsaxena.dev@gmail.com' || (displayName || display_name || name || '').toLowerCase() === 'anupamsaxenalucknow'
+        ? 'Anupam Saxena'
+        : (displayName || display_name || name || cleanEmail.split('@')[0])
+    ).trim();
     const resolvedPassword = password && password.trim().length >= 6 ? password.trim() : 'Staff@123';
     const resolvedRole = (role || 'STAFF').toUpperCase() === 'ADMIN' ? 'ADMIN' : 'STAFF';
     const nowIso = new Date().toISOString();
@@ -1168,7 +1172,12 @@ export async function syncAuthUsersToStaffMembers(): Promise<{ synced: number; t
       if (!u.email) continue;
       const cleanEmail = u.email.trim().toLowerCase();
       const meta = u.user_metadata || (u as any).raw_user_meta_data || {};
-      const displayName = String(meta.full_name || meta.name || meta.display_name || cleanEmail.split('@')[0]).trim();
+      let displayName = String(meta.full_name || meta.display_name || meta.name || '').trim();
+      if (cleanEmail === 'anupamsaxena.dev@gmail.com' || displayName.toLowerCase() === 'anupamsaxenalucknow' || cleanEmail.includes('anupamsaxena')) {
+        displayName = 'Anupam Saxena';
+      } else if (!displayName) {
+        displayName = cleanEmail.split('@')[0];
+      }
       const role = String(meta.role || (meta.is_admin ? 'admin' : 'staff')).toLowerCase();
 
       const staffPayload: Record<string, any> = {

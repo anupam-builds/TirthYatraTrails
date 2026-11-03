@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember, Package } from '../../types.js';
-import { api, mapInquiryRow } from '../../services/api.js';
+import { api, mapInquiryRow, formatStaffDisplayName, formatStaffOptionLabel } from '../../services/api.js';
 import { supabase, smartSupabaseInsert, safeSupabaseInsert } from '../../lib/supabase.js';
 import { localStore } from '../../services/localStore.js';
 import { broadcastNewInquiry } from '../../services/soundNotification.js';
@@ -183,7 +183,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
         assignedStaffName = currentStaffName;
       } else {
         const staffObj = staffList.find((s) => String(s.id) === String(assignedStaffId));
-        if (staffObj) assignedStaffName = staffObj.name;
+        if (staffObj) assignedStaffName = formatStaffDisplayName(staffObj);
       }
     }
 
@@ -874,7 +874,7 @@ export const CreateLeadModal: React.FC<CreateLeadModalProps> = ({
                   <option value="">-- Unassigned (Travel Desk Pool) --</option>
                   {staffList.map((stf) => (
                     <option key={stf.id} value={stf.id}>
-                      {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
+                      {formatStaffOptionLabel(stf)}
                     </option>
                   ))}
                 </BaseSelect>

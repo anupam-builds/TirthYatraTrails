@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
+import { formatStaffDisplayName, formatStaffOptionLabel } from '../../services/api.js';
 import { BaseInput, BaseSelect, BaseTextarea } from '../FormField.js';
 import {
   getLeadId,
@@ -152,7 +153,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
       setFormData((prev) => ({
         ...prev,
         assignedStaffId: staffId,
-        assignedStaffName: selected ? selected.name : staffId,
+        assignedStaffName: selected ? formatStaffDisplayName(selected) : staffId,
       }));
     }
   };
@@ -555,7 +556,7 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
                     <option value="">-- Unassigned (Available in Pool) --</option>
                     {staffList.map((stf) => (
                       <option key={stf.id} value={stf.id}>
-                        {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
+                        {formatStaffOptionLabel(stf)}
                       </option>
                     ))}
                   </BaseSelect>

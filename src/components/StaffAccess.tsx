@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, mapStaffRow, computeStaffLeadMetrics, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields } from '../services/api.js';
+import { api, mapStaffRow, computeStaffLeadMetrics, mapInquiryRow, matchLeadId, mergeUpdatedLeadFields, formatStaffDisplayName, formatStaffOptionLabel } from '../services/api.js';
 import { localStore, getDeletedStaffIdSet, markStaffAsDeleted } from '../services/localStore.js';
 import { supabase } from '../lib/supabase.js';
 import { StaffMember, StaffActivityLog, StaffSessionMonitor, Inquiry } from '../types.js';
@@ -799,6 +799,15 @@ export const StaffAccess: React.FC = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       if (
+        err?.status === 422 ||
+        err?.code === '422' ||
+        err?.code === 'user_already_exists' ||
+        err?.message?.includes('422') ||
+        err?.message?.toLowerCase().includes('already registered') ||
+        err?.message?.toLowerCase().includes('security requirements')
+      ) {
+        setFormError(err.message || 'This email address is already registered or the password does not meet security requirements.');
+      } else if (
         err?.status === 409 ||
         err?.code === '409' ||
         err?.code === '23505' ||
@@ -1183,7 +1192,7 @@ export const StaffAccess: React.FC = () => {
                                   : 'bg-gradient-to-br from-orange-500 to-amber-600 text-white'
                               }`}
                             >
-                              {(staff.name || staff.email || 'Staff')
+                              {(formatStaffDisplayName(staff) || staff.email || 'Staff')
                                 .split(' ')
                                 .map((n) => n[0])
                                 .join('')
@@ -1211,7 +1220,7 @@ export const StaffAccess: React.FC = () => {
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                                {staff.name || (staff.email ? staff.email.split('@')[0] : 'Staff Member')}
+                                {formatStaffDisplayName(staff)}
                               </h3>
 
                               {/* Role Badge */}
@@ -1494,7 +1503,7 @@ export const StaffAccess: React.FC = () => {
                                   : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                               }`}
                             >
-                              {(staff.name || staff.email || 'S')
+                              {(formatStaffDisplayName(staff) || staff.email || 'S')
                                 .split(' ')
                                 .map((n) => n[0])
                                 .join('')
@@ -1502,7 +1511,7 @@ export const StaffAccess: React.FC = () => {
                             </div>
                             <div>
                               <p className="font-extrabold text-slate-900 dark:text-white">
-                                {staff.name || (staff.email ? staff.email.split('@')[0] : 'Staff Member')}
+                                {formatStaffDisplayName(staff)}
                               </p>
                               <p className="text-[11px] font-mono text-slate-400">{staff.email}</p>
                             </div>
@@ -1600,7 +1609,7 @@ export const StaffAccess: React.FC = () => {
                   <option value="ALL">All Staff Members ({(activityLogs || []).length})</option>
                   {(staffList || []).map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name || s.email}
+                      {formatStaffOptionLabel(s)}
                     </option>
                   ))}
                 </BaseSelect>

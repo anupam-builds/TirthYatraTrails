@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout.js';
-import { api, updateLeadOrInquiryStatus, cleanUnassignedValue, matchLeadId, mergeUpdatedLeadFields, mapInquiryRow, isValidEntityId } from '../../services/api.js';
+import { api, updateLeadOrInquiryStatus, cleanUnassignedValue, matchLeadId, mergeUpdatedLeadFields, mapInquiryRow, isValidEntityId, formatStaffOptionLabel } from '../../services/api.js';
 import { supabase, safeSupabaseUpdate, safeRemoveChannel } from '../../lib/supabase.js';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
 import { subscribeToNewInquiries, subscribeToInquiryUpdates } from '../../services/soundNotification.js';
@@ -1152,7 +1152,7 @@ export const AdminInquiries: React.FC = () => {
                                 >
                                   {staffList.map((s) => (
                                     <option key={s.id} value={s.id}>
-                                      {s.name || s.displayName || s.email} {s.email ? `(${s.email})` : ''}
+                                      {formatStaffOptionLabel(s)}
                                     </option>
                                   ))}
                                 </BaseSelect>

@@ -3141,10 +3141,40 @@ export const api = {
           authUserId = authData.user.id;
         }
 
-        if (authErr && !authErr.message?.includes('already registered')) {
-          console.warn('[createStaffMember] Supabase Auth signUp note:', authErr.message);
+        if (authErr) {
+          console.warn('[createStaffMember] Supabase Auth signUp error note:', authErr);
+          const is422 =
+            authErr.status === 422 ||
+            (authErr as any).code === '422' ||
+            (authErr as any).code === 'user_already_exists' ||
+            (authErr as any).code === 'weak_password' ||
+            authErr.message?.includes('422') ||
+            authErr.message?.toLowerCase().includes('already registered') ||
+            authErr.message?.toLowerCase().includes('already exists') ||
+            authErr.message?.toLowerCase().includes('security') ||
+            authErr.message?.toLowerCase().includes('password');
+
+          if (is422) {
+            const friendlyText =
+              authErr.message?.toLowerCase().includes('already registered') ||
+              authErr.message?.toLowerCase().includes('already exists')
+                ? 'This email address is already registered or the password does not meet security requirements.'
+                : authErr.message || 'This email address is already registered or the password does not meet security requirements.';
+            const validationErr = new Error(friendlyText);
+            (validationErr as any).status = 422;
+            (validationErr as any).code = '422';
+            throw validationErr;
+          }
         }
       } catch (authEx: any) {
+        if (
+          authEx?.status === 422 ||
+          authEx?.code === '422' ||
+          authEx?.message?.includes('already registered') ||
+          authEx?.message?.includes('security requirements')
+        ) {
+          throw authEx;
+        }
         console.warn('[createStaffMember] Supabase Auth signUp note:', authEx?.message || authEx);
       }
     }
@@ -5350,10 +5380,85 @@ export function parseStaffPermissions(raw: any): StaffPermissions {
   return { canViewInquiries: true, canUpdateStatus: true, canAddNotes: true };
 }
 
+/**
+ * Resolves the cleanest human-readable display name for a staff member.
+ * Strictly prefers full display name (display_name, displayName) over raw usernames or emails.
+ * Converts raw usernames like 'anupamsaxenalucknow' to 'Anupam Saxena'.
+ */
+export function formatStaffDisplayName(staff: Partial<StaffMember> | Record<string, any> | null | undefined): string {
+  if (!staff) return 'Staff Member';
+
+  const email = String(staff.email || '').trim().toLowerCase();
+
+  const sAny = staff as any;
+  // 1. Explicit display_name or displayName
+  let name = String(
+    staff.display_name ||
+    staff.displayName ||
+    sAny.full_name ||
+    staff.name ||
+    ''
+  ).trim();
+
+  // Root Admin known username mapping
+  if (
+    email === 'anupamsaxena.dev@gmail.com' ||
+    email.includes('anupamsaxena') ||
+    name.toLowerCase() === 'anupamsaxenalucknow' ||
+    name.toLowerCase() === 'anupamsaxena'
+  ) {
+    return 'Anupam Saxena';
+  }
+
+  // If display_name had spaces (e.g. "Anupam Saxena") but name had "anupamsaxenalucknow", prefer display_name
+  if (staff.display_name && staff.display_name.trim().includes(' ')) {
+    return staff.display_name.trim();
+  }
+  if (staff.displayName && staff.displayName.trim().includes(' ')) {
+    return staff.displayName.trim();
+  }
+
+  // If name is identical to email or username prefix, extract formatted title
+  if (!name || name.toLowerCase() === email) {
+    if (email) {
+      const prefix = email.split('@')[0].replace(/[._-]/g, ' ');
+      return prefix
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return 'Staff Member';
+  }
+
+  return name;
+}
+
+/**
+ * Formats a staff member for dropdown lists:
+ * Full display name followed by their role or email in parentheses.
+ * e.g., "Anupam Saxena (Admin • anupamsaxena.dev@gmail.com)" or "Priya Verma (Staff • priya@tirthyatra.com)"
+ */
+export function formatStaffOptionLabel(staff: Partial<StaffMember> | Record<string, any> | null | undefined): string {
+  if (!staff) return 'Staff Member';
+  const name = formatStaffDisplayName(staff);
+  const roleRaw = staff.role ? String(staff.role).toUpperCase() : '';
+  const role = roleRaw === 'ADMIN' || roleRaw === 'SUPER ADMIN' ? 'Admin' : (roleRaw ? 'Staff' : '');
+  const email = staff.email ? String(staff.email).trim() : '';
+
+  if (role && email) {
+    return `${name} (${role} • ${email})`;
+  } else if (role) {
+    return `${name} (${role})`;
+  } else if (email) {
+    return `${name} (${email})`;
+  }
+  return name;
+}
+
 export function mapStaffRow(row: any): StaffMember {
   const isOnline = Boolean(row.is_online ?? row.isOnline ?? row.is_currently_logged_in ?? row.isCurrentlyLoggedIn);
   const permissions = parseStaffPermissions(row.permissions);
-  const displayName = String(row.display_name || row.displayName || row.name || row.full_name || 'Staff Member').trim();
+  const displayName = formatStaffDisplayName(row);
   const isBlocked = Boolean(row.is_blocked ?? row.isBlocked ?? (row.status === 'blocked'));
   const isActive = row.is_active !== undefined ? Boolean(row.is_active) : (row.isActive !== undefined ? Boolean(row.isActive) : (row.status ? row.status !== 'blocked' : true));
   const status = row.status || (isBlocked ? 'blocked' : (isActive ? 'active' : 'blocked'));

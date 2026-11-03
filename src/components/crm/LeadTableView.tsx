@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Inquiry, InquiryStatus, StaffMember } from '../../types.js';
-import { updateLeadOrInquiryStatus, cleanUnassignedValue } from '../../services/api.js';
+import { updateLeadOrInquiryStatus, cleanUnassignedValue, formatStaffDisplayName, formatStaffOptionLabel } from '../../services/api.js';
 import { BaseInput, BaseSelect } from '../FormField.js';
 import {
   getLeadId,
@@ -695,7 +695,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                   <option value="UNASSIGNED">Unassigned Only</option>
                   {staffList.map((stf) => (
                     <option key={stf.id} value={stf.id}>
-                      {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
+                      {formatStaffOptionLabel(stf)}
                     </option>
                   ))}
                 </BaseSelect>
@@ -901,7 +901,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                   : rawVal;
                                 const cleaned = cleanUnassignedValue(String(rawStaffId || '')) || '';
                                 const staffMember = cleaned ? staffList.find((s) => String(s.id) === String(cleaned)) : null;
-                                const staffName = staffMember ? staffMember.name : '';
+                                const staffName = staffMember ? formatStaffDisplayName(staffMember) : '';
 
                                 // Optimistic local state update
                                 setLocalInquiries((prev) =>
@@ -954,7 +954,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                               <option value="--Unassigned--">-- Unassigned --</option>
                               {staffList.map((stf) => (
                                 <option key={stf.id} value={stf.id}>
-                                  {stf.name || stf.displayName || stf.email} {stf.email ? `(${stf.email})` : ''}
+                                  {formatStaffOptionLabel(stf)}
                                 </option>
                               ))}
                             </BaseSelect>
@@ -965,7 +965,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
                                 <span className="truncate">
                                   {inq.assignedStaffName ||
                                     lead.assigned_staff_name ||
-                                    staffList.find((s) => s.id === (currentAssignedId !== '--Unassigned--' ? currentAssignedId : inq.assignedStaffId))?.name ||
+                                    formatStaffDisplayName(staffList.find((s) => s.id === (currentAssignedId !== '--Unassigned--' ? currentAssignedId : inq.assignedStaffId))) ||
                                     (isStaffMode ? 'Assigned to You' : 'Unassigned')}
                                 </span>
                               </span>
